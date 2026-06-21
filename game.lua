@@ -8,17 +8,18 @@ local PLAYER_HP_MAX = 5
 local BULLET_SPEED = 340 * 1.15
 
 local cube = { x=0, y=0, speed=260, angle=0, hp=PLAYER_HP_MAX, hit=0 }
-local bullets = {}
+local bullets = {}  -- <-- ЗДЕСЬ ПУЛИ ИГРОКА
 local bg, playerImg, font
 local cam = { x=0, y=0 }
 local dead = false
 
+-- ========== ФУНКЦИЯ СОЗДАНИЯ ПУЛИ ==========
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
         x=x, y=y,
         vx=dx*BULLET_SPEED,
         vy=dy*BULLET_SPEED,
-        life=3
+        life=3  -- Время жизни 3 секунды
     })
 end
 
@@ -52,7 +53,7 @@ function game.load()
     cube.hp = PLAYER_HP_MAX
     cube.hit = 0
     dead = false
-    bullets = {}
+    bullets = {}  -- Очищаем пули при загрузке
     cam.x, cam.y = -love.graphics.getWidth()/2, -love.graphics.getHeight()/2
 
     bg = bg or love.graphics.newImage("grass.png")
@@ -77,6 +78,7 @@ function game.update(dt)
 
     controls.update(dt)
 
+    -- ========== ДВИЖЕНИЕ ИГРОКА ==========
     local dx, dy = controls.getMove()
     cube.x = cube.x + dx * cube.speed * dt
     cube.y = cube.y + dy * cube.speed * dt
@@ -87,28 +89,33 @@ function game.update(dt)
 
     cube.hit = math.max(0, cube.hit - dt*3)
 
+    -- ========== КАМЕРА ==========
     local targetX = cube.x - love.graphics.getWidth()/2
     local targetY = cube.y - love.graphics.getHeight()/2
     local k = 1 - math.exp(-dt * 7.3)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Обновление пуль игрока
+    -- ========== ОБНОВЛЕНИЕ ПУЛЬ ИГРОКА ==========
     for i=#bullets,1,-1 do
         local b = bullets[i]
-        b.x = b.x + b.vx*dt
-        b.y = b.y + b.vy*dt
+        b.x = b.x + b.vx * dt
+        b.y = b.y + b.vy * dt
         b.life = b.life - dt
-        if b.life <= 0 then table.remove(bullets,i) end
+        if b.life <= 0 then
+            table.remove(bullets, i)
+        end
     end
 
+    -- ========== ОБНОВЛЕНИЕ ВРАГА ==========
+    -- Враг получает пули игрока и сам стреляет
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
         GameState.current = "lobby"
         return
     end
 
-    -- Проверка попадания пуль врага в игрока
+    -- ========== ПРОВЕРКА ПОПАДАНИЯ ПУЛЬ ВРАГА В ИГРОКА ==========
     local eBullets = enemy.getBullets()
     for i=#eBullets, 1, -1 do
         local b = eBullets[i]
@@ -128,7 +135,7 @@ function game.draw()
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
-    -- Отрисовка травы
+    -- ========== ФОН (ТРАВА) ==========
     local w,h = love.graphics.getDimensions()
     local tw,th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x/tw)*tw
@@ -139,36 +146,42 @@ function game.draw()
         end
     end
 
-    -- Отрисовка пуль игрока
-    love.graphics.setColor(0,0,0,1)
-    for _,b in ipairs(bullets) do
+    -- ========== ОТРИСОВКА ПУЛЬ ИГРОКА ==========
+    -- Пули игрока - черные круги
+    love.graphics.setColor(0, 0, 0, 1)
+    for _, b in ipairs(bullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
     
-    -- Отрисовка пуль врага
+    -- ========== ОТРИСОВКА ПУЛЬ ВРАГА ==========
+    -- Пули врага - красные круги (рисуются в enemy.drawBullets)
     enemy.drawBullets()
 
+    -- ========== ЛИНИЯ ПРИЦЕЛА ==========
     if controls.isAiming() then
         local ax, ay = controls.getAim()
-        love.graphics.setColor(0,0,0,0.55)
+        love.graphics.setColor(0, 0, 0, 0.55)
         love.graphics.setLineWidth(16)
         love.graphics.line(
             cube.x, cube.y,
-            cube.x + ax*180,
-            cube.y + ay*180
+            cube.x + ax * 180,
+            cube.y + ay * 180
         )
     end
 
+    -- ========== ОТРИСОВКА ВРАГА ==========
     enemy.draw()
 
-    -- Отрисовка игрока
-    love.graphics.setColor(0,0,0,0.4)
+    -- ========== ОТРИСОВКА ИГРОКА ==========
+    -- Тень игрока
+    love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
     love.graphics.rotate(cube.angle)
     love.graphics.draw(playerImg, -PLAYER_SIZE/2, -PLAYER_SIZE/2)
     love.graphics.pop()
 
+    -- Сам игрок
     love.graphics.push()
     love.graphics.translate(cube.x, cube.y)
     love.graphics.rotate(cube.angle)
@@ -179,50 +192,53 @@ function game.draw()
 
     love.graphics.pop()
 
-    -- UI Игрока слева
+    -- ========== UI ==========
     love.graphics.setColor(1,1,1,1)
     love.graphics.setFont(font)
 
+    -- HP Игрока (слева)
     local barW, barH = 200, 18
     local px = 20
     local py = 20
-    drawHPBar(px, py, barW, barH, cube.hp, PLAYER_HP_MAX, {0.3,0.85,0.35})
+    drawHPBar(px, py, barW, barH, cube.hp, PLAYER_HP_MAX, {0.3, 0.85, 0.35})
 
-    love.graphics.setColor(1,1,1,1)
-    love.graphics.printf("HP " .. math.max(0,cube.hp) .. " / " .. PLAYER_HP_MAX,
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf("HP " .. math.max(0, cube.hp) .. " / " .. PLAYER_HP_MAX,
         px, py + 22, barW, "left")
 
-    -- UI Врага справа
+    -- HP Врага (справа)
     local e = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
         local epy = 20
-        drawHPBar(epx, epy, barW, barH, e.hp, 10, {0.9,0.2,0.2})
+        drawHPBar(epx, epy, barW, barH, e.hp, 10, {0.9, 0.2, 0.2})
         
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.printf("ENEMY " .. math.max(0,e.hp) .. " / 10",
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.printf("ENEMY " .. math.max(0, e.hp) .. " / 10",
             epx, epy + 22, barW, "right")
     end
 
+    -- ========== ОТРИСОВКА УПРАВЛЕНИЯ ==========
     controls.draw()
 end
 
-function game.touchpressed(id,x,y)
-    controls.touchpressed(id,x,y)
+-- ========== ОБРАБОТЧИКИ ТАЧА ==========
+function game.touchpressed(id, x, y)
+    controls.touchpressed(id, x, y)
 end
 
-function game.touchmoved(id,x,y)
-    controls.touchmoved(id,x,y)
+function game.touchmoved(id, x, y)
+    controls.touchmoved(id, x, y)
 end
 
-function game.touchreleased(id,x,y)
+function game.touchreleased(id, x, y)
     local shot, dx, dy = controls.touchreleased(id)
     if shot then
         spawnBullet(cube.x, cube.y, dx, dy)
     end
 end
 
--- ========== ФУНКЦИЯ ДЛЯ ВЫСТРЕЛА С КЛАВИАТУРЫ ==========
+-- ========== ВЫСТРЕЛ С КЛАВИАТУРЫ ==========
 function game.spawnPlayerBullet(dx, dy)
     if dead then return end
     spawnBullet(cube.x, cube.y, dx, dy)
