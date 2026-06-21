@@ -1,6 +1,11 @@
 local controls = {}
 
--- ========== КЛАВИАТУРНОЕ УПРАВЛЕНИЕ ==========
+-- ========== ТАЧ УПРАВЛЕНИЕ (ДЖОСТИКИ) ==========
+local joy  = { id=nil, cx=0, cy=0, sx=0, sy=0, r=45, sr=18 }
+local atk  = { id=nil, x=0, y=0, r=52, hold=false, press=0 }
+local back = { x=20, y=20, w=140, h=55 }
+
+-- ========== КЛАВИАТУРНОЕ УПРАВЛЕНИЕ (WASD) ==========
 local keys = {
     w = false,
     a = false,
@@ -9,78 +14,178 @@ local keys = {
     space = false
 }
 
+local font
 local aimDx, aimDy = 0, -1
+local isMobile = love.system.getOS() == "Android" or love.system.getOS() == "iOS"
 local spacePressed = false
 local spaceHeld = false
 
--- Кнопка назад (только для мобильных)
-local back = { x=0, y=0, w=140, h=55 }
-local showBack = false
+local function place()
+    local w,h = love.graphics.getDimensions()
+    joy.cx = 80
+    joy.cy = h - 80
+    if not joy.id then
+        joy.sx, joy.sy = joy.cx, joy.cy
+    end
+    atk.x = w - 80
+    atk.y = h - 80
+    
+    back.x = w/2 - back.w/2
+    back.y = h - 120
+end
+
+local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
+    alpha = alpha or 1
+    spacing = spacing or 0
+    love.graphics.setFont(font)
+
+    local totalW = 0
+    local widths = {}
+    for i=1, #text do
+        local ch = text:sub(i,i)
+        local cw = font:getWidth(ch)
+        widths[i] = cw
+        totalW = totalW + cw
+    end
+    totalW = totalW + spacing * (#text - 1)
+
+    local startX = x + (w - totalW)/2
+    local outline = 2
+
+    love.graphics.setColor(0,0,0,alpha)
+    local cx = startX
+    for i=1, #text do
+        local ch = text:sub(i,i)
+        for dx=-outline, outline, outline do
+            for dy=-outline, outline, outline do
+                if dx ~= 0 or dy ~= 0 then
+                    love.graphics.print(ch, cx+dx, y+dy)
+                end
+            end
+        end
+        cx = cx + widths[i] + spacing
+    end
+
+    love.graphics.setColor(1,1,1,alpha)
+    cx = startX
+    for i=1, #text do
+        local ch = text:sub(i,i)
+        love.graphics.print(ch, cx, y)
+        cx = cx + widths[i] + spacing
+    end
+end
 
 function controls.load()
-    local w, h = love.graphics.getDimensions()
-    back.x = w - back.w - 20
-    back.y = h - back.h - 20
-    
-    -- Показываем кнопку Back только на мобильных
-    showBack = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+    font = love.graphics.newFont("Fredoka-Bold.ttf", 24)
+    place()
 end
 
 function controls.resize()
-    local w, h = love.graphics.getDimensions()
-    back.x = w - back.w - 20
-    back.y = h - back.h - 20
+    place()
 end
 
 function controls.update(dt)
+    local target = atk.hold and 1 or 0
+    atk.press = atk.press + (target - atk.press) * math.min(dt*12, 1)
+    
     -- Обновляем состояние пробела
     spaceHeld = keys.space
 end
 
+-- ========== ПОЛУЧЕНИЕ ДВИЖЕНИЯ (ТАЧ + КЛАВИАТУРА) ==========
 function controls.getMove()
     local dx, dy = 0, 0
     
+    -- Клавиатурное управление (WASD)
     if keys.w then dy = dy - 1 end
     if keys.s then dy = dy + 1 end
     if keys.a then dx = dx - 1 end
     if keys.d then dx = dx + 1 end
     
-    -- Нормализуем вектор
-    local len = math.sqrt(dx*dx + dy*dy)
-    if len > 0 then
-        dx = dx / len
-        dy = dy / len
-        -- Запоминаем направление для прицела
-        aimDx, aimDy = dx, dy
+    -- Тач управление (джостик) - если есть касание
+    if joy.id then
+        local jdx = joy.sx - joy.cx
+        local jdy = joy.sy - joy.cy
+        local len = math.sqrt(jdx*jdx + jdy*jdy)
+        if len > 0 then
+            -- Если клавиатура не используется, берем с джостика
+            if dx == 0 and dy == 0 then
+                dx = jdx / len
+                dy = jdy / len
+                aimDx, aimDy = dx, dy
+            end
+        end
+    end
+    
+    -- Если есть движение, обновляем прицел
+    if dx ~= 0 or dy ~= 0 then
+        local len = math.sqrt(dx*dx + dy*dy)
+        if len > 0 then
+            dx = dx / len
+            dy = dy / len
+            aimDx, aimDy = dx, dy
+        end
     end
     
     return dx, dy
 end
 
-function controls.isAiming()
-    return keys.space
+function controls.isAiming() 
+    return atk.hold or keys.space 
 end
 
-function controls.getAim()
-    return aimDx, aimDy
+function controls.getAim() 
+    return aimDx, aimDy 
 end
 
-function controls.touchpressed(id, x, y)
-    -- Проверяем нажатие на кнопку Back (для мобильных)
-    if showBack and x >= back.x and x <= back.x + back.w and
-       y >= back.y and y <= back.y + back.h then
+-- ========== ТАЧ СОБЫТИЯ ==========
+function controls.touchpressed(id,x,y)
+    if x>=back.x and x<=back.x+back.w and
+       y>=back.y and y<=back.y+back.h then
         GameState.current = "lobby"
-        return true
+        return
     end
-    return false
+
+    local dx = x-joy.cx
+    local dy = y-joy.cy
+    if dx*dx+dy*dy <= joy.r*joy.r then
+        joy.id = id
+        joy.sx, joy.sy = x, y
+        return
+    end
+
+    local ax = x-atk.x
+    local ay = y-atk.y
+    if ax*ax+ay*ay <= atk.r*atk.r then
+        atk.id = id
+        atk.hold = true
+    end
 end
 
-function controls.touchmoved(id, x, y)
-    -- Не используется на ПК
+function controls.touchmoved(id,x,y)
+    if joy.id == id then
+        local dx = x-joy.cx
+        local dy = y-joy.cy
+        local len = math.sqrt(dx*dx + dy*dy)
+        if len > joy.r then
+            dx = dx/len * joy.r
+            dy = dy/len * joy.r
+        end
+        joy.sx = joy.cx + dx
+        joy.sy = joy.cy + dy
+    end
 end
 
-function controls.touchreleased(id, x, y)
-    -- Используется только для мобильных
+function controls.touchreleased(id)
+    if joy.id == id then
+        joy.id = nil
+        joy.sx, joy.sy = joy.cx, joy.cy
+    end
+    if atk.id == id then
+        atk.id = nil
+        atk.hold = false
+        return true, aimDx, aimDy
+    end
     return false, aimDx, aimDy
 end
 
@@ -107,33 +212,57 @@ function controls.keyreleased(key)
     end
 end
 
--- ========== ПОЛУЧЕНИЕ СОБЫТИЯ ВЫСТРЕЛА ==========
+-- ========== ПОЛУЧЕНИЕ ВЫСТРЕЛА С КЛАВИАТУРЫ ==========
 function controls.getShot()
-    -- Возвращает true только в момент нажатия пробела
     if keys.space and not spaceHeld then
         return true, aimDx, aimDy
     end
     return false, aimDx, aimDy
 end
 
+-- ========== ОТРИСОВКА ==========
 function controls.draw()
-    -- Рисуем только кнопку Back для мобильных устройств
-    if showBack then
-        love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-        love.graphics.rectangle("fill", back.x+4, back.y+5, back.w, back.h, 14, 14)
-        
-        love.graphics.setColor(0.35, 0.15, 0.75, 1)
-        love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14, 14)
-        
+    -- Рисуем джостик (только если есть касание или на мобильных)
+    if isMobile or joy.id then
+        love.graphics.setLineWidth(2.55)
+
+        love.graphics.setColor(0,0,0,0.20)
+        love.graphics.circle("fill", joy.cx, joy.cy, joy.r)
+        love.graphics.setColor(0,0,0,1)
+        love.graphics.circle("line", joy.cx, joy.cy, joy.r)
+        love.graphics.circle("fill", joy.sx, joy.sy, joy.sr)
+
+        local scale = 1 - atk.press * 0.12
+        local r = atk.r * scale
+        local textScale = 1 - atk.press * 0.18
+        local textAlpha = 1 - atk.press * 0.45
+
+        love.graphics.setColor(0.55 - atk.press*0.2, 0.20, 0.85 - atk.press*0.3, 1)
+        love.graphics.circle("fill", atk.x, atk.y, r)
         love.graphics.setColor(0,0,0,1)
         love.graphics.setLineWidth(3.4)
-        love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14, 14)
-        
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.setFont(love.graphics.newFont("Fredoka-Bold.ttf", 24))
-        love.graphics.printf("Back", back.x, back.y+14, back.w, "center")
+        love.graphics.circle("line", atk.x, atk.y, r)
+
+        love.graphics.push()
+        love.graphics.translate(atk.x, atk.y)
+        love.graphics.scale(textScale, textScale)
+        drawSpacedText("Shot", -atk.r, -14, atk.r*2, "center", font, font:getWidth("A")*0.05, textAlpha)
+        love.graphics.pop()
     end
-    
+
+    -- Кнопка Back (всегда рисуется)
+    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    love.graphics.rectangle("fill", back.x+4, back.y+5, back.w, back.h, 14, 14)
+
+    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14, 14)
+
+    love.graphics.setColor(0,0,0,1)
+    love.graphics.setLineWidth(3.4)
+    love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14, 14)
+
+    drawSpacedText("Back", back.x, back.y+14, back.w, "center", font, font:getWidth("A")*0.05, 1)
+
     love.graphics.setColor(1,1,1,1)
 end
 
