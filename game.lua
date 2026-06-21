@@ -93,6 +93,7 @@ function game.update(dt)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
+    -- Обновление пуль игрока
     for i=#bullets,1,-1 do
         local b = bullets[i]
         b.x = b.x + b.vx*dt
@@ -105,6 +106,19 @@ function game.update(dt)
     if enemyKilled then
         GameState.current = "lobby"
         return
+    end
+
+    -- Проверка попадания пуль врага в игрока
+    local eBullets = enemy.getBullets()
+    for i=#eBullets, 1, -1 do
+        local b = eBullets[i]
+        local bx = b.x - cube.x
+        local by = b.y - cube.y
+        if bx*bx + by*by <= (PLAYER_SIZE*0.5)^2 then
+            onHitPlayer(1)
+            table.remove(eBullets, i)
+            if dead then return end
+        end
     end
 end
 
@@ -125,10 +139,14 @@ function game.draw()
         end
     end
 
+    -- Отрисовка пуль
     love.graphics.setColor(0,0,0,1)
     for _,b in ipairs(bullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
+    
+    -- Отрисовка пуль врага
+    enemy.drawBullets()
 
     if controls.isAiming() then
         local ax, ay = controls.getAim()
@@ -143,8 +161,7 @@ function game.draw()
 
     enemy.draw()
 
-    -- Убрал полоску здоровья над врагом, так как теперь она справа экрана
-
+    -- Отрисовка игрока
     love.graphics.setColor(0,0,0,0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
@@ -162,29 +179,29 @@ function game.draw()
 
     love.graphics.pop()
 
-    -- ИСПРАВЛЕНО: UI Игрока слева
+    -- UI Игрока слева
     love.graphics.setColor(1,1,1,1)
     love.graphics.setFont(font)
 
     local barW, barH = 200, 18
-    local px = 20 -- Слева
+    local px = 20
     local py = 20
     drawHPBar(px, py, barW, barH, cube.hp, PLAYER_HP_MAX, {0.3,0.85,0.35})
 
     love.graphics.setColor(1,1,1,1)
     love.graphics.printf("HP " .. math.max(0,cube.hp) .. " / " .. PLAYER_HP_MAX,
-        px, py + 22, barW, "left") -- Текст по левому краю
+        px, py + 22, barW, "left")
 
-    -- ИСПРАВЛЕНО: UI Врага справа
+    -- UI Врага справа
     local e = enemy.get()
     if e then
-        local epx = love.graphics.getWidth() - barW - 20 -- Справа
+        local epx = love.graphics.getWidth() - barW - 20
         local epy = 20
-        drawHPBar(epx, epy, barW, barH, e.hp, 5, {0.9,0.2,0.2})
+        drawHPBar(epx, epy, barW, barH, e.hp, 10, {0.9,0.2,0.2})
         
         love.graphics.setColor(1,1,1,1)
-        love.graphics.printf("ENEMY " .. math.max(0,e.hp) .. " / 5",
-            epx, epy + 22, barW, "right") -- Текст по правому краю
+        love.graphics.printf("ENEMY " .. math.max(0,e.hp) .. " / 10",
+            epx, epy + 22, barW, "right")
     end
 
     controls.draw()
