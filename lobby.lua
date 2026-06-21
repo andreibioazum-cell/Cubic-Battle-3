@@ -1,16 +1,38 @@
 local lobby = {}
 
 local btn = { w=220, h=75, x=0, y=0 }
-local grad, lastW, lastH = nil, 0, 0
 local fontTitle, fontSub, fontBtn
+local spaceCanvas -- Канвас для космоса (отрисовывается 1 раз)
 
 local function mkGrad(w, h)
+    -- ИСПРАВЛЕНО: Глубокие космические синие оттенки
     return love.graphics.newMesh({
-        {0,0, 0,0, 0.45,0.15,0.80,1},
-        {w,0, 1,0, 0.55,0.20,0.85,1},
-        {w,h, 1,1, 0.85,0.30,0.65,1},
-        {0,h, 0,1, 0.80,0.25,0.70,1},
+        {0,0, 0,0, 0.02,0.00,0.10,1},
+        {w,0, 1,0, 0.00,0.05,0.25,1},
+        {w,h, 1,1, 0.10,0.15,0.45,1},
+        {0,h, 0,1, 0.05,0.10,0.35,1},
     }, "fan", "static")
+end
+
+local function generateSpace(w, h)
+    spaceCanvas = love.graphics.newCanvas(w, h)
+    love.graphics.setCanvas(spaceCanvas)
+    
+    -- Рисуем градиент
+    love.graphics.draw(mkGrad(w, h), 0, 0)
+    
+    -- Рисуем звезды
+    love.graphics.setColor(1, 1, 1, 1)
+    for i=1, 300 do
+        local sx = math.random(w)
+        local sy = math.random(h)
+        local size = math.random(1, 3)
+        local alpha = math.random(50, 100) / 100
+        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.rectangle("fill", sx, sy, size, size)
+    end
+    
+    love.graphics.setCanvas()
 end
 
 local function place()
@@ -69,34 +91,35 @@ function lobby.load()
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", 64)
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", 22)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", 30)
+    
+    local w, h = love.graphics.getDimensions()
+    generateSpace(w, h)
+    
     place()
 end
 
-function lobby.resize()
-    grad = nil
+function lobby.resize(w, h)
+    generateSpace(w, h)
     place()
 end
 
 function lobby.update(dt) end
 
 function lobby.draw()
-    local w, h = love.graphics.getDimensions()
-
-    if not grad or w ~= lastW or h ~= lastH then
-        grad = mkGrad(w, h)
-        lastW, lastH = w, h
+    -- Отрисовываем готовый космос
+    love.graphics.setColor(1,1,1,1)
+    if spaceCanvas then
+        love.graphics.draw(spaceCanvas, 0, 0)
     end
 
-    love.graphics.setColor(1,1,1,1)
-    love.graphics.draw(grad, 0, 0)
+    drawSpacedText("Cubic Battle", 0, love.graphics.getHeight()/2 - 150, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A")*0.05)
+    drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 60, love.graphics.getWidth(), "center", fontSub, fontSub:getWidth("A")*0.05)
 
-    drawSpacedText("Cubic Battle", 0, h/2 - 150, w, "center", fontTitle, fontTitle:getWidth("A")*0.05)
-    drawSpacedText("Touch & Dodge", 0, h/2 - 60, w, "center", fontSub, fontSub:getWidth("A")*0.05)
-
-    love.graphics.setColor(0,0,0,0.20)
+    -- ИСПРАВЛЕНО: Космически-синие цвета кнопки
+    love.graphics.setColor(0.0, 0.1, 0.4, 0.5)
     love.graphics.rectangle("fill", btn.x+5, btn.y+6, btn.w, btn.h, 16, 16)
 
-    love.graphics.setColor(0.55, 0.20, 0.85, 1)
+    love.graphics.setColor(0.2, 0.45, 1.0, 1)
     love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16, 16)
 
     love.graphics.setColor(0,0,0,1)
