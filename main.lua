@@ -33,7 +33,7 @@ function love.update(dt)
             shotCooldown = shotCooldown - dt
         end
         
-        -- Выстрел с клавиатуры (ПК)
+        -- ========== ВЫСТРЕЛ С КЛАВИАТУРЫ (РАБОТАЕТ НА ВСЕХ ПЛАТФОРМАХ) ==========
         local shot, dx, dy = controls.getShot()
         if shot and shotCooldown <= 0 and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
