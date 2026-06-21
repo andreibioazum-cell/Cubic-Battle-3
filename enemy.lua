@@ -3,19 +3,33 @@ local enemy = {}
 local SIZE = 55
 local SPEED = 140
 local SIGHT = 650
-local SHOOT_RANGE = 450 -- Дальнобойная атака
-local KEEP_DIST = 150   -- Дистанция, на которой враг убегает
-local MAX_HP = 10       -- Чуть больше ХП, так как он уворачивается
+local SHOOT_RANGE = 450
+local KEEP_DIST = 150
+local MAX_HP = 10
 local RESPAWN = 2
 local SHOOT_CD = 1.2
 local BULLET_SPEED = 220
-local DODGE_RADIUS = 140 -- Радиус реагирования на пули игрока
-local DODGE_SPEED = 320  -- Скорость рывка уклонения
+local DODGE_RADIUS = 140
+local DODGE_SPEED = 320
+
+-- ========== НОВЫЕ ПАРАМЕТРЫ ДЛЯ УМЕНЬШЕНИЯ СЛОЖНОСТИ ==========
+local DODGE_CHANCE = 0.25          -- 25% шанс уклонения (было 100%)
+local SHOOT_ACCURACY = 0.6         -- 60% точность стрельбы
+local REACTION_DELAY = 0.3         -- Задержка реакции на пули (сек)
+local SHOOT_SPREAD = 0.3           -- Разброс при стрельбе (радианы)
+local DODGE_COOLDOWN = 1.5         -- Задержка между уклонениями
+local MAX_DODGE_TIME = 0.5         -- Максимальное время уклонения
 
 local e
 local timer = 0
 local img
-local eBullets = {} -- Пули врага
+local eBullets = {}
+
+-- ========== ПЕРЕМЕННЫЕ ДЛЯ СОСТОЯНИЙ ВРАГА ==========
+local dodgeTimer = 0
+local lastDodgeTime = 0
+local reactionTimer = 0
+local currentDodgeDir = 1
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(eBullets, {
@@ -42,8 +56,13 @@ local function spawn(px, py)
         wanderT = 0,
         wanderDX = 0,
         wanderDY = 0,
-        shootT = SHOOT_CD * 0.5, -- Начальная задержка перед выстрелом
-        strafeDir = math.random() > 0.5 and 1 or -1 -- Направление стрейфа
+        shootT = SHOOT_CD * 0.5,
+        strafeDir = math.random() > 0.5 and 1 or -1,
+        -- Новые переменные состояния
+        dodgeCooldown = 0,
+        isDodging = false,
+        dodgeTime = 0,
+        shootAccuracy = SHOOT_ACCURACY + (math.random() - 0.5) * 0.2
     }
 end
 
@@ -56,6 +75,9 @@ function enemy.reset()
     e = nil
     timer = 0
     eBullets = {}
+    dodgeTimer = 0
+    lastDodgeTime = 0
+    reactionTimer = 0
 end
 
 function enemy.get()
@@ -90,41 +112,63 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
     local dist = math.sqrt(dx*dx + dy*dy) + 0.0001
     local nx, ny = dx/dist, dy/dist
 
-    -- ЛОГИКА УКЛОНЕНИЯ ОТ ПУЛЬ ИГРОКА
+    -- ========== УМЕНЬШЕННАЯ ЛОГИКА УКЛОНЕНИЯ ==========
     local dodging = false
     local dodgeDx, dodgeDy = 0, 0
     
-    for _, b in ipairs(playerBullets) do
-        local bx = b.x - e.x
-        local by = b.y - e.y
-        local distToBullet = math.sqrt(bx*bx + by*by)
-        
-        if distToBullet < DODGE_RADIUS then
-            -- Проверяем, летит ли пуля в нашу сторону
-            local dot = bx*b.vx + by*b.vy
-            if dot < 0 then -- Пуля летит к нам
-                dodging = true
-                -- Вычисляем перпендикуляр для уклонения
-                -- Вектор пули (b.vx, b.vy). Перпендикуляр: (-b.vy, b.vx) или (b.vy, -b.vx)
-                local cross = b.vx * by - b.vy * bx
-                if cross > 0 then
-                    dodgeDx, dodgeDy = b.vy, -b.vx
-                else
-                    dodgeDx, dodgeDy = -b.vy, b.vx
+    -- Обновляем таймеры
+    if e.dodgeCooldown > 0 then
+        e.dodgeCooldown = e.dodgeCooldown - dt
+    end
+    
+    if e.isDodging then
+        e.dodgeTime = e.dodgeTime - dt
+        if e.dodgeTime <= 0 then
+            e.isDodging = false
+        end
+    end
+
+    -- Проверяем пули только если не на кулдауне и не уклоняется
+    if not e.isDodging and e.dodgeCooldown <= 0 then
+        for _, b in ipairs(playerBullets) do
+            local bx = b.x - e.x
+            local by = b.y - e.y
+            local distToBullet = math.sqrt(bx*bx + by*by)
+            
+            if distToBullet < DODGE_RADIUS then
+                local dot = bx*b.vx + by*b.vy
+                if dot < 0 then
+                    -- ========== ШАНС УКЛОНЕНИЯ ==========
+                    if math.random() < DODGE_CHANCE then
+                        dodging = true
+                        local cross = b.vx * by - b.vy * bx
+                        if cross > 0 then
+                            dodgeDx, dodgeDy = b.vy, -b.vx
+                        else
+                            dodgeDx, dodgeDy = -b.vy, b.vx
+                        end
+                        local dLen = math.sqrt(dodgeDx*dodgeDx + dodgeDy*dodgeDy) + 0.0001
+                        dodgeDx, dodgeDy = dodgeDx/dLen, dodgeDy/dLen
+                        
+                        e.isDodging = true
+                        e.dodgeTime = MAX_DODGE_TIME
+                        e.dodgeCooldown = DODGE_COOLDOWN
+                        
+                        -- Меняем направление стрейфа после уклонения
+                        e.strafeDir = math.random() > 0.5 and 1 or -1
+                        break
+                    end
                 end
-                local dLen = math.sqrt(dodgeDx*dodgeDx + dodgeDy*dodgeDy) + 0.0001
-                dodgeDx, dodgeDy = dodgeDx/dLen, dodgeDy/dLen
-                break -- Уклоняемся от ближайшей угрозы
             end
         end
     end
 
-    if dodging then
+    if e.isDodging then
         e.state = "dodge"
         e.x = e.x + dodgeDx * DODGE_SPEED * dt
         e.y = e.y + dodgeDy * DODGE_SPEED * dt
     else
-        -- ОСНОВНАЯ ЛОГИКА СОСТОЯНИЙ
+        -- ========== ОСНОВНАЯ ЛОГИКА СОСТОЯНИЙ ==========
         if dist < SIGHT then
             if dist < KEEP_DIST then
                 e.state = "retreat"
@@ -144,37 +188,52 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
             e.x = e.x - nx * SPEED * dt
             e.y = e.y - ny * SPEED * dt
         elseif e.state == "attack" then
-            -- Стрейф вокруг игрока
+            -- Стрейф вокруг игрока (медленнее)
             local sDx = -ny * e.strafeDir
             local sDy =  nx * e.strafeDir
-            e.x = e.x + sDx * SPEED * 0.5 * dt
-            e.y = e.y + sDy * SPEED * 0.5 * dt
+            e.x = e.x + sDx * SPEED * 0.3 * dt  -- Уменьшено с 0.5 до 0.3
+            e.y = e.y + sDy * SPEED * 0.3 * dt
 
-            -- Стрельба
+            -- ========== СТРЕЛЬБА С НЕТОЧНОСТЬЮ ==========
             e.shootT = e.shootT - dt
             if e.shootT <= 0 then
                 e.shootT = SHOOT_CD
-                spawnBullet(e.x, e.y, nx, ny)
+                
+                -- ========== ДОБАВЛЯЕМ РАЗБРОС ==========
+                local spread = (math.random() - 0.5) * SHOOT_SPREAD * 2
+                local angle = math.atan2(dy, dx) + spread
+                local sDx = math.cos(angle)
+                local sDy = math.sin(angle)
+                
+                -- ========== ШАНС ПРОМАХА ==========
+                if math.random() < e.shootAccuracy then
+                    spawnBullet(e.x, e.y, sDx, sDy)
+                else
+                    -- Промах - стреляем в случайном направлении
+                    local missAngle = math.random() * math.pi * 2
+                    spawnBullet(e.x, e.y, math.cos(missAngle), math.sin(missAngle))
+                end
+                
                 -- Меняем направление стрейфа после выстрела
-                if math.random() > 0.6 then e.strafeDir = -e.strafeDir end
+                if math.random() > 0.7 then e.strafeDir = -e.strafeDir end
             end
         elseif e.state == "wander" then
             e.wanderT = e.wanderT - dt
             if e.wanderT <= 0 then
-                e.wanderT = 1 + math.random() * 2
+                e.wanderT = 1.5 + math.random() * 2.5  -- Дольше бродит
                 local a = math.random() * math.pi * 2
                 e.wanderDX = math.cos(a)
                 e.wanderDY = math.sin(a)
             end
-            e.x = e.x + e.wanderDX * SPEED * 0.35 * dt
-            e.y = e.y + e.wanderDY * SPEED * 0.35 * dt
+            e.x = e.x + e.wanderDX * SPEED * 0.25 * dt  -- Медленнее бродит
+            e.y = e.y + e.wanderDY * SPEED * 0.25 * dt
         end
     end
 
     e.angle = math.atan2(dy, dx) + math.pi/2
     e.hit = math.max(0, e.hit - dt*3)
 
-    -- Коллизия пуль игрока с врагом
+    -- ========== КОЛЛИЗИЯ ПУЛЬ ИГРОКА С ВРАГОМ ==========
     for i=#playerBullets,1,-1 do
         local b = playerBullets[i]
         local bx = b.x - e.x
@@ -185,7 +244,7 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
             table.remove(playerBullets, i)
             if e.hp <= 0 then
                 e = nil
-                return true -- Враг убит
+                return true
             end
         end
     end
@@ -207,7 +266,6 @@ function enemy.draw()
     love.graphics.translate(e.x, e.y)
     love.graphics.rotate(e.angle)
     local t = e.hit
-    -- Слегка меняем цвет врага, чтобы отличался от игрока (красноватый оттенок при получении урона)
     love.graphics.setColor(1, 1 - t*0.8, 1 - t*0.8, 1)
     love.graphics.draw(img, -SIZE/2, -SIZE/2)
     love.graphics.pop()
@@ -216,7 +274,6 @@ function enemy.draw()
 end
 
 function enemy.drawBullets()
-    -- Отрисовка пуль врага (красные)
     love.graphics.setColor(1, 0.2, 0.2, 1)
     for _, b in ipairs(eBullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
