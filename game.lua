@@ -12,7 +12,6 @@ local bullets = {}
 local bg, playerImg, font
 local cam = { x=0, y=0 }
 local dead = false
-local bgQuad -- ОПТИМИЗАЦИЯ: Quad для фона вместо тысячи циклов
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
@@ -59,10 +58,6 @@ function game.load()
     bg = bg or love.graphics.newImage("grass.png")
     bg:setWrap("repeat","repeat")
 
-    -- ОПТИМИЗАЦИЯ: Создаем Quad один раз при загрузке
-    local w, h = love.graphics.getDimensions()
-    bgQuad = love.graphics.newQuad(0, 0, w, h, bg:getWidth(), bg:getHeight())
-
     playerImg = playerImg or love.graphics.newImage("player.png")
     playerImg:setFilter("nearest","nearest")
 
@@ -75,13 +70,6 @@ end
 
 function game.resize()
     controls.resize()
-    
-    -- ИСПРАВЛЕНО: Проверяем, загружена ли текстура, чтобы избежать краша при старте
-    if not bg then return end
-    
-    -- ОПТИМИЗАЦИЯ: Пересоздаем Quad только при изменении размера окна
-    local w, h = love.graphics.getDimensions()
-    bgQuad = love.graphics.newQuad(0, 0, w, h, bg:getWidth(), bg:getHeight())
 end
 
 function game.update(dt)
@@ -113,7 +101,6 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets,i) end
     end
 
-    -- Проверяем, убит ли враг. Если убит — кидаем в лобби
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
         GameState.current = "lobby"
@@ -127,11 +114,16 @@ function game.draw()
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
-    -- ОПТИМИЗАЦИЯ: Отрисовка фона одним draw call вместо вложенных циклов
-    local tw, th = bg:getWidth(), bg:getHeight()
+    -- ИСПРАВЛЕНО: Возвращаем стабильную отрисовку травы циклом
+    local w,h = love.graphics.getDimensions()
+    local tw,th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x/tw)*tw
     local sY = math.floor(cam.y/th)*th
-    love.graphics.draw(bg, bgQuad, sX, sY)
+    for x=sX, sX+w+tw, tw do
+        for y=sY, sY+h+th, th do
+            love.graphics.draw(bg, x, y)
+        end
+    end
 
     love.graphics.setColor(0,0,0,1)
     for _,b in ipairs(bullets) do
