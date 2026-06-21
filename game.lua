@@ -139,7 +139,7 @@ function game.draw()
         end
     end
 
-    -- Отрисовка пуль
+    -- Отрисовка пуль игрока
     love.graphics.setColor(0,0,0,1)
     for _,b in ipairs(bullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
@@ -220,6 +220,12 @@ function game.touchreleased(id,x,y)
     if shot then
         spawnBullet(cube.x, cube.y, dx, dy)
     end
+end
+
+-- ========== ФУНКЦИЯ ДЛЯ ВЫСТРЕЛА С КЛАВИАТУРЫ ==========
+function game.spawnPlayerBullet(dx, dy)
+    if dead then return end
+    spawnBullet(cube.x, cube.y, dx, dy)
 end
 
 return game
