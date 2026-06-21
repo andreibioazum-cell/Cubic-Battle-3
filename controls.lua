@@ -10,17 +10,20 @@ local keys = {
 }
 
 local aimDx, aimDy = 0, -1
-local isAiming = false
 local spacePressed = false
 local spaceHeld = false
 
--- Кнопка назад (только для мобильных, на ПК не используется)
+-- Кнопка назад (только для мобильных)
 local back = { x=0, y=0, w=140, h=55 }
+local showBack = false
 
 function controls.load()
     local w, h = love.graphics.getDimensions()
     back.x = w - back.w - 20
     back.y = h - back.h - 20
+    
+    -- Показываем кнопку Back только на мобильных
+    showBack = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 end
 
 function controls.resize()
@@ -30,15 +33,8 @@ function controls.resize()
 end
 
 function controls.update(dt)
+    -- Обновляем состояние пробела
     spaceHeld = keys.space
-    
-    if keys.space and not spacePressed then
-        spacePressed = true
-        isAiming = true
-    elseif not keys.space then
-        spacePressed = false
-        isAiming = false
-    end
 end
 
 function controls.getMove()
@@ -49,10 +45,12 @@ function controls.getMove()
     if keys.a then dx = dx - 1 end
     if keys.d then dx = dx + 1 end
     
+    -- Нормализуем вектор
     local len = math.sqrt(dx*dx + dy*dy)
     if len > 0 then
         dx = dx / len
         dy = dy / len
+        -- Запоминаем направление для прицела
         aimDx, aimDy = dx, dy
     end
     
@@ -60,7 +58,7 @@ function controls.getMove()
 end
 
 function controls.isAiming()
-    return isAiming or keys.space
+    return keys.space
 end
 
 function controls.getAim()
@@ -68,11 +66,13 @@ function controls.getAim()
 end
 
 function controls.touchpressed(id, x, y)
-    if x >= back.x and x <= back.x + back.w and
+    -- Проверяем нажатие на кнопку Back (для мобильных)
+    if showBack and x >= back.x and x <= back.x + back.w and
        y >= back.y and y <= back.y + back.h then
         GameState.current = "lobby"
-        return
+        return true
     end
+    return false
 end
 
 function controls.touchmoved(id, x, y)
@@ -81,6 +81,7 @@ end
 
 function controls.touchreleased(id, x, y)
     -- Используется только для мобильных
+    return false, aimDx, aimDy
 end
 
 -- ========== КЛАВИАТУРНЫЕ СОБЫТИЯ ==========
@@ -91,7 +92,6 @@ function controls.keypressed(key)
     if key == "d" then keys.d = true end
     if key == "space" then
         keys.space = true
-        isAiming = true
         spacePressed = true
     end
 end
@@ -103,13 +103,13 @@ function controls.keyreleased(key)
     if key == "d" then keys.d = false end
     if key == "space" then
         keys.space = false
-        isAiming = false
         spacePressed = false
     end
 end
 
 -- ========== ПОЛУЧЕНИЕ СОБЫТИЯ ВЫСТРЕЛА ==========
 function controls.getShot()
+    -- Возвращает true только в момент нажатия пробела
     if keys.space and not spaceHeld then
         return true, aimDx, aimDy
     end
@@ -118,7 +118,7 @@ end
 
 function controls.draw()
     -- Рисуем только кнопку Back для мобильных устройств
-    if love.system.getOS() == "Android" or love.system.getOS() == "iOS" then
+    if showBack then
         love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
         love.graphics.rectangle("fill", back.x+4, back.y+5, back.w, back.h, 14, 14)
         
