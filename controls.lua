@@ -3,7 +3,7 @@ local controls = {}
 -- ========== ТАЧ УПРАВЛЕНИЕ (ДЖОСТИКИ) ==========
 local joy  = { id=nil, cx=0, cy=0, sx=0, sy=0, r=45, sr=18 }
 local atk  = { id=nil, x=0, y=0, r=52, hold=false, press=0 }
-local back = { x=20, y=20, w=140, h=55 }
+local back = { x=20, y=20, w=140, h=55 }  -- Кнопка вверху
 
 -- ========== КЛАВИАТУРНОЕ УПРАВЛЕНИЕ (WASD) ==========
 local keys = {
@@ -17,7 +17,7 @@ local keys = {
 local font
 local aimDx, aimDy = 0, -1
 local isMobile = love.system.getOS() == "Android" or love.system.getOS() == "iOS"
-local spaceJustPressed = false  -- Флаг для отслеживания нажатия
+local spaceJustPressed = false
 
 local function place()
     local w,h = love.graphics.getDimensions()
@@ -29,8 +29,9 @@ local function place()
     atk.x = w - 80
     atk.y = h - 80
     
-    back.x = w/2 - back.w/2
-    back.y = h - 120
+    -- Кнопка Back всегда вверху слева
+    back.x = 20
+    back.y = 20
 end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
@@ -88,23 +89,19 @@ function controls.update(dt)
     atk.press = atk.press + (target - atk.press) * math.min(dt*12, 1)
 end
 
--- ========== ПОЛУЧЕНИЕ ДВИЖЕНИЯ (ТАЧ + КЛАВИАТУРА) ==========
 function controls.getMove()
     local dx, dy = 0, 0
     
-    -- Клавиатурное управление (WASD)
     if keys.w then dy = dy - 1 end
     if keys.s then dy = dy + 1 end
     if keys.a then dx = dx - 1 end
     if keys.d then dx = dx + 1 end
     
-    -- Тач управление (джостик) - если есть касание
     if joy.id then
         local jdx = joy.sx - joy.cx
         local jdy = joy.sy - joy.cy
         local len = math.sqrt(jdx*jdx + jdy*jdy)
         if len > 0 then
-            -- Если клавиатура не используется, берем с джостика
             if dx == 0 and dy == 0 then
                 dx = jdx / len
                 dy = jdy / len
@@ -113,7 +110,6 @@ function controls.getMove()
         end
     end
     
-    -- Если есть движение, обновляем прицел
     if dx ~= 0 or dy ~= 0 then
         local len = math.sqrt(dx*dx + dy*dy)
         if len > 0 then
@@ -134,7 +130,6 @@ function controls.getAim()
     return aimDx, aimDy 
 end
 
--- ========== ТАЧ СОБЫТИЯ ==========
 function controls.touchpressed(id,x,y)
     if x>=back.x and x<=back.x+back.w and
        y>=back.y and y<=back.y+back.h then
@@ -185,7 +180,6 @@ function controls.touchreleased(id)
     return false, aimDx, aimDy
 end
 
--- ========== КЛАВИАТУРНЫЕ СОБЫТИЯ ==========
 function controls.keypressed(key)
     if key == "w" then keys.w = true end
     if key == "a" then keys.a = true end
@@ -193,7 +187,7 @@ function controls.keypressed(key)
     if key == "d" then keys.d = true end
     if key == "space" then
         keys.space = true
-        spaceJustPressed = true  -- Устанавливаем флаг при нажатии
+        spaceJustPressed = true
     end
 end
 
@@ -204,22 +198,18 @@ function controls.keyreleased(key)
     if key == "d" then keys.d = false end
     if key == "space" then
         keys.space = false
-        -- Не сбрасываем spaceJustPressed здесь, чтобы main.lua мог его обработать
     end
 end
 
--- ========== ПОЛУЧЕНИЕ ВЫСТРЕЛА С КЛАВИАТУРЫ ==========
 function controls.getShot()
     if spaceJustPressed then
-        spaceJustPressed = false  -- Сбрасываем флаг после выстрела
+        spaceJustPressed = false
         return true, aimDx, aimDy
     end
     return false, aimDx, aimDy
 end
 
--- ========== ОТРИСОВКА ==========
 function controls.draw()
-    -- Рисуем джостик (всегда рисуем на мобильных)
     if isMobile then
         love.graphics.setLineWidth(2.55)
 
@@ -247,8 +237,8 @@ function controls.draw()
         love.graphics.pop()
     end
 
-    -- Кнопка Back (всегда рисуется)
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    -- Кнопка Back с тенью как в лобби (тёмная, не фиолетовая)
+    love.graphics.setColor(0, 0, 0, 0.5)  -- Тень как в лобби
     love.graphics.rectangle("fill", back.x+4, back.y+5, back.w, back.h, 14, 14)
 
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
