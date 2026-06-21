@@ -1,4 +1,4 @@
- local controls = require("controls")
+local controls = require("controls")
 local enemy = require("enemy")
 
 local game = {}
@@ -75,6 +75,10 @@ end
 
 function game.resize()
     controls.resize()
+    
+    -- ИСПРАВЛЕНО: Проверяем, загружена ли текстура, чтобы избежать краша при старте
+    if not bg then return end
+    
     -- ОПТИМИЗАЦИЯ: Пересоздаем Quad только при изменении размера окна
     local w, h = love.graphics.getDimensions()
     bgQuad = love.graphics.newQuad(0, 0, w, h, bg:getWidth(), bg:getHeight())
