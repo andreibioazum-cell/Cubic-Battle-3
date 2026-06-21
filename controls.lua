@@ -16,6 +16,10 @@ local function place()
     end
     atk.x = w - 80
     atk.y = h - 80
+    
+    -- ИСПРАВЛЕНО: Кнопка назад по центру внизу экрана
+    back.x = w/2 - back.w/2
+    back.y = h - 120
 end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
@@ -113,7 +117,7 @@ function controls.touchmoved(id,x,y)
     if joy.id == id then
         local dx = x-joy.cx
         local dy = y-joy.cy
-        local len = math.sqrt(dx*dx+dy*dy)
+        local len = math.sqrt(dx*dx + dy*dy)
         if len > joy.r then
             dx = dx/len * joy.r
             dy = dy/len * joy.r
@@ -161,10 +165,11 @@ function controls.draw()
     drawSpacedText("Shot", -atk.r, -14, atk.r*2, "center", font, font:getWidth("A")*0.05, textAlpha)
     love.graphics.pop()
 
-    love.graphics.setColor(0,0,0,0.20)
+    -- ИСПРАВЛЕНО: Кнопка назад как в лобби (темнее и фиолетовее)
+    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", back.x+4, back.y+5, back.w, back.h, 14, 14)
 
-    love.graphics.setColor(0.55, 0.20, 0.85, 1)
+    love.graphics.setColor(0.35, 0.15, 0.75, 1)
     love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14, 14)
 
     love.graphics.setColor(0,0,0,1)
