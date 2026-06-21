@@ -14,6 +14,7 @@ end
 function love.update(dt)
     if dt > 0.05 then dt = 0.05 end
 
+    -- Проверяем смену состояния ДО обновления
     if GameState.current ~= lastState then
         if GameState.current == "lobby" and lobby.load then lobby.load() end
         if GameState.current == "game"  and game.load  then game.load()  end
@@ -24,6 +25,13 @@ function love.update(dt)
         lobby.update(dt)
     elseif GameState.current == "game" then
         game.update(dt)
+    end
+
+    -- Проверяем смену состояния ПОСЛЕ обновления (если игрок умер/победил внутри update)
+    if GameState.current ~= lastState then
+        if GameState.current == "lobby" and lobby.load then lobby.load() end
+        if GameState.current == "game"  and game.load  then game.load()  end
+        lastState = GameState.current
     end
 end
 
@@ -61,9 +69,12 @@ function love.touchreleased(id, x, y)
     dispatch("touchreleased", id, x, y)
 end
 
-function love.mousepressed(x, y)
-    if isMobile then return end
-    love.touchpressed(1, x, y)
+-- ИСПРАВЛЕНО: Добавлены проверки на левую кнопку мыши и флаг istouch
+function love.mousepressed(x, y, button, istouch)
+    if isMobile or istouch then return end
+    if button == 1 then
+        love.touchpressed(1, x, y)
+    end
 end
 
 function love.mousemoved(x, y)
@@ -71,7 +82,9 @@ function love.mousemoved(x, y)
     if love.mouse.isDown(1) then love.touchmoved(1, x, y) end
 end
 
-function love.mousereleased(x, y)
-    if isMobile then return end
-    love.touchreleased(1, x, y)
+function love.mousereleased(x, y, button, istouch)
+    if isMobile or istouch then return end
+    if button == 1 then
+        love.touchreleased(1, x, y)
+    end
 end
