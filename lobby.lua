@@ -3,9 +3,10 @@ local lobby = {}
 local btn = { w=220, h=75, x=0, y=0 }
 local fontTitle, fontSub, fontBtn
 local spaceCanvas -- Канвас для космоса (отрисовывается 1 раз)
+local stars = {} -- Таблица для анимации звезд
 
 local function mkGrad(w, h)
-    -- ИСПРАВЛЕНО: Глубокие космические синие оттенки
+    -- Глубокие космические синие оттенки
     return love.graphics.newMesh({
         {0,0, 0,0, 0.02,0.00,0.10,1},
         {w,0, 1,0, 0.00,0.05,0.25,1},
@@ -14,23 +15,25 @@ local function mkGrad(w, h)
     }, "fan", "static")
 end
 
+local function generateStars(w, h)
+    stars = {}
+    for i=1, 150 do
+        table.insert(stars, {
+            x = math.random(w),
+            y = math.random(h),
+            size = math.random(1, 3),
+            alpha = math.random(50, 100) / 100,
+            speed = 40 + math.random(80) -- Скорость полета звезды
+        })
+    end
+end
+
 local function generateSpace(w, h)
     spaceCanvas = love.graphics.newCanvas(w, h)
     love.graphics.setCanvas(spaceCanvas)
     
-    -- Рисуем градиент
+    -- Рисуем статичный градиент на канвас
     love.graphics.draw(mkGrad(w, h), 0, 0)
-    
-    -- Рисуем звезды
-    love.graphics.setColor(1, 1, 1, 1)
-    for i=1, 300 do
-        local sx = math.random(w)
-        local sy = math.random(h)
-        local size = math.random(1, 3)
-        local alpha = math.random(50, 100) / 100
-        love.graphics.setColor(1, 1, 1, alpha)
-        love.graphics.rectangle("fill", sx, sy, size, size)
-    end
     
     love.graphics.setCanvas()
 end
@@ -94,32 +97,58 @@ function lobby.load()
     
     local w, h = love.graphics.getDimensions()
     generateSpace(w, h)
+    generateStars(w, h)
     
     place()
 end
 
 function lobby.resize(w, h)
     generateSpace(w, h)
+    generateStars(w, h)
     place()
 end
 
-function lobby.update(dt) end
+function lobby.update(dt)
+    local w, h = love.graphics.getDimensions()
+    -- Двигаем звезды из левого верхнего угла в правый нижний
+    for _, s in ipairs(stars) do
+        s.x = s.x + s.speed * dt
+        s.y = s.y + s.speed * dt
+        
+        -- Если звезда улетела за экран, респавним её сверху или слева
+        if s.x > w or s.y > h then
+            if math.random() > 0.5 then
+                s.x = math.random(-50, 0)
+                s.y = math.random(0, h)
+            else
+                s.x = math.random(0, w)
+                s.y = math.random(-50, 0)
+            end
+        end
+    end
+end
 
 function lobby.draw()
-    -- Отрисовываем готовый космос
+    -- Отрисовываем готовый космос (градиент)
     love.graphics.setColor(1,1,1,1)
     if spaceCanvas then
         love.graphics.draw(spaceCanvas, 0, 0)
     end
 
+    -- Отрисовываем анимированные звезды
+    for _, s in ipairs(stars) do
+        love.graphics.setColor(1, 1, 1, s.alpha)
+        love.graphics.rectangle("fill", s.x, s.y, s.size, s.size)
+    end
+
     drawSpacedText("Cubic Battle", 0, love.graphics.getHeight()/2 - 150, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A")*0.05)
     drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 60, love.graphics.getWidth(), "center", fontSub, fontSub:getWidth("A")*0.05)
 
-    -- ИСПРАВЛЕНО: Космически-синие цвета кнопки
-    love.graphics.setColor(0.0, 0.1, 0.4, 0.5)
+    -- ИСПРАВЛЕНО: Темнее и фиолетовее
+    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btn.x+5, btn.y+6, btn.w, btn.h, 16, 16)
 
-    love.graphics.setColor(0.2, 0.45, 1.0, 1)
+    love.graphics.setColor(0.35, 0.15, 0.75, 1)
     love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16, 16)
 
     love.graphics.setColor(0,0,0,1)
