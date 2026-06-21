@@ -114,7 +114,7 @@ function game.draw()
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
-    -- ИСПРАВЛЕНО: Возвращаем стабильную отрисовку травы циклом
+    -- Отрисовка травы
     local w,h = love.graphics.getDimensions()
     local tw,th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x/tw)*tw
@@ -143,10 +143,7 @@ function game.draw()
 
     enemy.draw()
 
-    local e = enemy.get()
-    if e then
-        drawHPBar(e.x - 28, e.y - 45, 56, 8, e.hp, 5, {0.9,0.2,0.2})
-    end
+    -- Убрал полоску здоровья над врагом, так как теперь она справа экрана
 
     love.graphics.setColor(0,0,0,0.4)
     love.graphics.push()
@@ -165,17 +162,30 @@ function game.draw()
 
     love.graphics.pop()
 
+    -- ИСПРАВЛЕНО: UI Игрока слева
     love.graphics.setColor(1,1,1,1)
     love.graphics.setFont(font)
 
     local barW, barH = 200, 18
-    local px = love.graphics.getWidth() - barW - 20
+    local px = 20 -- Слева
     local py = 20
     drawHPBar(px, py, barW, barH, cube.hp, PLAYER_HP_MAX, {0.3,0.85,0.35})
 
     love.graphics.setColor(1,1,1,1)
     love.graphics.printf("HP " .. math.max(0,cube.hp) .. " / " .. PLAYER_HP_MAX,
-        px, py + 22, barW, "right")
+        px, py + 22, barW, "left") -- Текст по левому краю
+
+    -- ИСПРАВЛЕНО: UI Врага справа
+    local e = enemy.get()
+    if e then
+        local epx = love.graphics.getWidth() - barW - 20 -- Справа
+        local epy = 20
+        drawHPBar(epx, epy, barW, barH, e.hp, 5, {0.9,0.2,0.2})
+        
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.printf("ENEMY " .. math.max(0,e.hp) .. " / 5",
+            epx, epy + 22, barW, "right") -- Текст по правому краю
+    end
 
     controls.draw()
 end
