@@ -55,7 +55,7 @@ function enemy.update(dt, px, py, bullets, onHitPlayer)
             timer = 0
             spawn(px, py)
         end
-        return
+        return false -- Врага нет, не убит
     end
 
     local dx = px - e.x
@@ -112,10 +112,12 @@ function enemy.update(dt, px, py, bullets, onHitPlayer)
             table.remove(bullets, i)
             if e.hp <= 0 then
                 e = nil
-                return
+                return true -- Враг убит!
             end
         end
     end
+
+    return false -- Враг выжил
 end
 
 function enemy.draw()
