@@ -17,8 +17,7 @@ local keys = {
 local font
 local aimDx, aimDy = 0, -1
 local isMobile = love.system.getOS() == "Android" or love.system.getOS() == "iOS"
-local spacePressed = false
-local spaceHeld = false
+local spaceJustPressed = false  -- Флаг для отслеживания нажатия
 
 local function place()
     local w,h = love.graphics.getDimensions()
@@ -87,9 +86,6 @@ end
 function controls.update(dt)
     local target = atk.hold and 1 or 0
     atk.press = atk.press + (target - atk.press) * math.min(dt*12, 1)
-    
-    -- Обновляем состояние пробела
-    spaceHeld = keys.space
 end
 
 -- ========== ПОЛУЧЕНИЕ ДВИЖЕНИЯ (ТАЧ + КЛАВИАТУРА) ==========
@@ -197,7 +193,7 @@ function controls.keypressed(key)
     if key == "d" then keys.d = true end
     if key == "space" then
         keys.space = true
-        spacePressed = true
+        spaceJustPressed = true  -- Устанавливаем флаг при нажатии
     end
 end
 
@@ -208,13 +204,14 @@ function controls.keyreleased(key)
     if key == "d" then keys.d = false end
     if key == "space" then
         keys.space = false
-        spacePressed = false
+        -- Не сбрасываем spaceJustPressed здесь, чтобы main.lua мог его обработать
     end
 end
 
 -- ========== ПОЛУЧЕНИЕ ВЫСТРЕЛА С КЛАВИАТУРЫ ==========
 function controls.getShot()
-    if keys.space and not spaceHeld then
+    if spaceJustPressed then
+        spaceJustPressed = false  -- Сбрасываем флаг после выстрела
         return true, aimDx, aimDy
     end
     return false, aimDx, aimDy
@@ -222,8 +219,8 @@ end
 
 -- ========== ОТРИСОВКА ==========
 function controls.draw()
-    -- Рисуем джостик (только если есть касание или на мобильных)
-    if isMobile or joy.id then
+    -- Рисуем джостик (всегда рисуем на мобильных)
+    if isMobile then
         love.graphics.setLineWidth(2.55)
 
         love.graphics.setColor(0,0,0,0.20)
