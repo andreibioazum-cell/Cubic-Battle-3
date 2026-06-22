@@ -1,4 +1,4 @@
-name: Build Cubic Battle (ULTRA FAST)
+name: Build_Cubic_Battle_FULL
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   # ============================================================
-  # ANDROID APK (быстрый, с кэшами)
+  # JOB 1: СБОРКА APK (Android)
   # ============================================================
   build-android:
     runs-on: ubuntu-latest
@@ -33,7 +33,7 @@ jobs:
           path: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
           key: ndk-25.2.9519653-v5
 
-      - name: Install NDK (если нет в кэше)
+      - name: Install NDK
         if: steps.ndk-cache.outputs.cache-hit != 'true'
         run: yes | sdkmanager "ndk;25.2.9519653"
 
@@ -48,7 +48,7 @@ jobs:
           path: love-android
           key: love-android-src-v6
 
-      - name: Clone love-android (если нет кэша)
+      - name: Clone love-android
         if: steps.love-android-cache.outputs.cache-hit != 'true'
         run: git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
@@ -108,7 +108,7 @@ jobs:
           if-no-files-found: error
 
   # ============================================================
-  # WINDOWS EXE (портативный, максимально быстро)
+  # JOB 2: СБОРКА EXE (Windows) — ОПТИМИЗИРОВАНА
   # ============================================================
   build-windows:
     runs-on: ubuntu-latest
@@ -180,7 +180,7 @@ jobs:
           if-no-files-found: error
 
   # ============================================================
-  # (Опционально) RELEASE – заливаем артефакты в релиз
+  # JOB 3: ЗАГРУЗКА В RELEASE (опционально)
   # ============================================================
   release:
     runs-on: ubuntu-latest
