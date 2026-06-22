@@ -20,7 +20,7 @@ local function loadMusic()
     if ok and source then
         bgMusic = source
         bgMusic:setLooping(true)
-        bgMusic:setVolume(0.5)
+        bgMusic:setVolume(0.3)
         bgMusic:play()
         print("Фоновая музыка запущена")
     else
