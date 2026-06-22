@@ -3,7 +3,7 @@ local enemy = require("enemy")
 
 local game = {}
 
--- Глобальные переменные для сохранения (устанавливаются в main.lua)
+-- Глобальные переменные для сохранения (устанавливаются из main.lua)
 SAVE_DATA = SAVE_DATA or { coins = 0, hasAzumSkin = false }
 SAVE_SAVE = SAVE_SAVE or function() end
 
@@ -17,10 +17,11 @@ local bg, playerImg, azumImg, font
 local cam = { x=0, y=0 }
 local dead = false
 
--- Флаг скина и использование перерождения
+-- Флаги для скина и способности
 local hasAzumSkin = false
-local resurrectionUsed = false
+local resurrectionUsed = false   -- использована ли способность в текущей игре
 
+-- ========== СОЗДАНИЕ ПУЛИ ==========
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
         x=x, y=y,
@@ -30,6 +31,7 @@ local function spawnBullet(x, y, dx, dy)
     })
 end
 
+-- ========== ОТРИСОВКА ПОЛОСЫ HP ==========
 local function drawHPBar(x, y, w, h, hp, max, color)
     if hp < 0 then hp = 0 end
     love.graphics.setColor(0,0,0,0.5)
@@ -43,16 +45,14 @@ local function drawHPBar(x, y, w, h, hp, max, color)
     love.graphics.rectangle("line", x, y, w, h, 4, 4)
 end
 
+-- ========== ОБРАБОТЧИК ПОЛУЧЕНИЯ УРОНА ==========
+-- АВТОМАТИЧЕСКОГО ВОСКРЕШЕНИЯ ЗДЕСЬ НЕТ!
 local function onHitPlayer(dmg)
     if dead then return end
     cube.hp = cube.hp - dmg
     cube.hit = 1
-    -- Перерождение (если скин куплен и не использовано)
-    if cube.hp <= 1 and hasAzumSkin and not resurrectionUsed then
-        cube.hp = 5
-        resurrectionUsed = true
-        cube.hit = 0
-    end
+
+    -- Если здоровье упало до 0 или ниже – игрок умирает, переходим в лобби
     if cube.hp <= 0 then
         cube.hp = 0
         dead = true
@@ -60,9 +60,11 @@ local function onHitPlayer(dmg)
     end
 end
 
+-- ========== ЗАГРУЗКА ИГРЫ ==========
 function game.load(hasAzum)
     hasAzumSkin = hasAzum or false
-    resurrectionUsed = false
+    resurrectionUsed = false   -- сбрасываем использование способности
+
     cube.x, cube.y = 0, 0
     cube.angle = 0
     cube.hp = PLAYER_HP_MAX
@@ -91,21 +93,23 @@ function game.resize()
     controls.resize()
 end
 
+-- ========== ОБНОВЛЕНИЕ ИГРЫ ==========
 function game.update(dt)
     if dead then return end
 
     controls.update(dt)
 
-    -- ========== АКТИВАЦИЯ СПОСОБНОСТИ (КНОПКА R / КЛАВИША E) ==========
+    -- ========== РУЧНАЯ АКТИВАЦИЯ СПОСОБНОСТИ (ТОЛЬКО ПО КНОПКЕ!) ==========
     if controls.getAbilityTrigger() then
+        -- Условия: есть скин, способность ещё не использована, здоровье <= 1
         if hasAzumSkin and not resurrectionUsed and cube.hp <= 1 then
-            cube.hp = 5
+            cube.hp = 5          -- воскрешение до 5 HP
             resurrectionUsed = true
-            cube.hit = 0
+            cube.hit = 0         -- убираем эффект попадания
         end
     end
 
-    -- Движение
+    -- ========== ДВИЖЕНИЕ ИГРОКА ==========
     local dx, dy = controls.getMove()
     cube.x = cube.x + dx * cube.speed * dt
     cube.y = cube.y + dy * cube.speed * dt
@@ -116,14 +120,14 @@ function game.update(dt)
 
     cube.hit = math.max(0, cube.hit - dt*3)
 
-    -- Камера
+    -- ========== КАМЕРА ==========
     local targetX = cube.x - love.graphics.getWidth()/2
     local targetY = cube.y - love.graphics.getHeight()/2
     local k = 1 - math.exp(-dt * 7.3)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Обновление пуль игрока
+    -- ========== ОБНОВЛЕНИЕ ПУЛЬ ИГРОКА ==========
     for i=#bullets,1,-1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -134,17 +138,17 @@ function game.update(dt)
         end
     end
 
-    -- Обновление врага
+    -- ========== ОБНОВЛЕНИЕ ВРАГА ==========
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
-        -- Начисляем монеты
+        -- Начисляем монеты за убийство врага
         SAVE_DATA.coins = (SAVE_DATA.coins or 0) + 10
         SAVE_SAVE()
         GameState.current = "lobby"
         return
     end
 
-    -- Проверка попадания пуль врага в игрока
+    -- ========== ПРОВЕРКА ПОПАДАНИЙ ПУЛЬ ВРАГА В ИГРОКА ==========
     local eBullets = enemy.getBullets()
     for i=#eBullets, 1, -1 do
         local b = eBullets[i]
@@ -158,13 +162,14 @@ function game.update(dt)
     end
 end
 
+-- ========== ОТРИСОВКА ==========
 function game.draw()
     love.graphics.setColor(1,1,1,1)
 
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
-    -- Фон (трава)
+    -- ФОН
     local w,h = love.graphics.getDimensions()
     local tw,th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x/tw)*tw
@@ -175,16 +180,16 @@ function game.draw()
         end
     end
 
-    -- Пули игрока (чёрные)
+    -- ПУЛИ ИГРОКА
     love.graphics.setColor(0, 0, 0, 1)
     for _, b in ipairs(bullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
 
-    -- Пули врага (рисуются в enemy.drawBullets)
+    -- ПУЛИ ВРАГА
     enemy.drawBullets()
 
-    -- Линия прицела
+    -- ЛИНИЯ ПРИЦЕЛА
     if controls.isAiming() then
         local ax, ay = controls.getAim()
         love.graphics.setColor(0, 0, 0, 0.55)
@@ -196,13 +201,13 @@ function game.draw()
         )
     end
 
-    -- Отрисовка врага
+    -- ВРАГ
     enemy.draw()
 
-    -- Выбор текстуры игрока (скин или обычный)
+    -- ИГРОК (С УЧЁТОМ СКИНА)
     local imgToDraw = hasAzumSkin and azumImg or playerImg
 
-    -- Тень игрока
+    -- Тень
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
@@ -225,7 +230,6 @@ function game.draw()
     love.graphics.setColor(1,1,1,1)
     love.graphics.setFont(font)
 
-    -- HP игрока
     local barW, barH = 200, 18
     local px = 20
     local py = 20
@@ -235,7 +239,6 @@ function game.draw()
     love.graphics.printf("HP " .. math.max(0, cube.hp) .. " / " .. PLAYER_HP_MAX,
         px, py + 22, barW, "left")
 
-    -- HP врага
     local e = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
@@ -247,7 +250,7 @@ function game.draw()
             epx, epy + 22, barW, "right")
     end
 
-    -- Отрисовка элементов управления (джойстик, кнопки)
+    -- ЭЛЕМЕНТЫ УПРАВЛЕНИЯ
     controls.draw()
 end
 
@@ -267,6 +270,7 @@ function game.touchreleased(id, x, y)
     end
 end
 
+-- ========== ВЫСТРЕЛ С КЛАВИАТУРЫ (ПРОБЕЛ) ==========
 function game.spawnPlayerBullet(dx, dy)
     if dead then return end
     spawnBullet(cube.x, cube.y, dx, dy)
