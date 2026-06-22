@@ -3,6 +3,7 @@ local credits = {}
 local fontTitle, fontText, fontBtn
 local btnBack = { w = 200, h = 60, x = 0, y = 0 }
 
+-- Draw text with a shadow effect (no per‑character loop)
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -47,9 +48,9 @@ function credits.draw()
 
     drawSpacedText("Developers:", 0, y, w, "center", fontText)
     y = y + 50
-    drawSpacedText("Дима Сараев – Creator (10 years)", 0, y, w, "center", fontText)
+    drawSpacedText("Dima Saraev – Creator (10 years)", 0, y, w, "center", fontText)
     y = y + 45
-    drawSpacedText("Дима Густенёв – Owner (11 years)", 0, y, w, "center", fontText)
+    drawSpacedText("Dima Gustenyov – Owner (11 years)", 0, y, w, "center", fontText)
     y = y + 70
 
     drawSpacedText("Music:", 0, y, w, "center", fontText)
@@ -60,7 +61,7 @@ function credits.draw()
     y = y + 40
     drawSpacedText("Licensed under Creative Commons: By Attribution 3.0", 0, y, w, "center", fontText)
 
-    -- Кнопка Back
+    -- Back button
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4, btnBack.y + 5, btnBack.w, btnBack.h, 14, 14)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
