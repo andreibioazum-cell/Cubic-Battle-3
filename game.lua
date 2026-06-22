@@ -3,7 +3,7 @@ local enemy = require("enemy")
 
 local game = {}
 
--- Глобальные переменные для сохранения (будут установлены из main)
+-- Глобальные переменные для сохранения (устанавливаются в main.lua)
 SAVE_DATA = SAVE_DATA or { coins = 0, hasAzumSkin = false }
 SAVE_SAVE = SAVE_SAVE or function() end
 
@@ -47,7 +47,7 @@ local function onHitPlayer(dmg)
     if dead then return end
     cube.hp = cube.hp - dmg
     cube.hit = 1
-    -- Перерождение
+    -- Перерождение (если скин куплен и не использовано)
     if cube.hp <= 1 and hasAzumSkin and not resurrectionUsed then
         cube.hp = 5
         resurrectionUsed = true
@@ -96,6 +96,16 @@ function game.update(dt)
 
     controls.update(dt)
 
+    -- ========== АКТИВАЦИЯ СПОСОБНОСТИ (КНОПКА R / КЛАВИША E) ==========
+    if controls.getAbilityTrigger() then
+        if hasAzumSkin and not resurrectionUsed and cube.hp <= 1 then
+            cube.hp = 5
+            resurrectionUsed = true
+            cube.hit = 0
+        end
+    end
+
+    -- Движение
     local dx, dy = controls.getMove()
     cube.x = cube.x + dx * cube.speed * dt
     cube.y = cube.y + dy * cube.speed * dt
@@ -106,12 +116,14 @@ function game.update(dt)
 
     cube.hit = math.max(0, cube.hit - dt*3)
 
+    -- Камера
     local targetX = cube.x - love.graphics.getWidth()/2
     local targetY = cube.y - love.graphics.getHeight()/2
     local k = 1 - math.exp(-dt * 7.3)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
+    -- Обновление пуль игрока
     for i=#bullets,1,-1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -122,6 +134,7 @@ function game.update(dt)
         end
     end
 
+    -- Обновление врага
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
         -- Начисляем монеты
@@ -131,6 +144,7 @@ function game.update(dt)
         return
     end
 
+    -- Проверка попадания пуль врага в игрока
     local eBullets = enemy.getBullets()
     for i=#eBullets, 1, -1 do
         local b = eBullets[i]
@@ -150,6 +164,7 @@ function game.draw()
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
+    -- Фон (трава)
     local w,h = love.graphics.getDimensions()
     local tw,th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x/tw)*tw
@@ -160,13 +175,16 @@ function game.draw()
         end
     end
 
+    -- Пули игрока (чёрные)
     love.graphics.setColor(0, 0, 0, 1)
     for _, b in ipairs(bullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
 
+    -- Пули врага (рисуются в enemy.drawBullets)
     enemy.drawBullets()
 
+    -- Линия прицела
     if controls.isAiming() then
         local ax, ay = controls.getAim()
         love.graphics.setColor(0, 0, 0, 0.55)
@@ -178,11 +196,13 @@ function game.draw()
         )
     end
 
+    -- Отрисовка врага
     enemy.draw()
 
-    -- Выбор текстуры игрока
+    -- Выбор текстуры игрока (скин или обычный)
     local imgToDraw = hasAzumSkin and azumImg or playerImg
 
+    -- Тень игрока
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
@@ -190,6 +210,7 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE/2, -PLAYER_SIZE/2)
     love.graphics.pop()
 
+    -- Сам игрок
     love.graphics.push()
     love.graphics.translate(cube.x, cube.y)
     love.graphics.rotate(cube.angle)
@@ -200,9 +221,11 @@ function game.draw()
 
     love.graphics.pop()
 
+    -- UI
     love.graphics.setColor(1,1,1,1)
     love.graphics.setFont(font)
 
+    -- HP игрока
     local barW, barH = 200, 18
     local px = 20
     local py = 20
@@ -212,6 +235,7 @@ function game.draw()
     love.graphics.printf("HP " .. math.max(0, cube.hp) .. " / " .. PLAYER_HP_MAX,
         px, py + 22, barW, "left")
 
+    -- HP врага
     local e = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
@@ -223,9 +247,11 @@ function game.draw()
             epx, epy + 22, barW, "right")
     end
 
+    -- Отрисовка элементов управления (джойстик, кнопки)
     controls.draw()
 end
 
+-- ========== ОБРАБОТЧИКИ ТАЧ ==========
 function game.touchpressed(id, x, y)
     controls.touchpressed(id, x, y)
 end
