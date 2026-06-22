@@ -43,7 +43,7 @@ function credits.draw()
     local w = love.graphics.getWidth()
     local y = 100
 
-    drawSpacedText("=== CREDITS ===", 0, y, w, "center", fontTitle)
+    drawSpacedText("    CREDITS     ", 0, y, w, "center", fontTitle)
     y = y + 80
 
     drawSpacedText("Developers:", 0, y, w, "center", fontText)
