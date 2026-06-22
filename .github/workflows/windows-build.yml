@@ -1,0 +1,65 @@
+name: Build_Cubic_Battle_Windows
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      exe-name: ${{ steps.set-output.outputs.exe-name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: game
+
+      - name: Package game.love
+        run: |
+          cd game
+          zip -9 -r ../game.love . -x "*.git*" -x ".github/*"
+
+      - name: Download LÖVE Windows
+        run: |
+          wget -O love-windows.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip"
+          unzip love-windows.zip -d love-windows
+
+      - name: Download LÖVE Windows 32-bit
+        run: |
+          wget -O love-windows32.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win32.zip"
+          unzip love-windows32.zip -d love-windows32
+
+      - name: Create Portable EXE (64-bit)
+        run: |
+          mkdir -p dist/CubicBattle
+          cp love-windows/love-11.5-win64/* dist/CubicBattle/
+          cat game.love >> dist/CubicBattle/love.exe
+          mv dist/CubicBattle/love.exe dist/CubicBattle/CubicBattle.exe
+          cp game/icon.ico dist/CubicBattle/ || true
+
+      - name: Create Portable EXE (32-bit)
+        run: |
+          mkdir -p dist/CubicBattle32
+          cp love-windows32/love-11.5-win32/* dist/CubicBattle32/
+          cat game.love >> dist/CubicBattle32/love.exe
+          mv dist/CubicBattle32/love.exe dist/CubicBattle32/CubicBattle32.exe
+
+      - name: Create ZIP
+        run: |
+          cd dist
+          zip -9 -r ../CubicBattle_Windows_Portable.zip CubicBattle/ CubicBattle32/
+
+      - name: Set EXE name
+        id: set-output
+        run: |
+          EXE_NAME="CubicBattle_Windows_$(date +'%Y%m%d_%H%M').zip"
+          mv CubicBattle_Windows_Portable.zip "$EXE_NAME"
+          echo "exe-name=$EXE_NAME" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CubicBattle_Windows
+          path: CubicBattle_Windows_*.zip
+          compression-level: 0
