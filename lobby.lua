@@ -3,12 +3,13 @@ local lobby = {}
 local btns = {
     play = { w = 220, h = 75, x = 0, y = 0 },
     shop = { w = 220, h = 75, x = 0, y = 0 },
-    credits = { w = 160, h = 55, x = 0, y = 0 }  -- новая кнопка
+    credits = { w = 160, h = 55, x = 0, y = 0 }
 }
 local fontTitle, fontSub, fontBtn
 local spaceCanvas
 local stars = {}
 
+-- ========== ГРАДИЕНТНЫЙ МЕШ ==========
 local function mkGrad(w, h)
     return love.graphics.newMesh({
         {0, 0, 0, 0, 0.02, 0.00, 0.10, 1},
@@ -38,16 +39,27 @@ local function generateSpace(w, h)
     love.graphics.setCanvas()
 end
 
+-- ========== РАЗМЕЩЕНИЕ КНОПОК (АДАПТИВНО) ==========
 local function place()
     local w, h = love.graphics.getDimensions()
-    btns.play.x = w / 2 - btns.play.w - 20
-    btns.play.y = h / 2 + 50
-    btns.shop.x = w / 2 + 20
-    btns.shop.y = h / 2 + 50
-    btns.credits.x = w / 2 - btns.credits.w / 2
-    btns.credits.y = h / 2 + 140   -- ниже кнопок Play/Shop
+    local scale = math.min(w, h) / 800
+
+    btns.play.w = 220 * scale
+    btns.play.h = 75 * scale
+    btns.shop.w = 220 * scale
+    btns.shop.h = 75 * scale
+    btns.credits.w = 160 * scale
+    btns.credits.h = 55 * scale
+
+    btns.play.x = w/2 - btns.play.w - 20 * scale
+    btns.play.y = h/2 + 100 * scale
+    btns.shop.x = w/2 + 20 * scale
+    btns.shop.y = h/2 + 100 * scale
+    btns.credits.x = w/2 - btns.credits.w/2
+    btns.credits.y = h/2 + 190 * scale
 end
 
+-- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -66,10 +78,17 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
 end
 
 function lobby.load()
-    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", 64)
-    fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", 22)
-    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", 30)
     local w, h = love.graphics.getDimensions()
+    local scale = math.min(w, h) / 800
+
+    local titleSize = math.max(32, 64 * scale)
+    local subSize   = math.max(16, 22 * scale)
+    local btnSize   = math.max(20, 30 * scale)
+
+    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
+    fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
+    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
+
     generateSpace(w, h)
     generateStars(w, h)
     place()
@@ -79,6 +98,14 @@ function lobby.resize(w, h)
     generateSpace(w, h)
     generateStars(w, h)
     place()
+
+    local scale = math.min(w, h) / 800
+    local titleSize = math.max(32, 64 * scale)
+    local subSize   = math.max(16, 22 * scale)
+    local btnSize   = math.max(20, 30 * scale)
+    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
+    fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
+    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
 
 function lobby.update(dt)
@@ -107,38 +134,41 @@ function lobby.draw()
         love.graphics.rectangle("fill", s.x, s.y, s.size, s.size)
     end
 
-    drawSpacedText("Cubic Battle", 0, love.graphics.getHeight() / 2 - 150, love.graphics.getWidth(), "center", fontTitle)
-    drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight() / 2 - 60, love.graphics.getWidth(), "center", fontSub)
+    local w = love.graphics.getWidth()
+    local scale = math.min(w, love.graphics.getHeight()) / 800
+
+    drawSpacedText("Cubic Battle", 0, love.graphics.getHeight()/2 - 150*scale, w, "center", fontTitle)
+    drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 60*scale, w, "center", fontSub)
 
     -- Кнопка Play
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btns.play.x + 5, btns.play.y + 6, btns.play.w, btns.play.h, 16, 16)
+    love.graphics.rectangle("fill", btns.play.x + 5*scale, btns.play.y + 6*scale, btns.play.w, btns.play.h, 16*scale, 16*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16, 16)
+    love.graphics.rectangle("fill", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16*scale, 16*scale)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4)
-    love.graphics.rectangle("line", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16, 16)
-    drawSpacedText("Play", btns.play.x, btns.play.y + 20, btns.play.w, "center", fontBtn)
+    love.graphics.setLineWidth(3.4 * scale)
+    love.graphics.rectangle("line", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16*scale, 16*scale)
+    drawSpacedText("Play", btns.play.x, btns.play.y + 20*scale, btns.play.w, "center", fontBtn)
 
     -- Кнопка Shop
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btns.shop.x + 5, btns.shop.y + 6, btns.shop.w, btns.shop.h, 16, 16)
+    love.graphics.rectangle("fill", btns.shop.x + 5*scale, btns.shop.y + 6*scale, btns.shop.w, btns.shop.h, 16*scale, 16*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16, 16)
+    love.graphics.rectangle("fill", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16*scale, 16*scale)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4)
-    love.graphics.rectangle("line", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16, 16)
-    drawSpacedText("Shop", btns.shop.x, btns.shop.y + 20, btns.shop.w, "center", fontBtn)
+    love.graphics.setLineWidth(3.4 * scale)
+    love.graphics.rectangle("line", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16*scale, 16*scale)
+    drawSpacedText("Shop", btns.shop.x, btns.shop.y + 20*scale, btns.shop.w, "center", fontBtn)
 
     -- Кнопка Credits
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btns.credits.x + 5, btns.credits.y + 6, btns.credits.w, btns.credits.h, 14, 14)
+    love.graphics.rectangle("fill", btns.credits.x + 5*scale, btns.credits.y + 6*scale, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14, 14)
+    love.graphics.rectangle("fill", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4)
-    love.graphics.rectangle("line", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14, 14)
-    drawSpacedText("Credits", btns.credits.x, btns.credits.y + 14, btns.credits.w, "center", fontBtn)
+    love.graphics.setLineWidth(3.4 * scale)
+    love.graphics.rectangle("line", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
+    drawSpacedText("Credits", btns.credits.x, btns.credits.y + 14*scale, btns.credits.w, "center", fontBtn)
 end
 
 function lobby.touchpressed(id, x, y)
