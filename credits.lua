@@ -47,7 +47,7 @@ function credits.draw()
 
     drawSpacedText("Developers:", 0, y, w, "center", fontText)
     y = y + 50
-    drawSpacedText("Дима Сараев 2 – Creator (10 years)", 0, y, w, "center", fontText)
+    drawSpacedText("Дима Сараев – Creator (10 years)", 0, y, w, "center", fontText)
     y = y + 45
     drawSpacedText("Дима Густенёв – Owner (11 years)", 0, y, w, "center", fontText)
     y = y + 70
