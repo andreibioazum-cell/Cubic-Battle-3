@@ -3,7 +3,6 @@ local credits = {}
 local fontTitle, fontText, fontBtn
 local btnBack = { w = 200, h = 60, x = 0, y = 0 }
 
--- Draw text with a shadow effect (no per‑character loop)
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -23,17 +22,38 @@ end
 
 function credits.load()
     local w, h = love.graphics.getDimensions()
+    local scale = math.min(w, h) / 800
+
+    btnBack.w = 200 * scale
+    btnBack.h = 60 * scale
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - 100
-    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", 48)
-    fontText  = love.graphics.newFont("Fredoka-Bold.ttf", 28)
-    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", 30)
+    btnBack.y = h - 100 * scale
+
+    local titleSize = math.max(32, 48 * scale)
+    local textSize  = math.max(18, 28 * scale)
+    local btnSize   = math.max(20, 30 * scale)
+
+    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
+    fontText  = love.graphics.newFont("Fredoka-Bold.ttf", textSize)
+    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
 
 function credits.resize()
     local w, h = love.graphics.getDimensions()
+    local scale = math.min(w, h) / 800
+
+    btnBack.w = 200 * scale
+    btnBack.h = 60 * scale
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - 100
+    btnBack.y = h - 100 * scale
+
+    local titleSize = math.max(32, 48 * scale)
+    local textSize  = math.max(18, 28 * scale)
+    local btnSize   = math.max(20, 30 * scale)
+
+    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
+    fontText  = love.graphics.newFont("Fredoka-Bold.ttf", textSize)
+    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
 
 function credits.draw()
@@ -41,35 +61,36 @@ function credits.draw()
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
     local w = love.graphics.getWidth()
-    local y = 100
+    local scale = math.min(w, love.graphics.getHeight()) / 800
+    local y = 100 * scale
 
-    drawSpacedText("    CREDITS     ", 0, y, w, "center", fontTitle)
-    y = y + 80
+    drawSpacedText("    CREDITS    ", 0, y, w, "center", fontTitle)
+    y = y + 80 * scale
 
     drawSpacedText("Developers:", 0, y, w, "center", fontText)
-    y = y + 50
+    y = y + 50 * scale
     drawSpacedText("Dima Saraev – Creator (10 years)", 0, y, w, "center", fontText)
-    y = y + 45
+    y = y + 45 * scale
     drawSpacedText("Dima Gustenyov – Owner (11 years)", 0, y, w, "center", fontText)
-    y = y + 70
+    y = y + 70 * scale
 
     drawSpacedText("Music:", 0, y, w, "center", fontText)
-    y = y + 50
+    y = y + 50 * scale
     drawSpacedText('"Sneaky Snitch" by Kevin MacLeod', 0, y, w, "center", fontText)
-    y = y + 40
+    y = y + 40 * scale
     drawSpacedText("(incompetech.com)", 0, y, w, "center", fontText)
-    y = y + 40
+    y = y + 40 * scale
     drawSpacedText("Licensed under Creative Commons: By Attribution 3.0", 0, y, w, "center", fontText)
 
-    -- Back button
+    -- Кнопка Back
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btnBack.x + 4, btnBack.y + 5, btnBack.w, btnBack.h, 14, 14)
+    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14, 14)
+    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4)
-    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14, 14)
-    drawSpacedText("Back", btnBack.x, btnBack.y + 16, btnBack.w, "center", fontBtn)
+    love.graphics.setLineWidth(3.4 * scale)
+    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
+    drawSpacedText("Back", btnBack.x, btnBack.y + 16*scale, btnBack.w, "center", fontBtn)
 end
 
 function credits.touchpressed(id, x, y)
