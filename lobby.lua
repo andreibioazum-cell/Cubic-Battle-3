@@ -2,7 +2,8 @@ local lobby = {}
 
 local btns = {
     play = { w = 220, h = 75, x = 0, y = 0 },
-    shop = { w = 220, h = 75, x = 0, y = 0 }
+    shop = { w = 220, h = 75, x = 0, y = 0 },
+    credits = { w = 160, h = 55, x = 0, y = 0 }  -- новая кнопка
 }
 local fontTitle, fontSub, fontBtn
 local spaceCanvas
@@ -43,6 +44,8 @@ local function place()
     btns.play.y = h / 2 + 50
     btns.shop.x = w / 2 + 20
     btns.shop.y = h / 2 + 50
+    btns.credits.x = w / 2 - btns.credits.w / 2
+    btns.credits.y = h / 2 + 140   -- ниже кнопок Play/Shop
 end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
@@ -107,6 +110,7 @@ function lobby.draw()
     drawSpacedText("Cubic Battle", 0, love.graphics.getHeight() / 2 - 150, love.graphics.getWidth(), "center", fontTitle)
     drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight() / 2 - 60, love.graphics.getWidth(), "center", fontSub)
 
+    -- Кнопка Play
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btns.play.x + 5, btns.play.y + 6, btns.play.w, btns.play.h, 16, 16)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -116,6 +120,7 @@ function lobby.draw()
     love.graphics.rectangle("line", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16, 16)
     drawSpacedText("Play", btns.play.x, btns.play.y + 20, btns.play.w, "center", fontBtn)
 
+    -- Кнопка Shop
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btns.shop.x + 5, btns.shop.y + 6, btns.shop.w, btns.shop.h, 16, 16)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -124,6 +129,16 @@ function lobby.draw()
     love.graphics.setLineWidth(3.4)
     love.graphics.rectangle("line", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16, 16)
     drawSpacedText("Shop", btns.shop.x, btns.shop.y + 20, btns.shop.w, "center", fontBtn)
+
+    -- Кнопка Credits
+    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    love.graphics.rectangle("fill", btns.credits.x + 5, btns.credits.y + 6, btns.credits.w, btns.credits.h, 14, 14)
+    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.rectangle("fill", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14, 14)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(3.4)
+    love.graphics.rectangle("line", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14, 14)
+    drawSpacedText("Credits", btns.credits.x, btns.credits.y + 14, btns.credits.w, "center", fontBtn)
 end
 
 function lobby.touchpressed(id, x, y)
@@ -131,6 +146,8 @@ function lobby.touchpressed(id, x, y)
         GameState.current = "game"
     elseif x >= btns.shop.x and x <= btns.shop.x + btns.shop.w and y >= btns.shop.y and y <= btns.shop.y + btns.shop.h then
         GameState.current = "shop"
+    elseif x >= btns.credits.x and x <= btns.credits.x + btns.credits.w and y >= btns.credits.y and y <= btns.credits.y + btns.credits.h then
+        GameState.current = "credits"
     end
 end
 
