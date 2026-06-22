@@ -29,9 +29,9 @@ local function place()
     atk.x = w - 80
     atk.y = h - 80
     
-    -- Кнопка Back всегда вверху слева
-    back.x = 20
-    back.y = 20
+    -- Кнопка Back теперь по центру вверху
+    back.x = (w - back.w) / 2   -- центрирование по горизонтали
+    back.y = 30                 -- отступ сверху
 end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
