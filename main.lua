@@ -1,6 +1,7 @@
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
+local shop = require("shop")
 
 GameState = { current = "lobby" }
 
@@ -10,8 +11,30 @@ local lastState = nil
 local shotCooldown = 0
 local SHOT_DELAY = 0.15
 
+-- ========== СОХРАНЕНИЕ ==========
+SAVE_DATA = { coins = 0, hasAzumSkin = false }
+function SAVE_SAVE()
+    -- Простая сериализация (если нет инспекта, используем свой вариант)
+    local str = "return {\n"
+    for k,v in pairs(SAVE_DATA) do
+        str = str .. "  [" .. tostring(k) .. "] = " .. tostring(v) .. ",\n"
+    end
+    str = str .. "}"
+    love.filesystem.write("save.lua", str)
+end
+
+local function loadSave()
+    local ok, data = pcall(love.filesystem.load, "save.lua")
+    if ok and type(data) == "table" then
+        SAVE_DATA = data
+    else
+        SAVE_DATA = { coins = 0, hasAzumSkin = false }
+    end
+end
+
 function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
+    loadSave()
     controls.load()
 end
 
@@ -19,8 +42,13 @@ function love.update(dt)
     if dt > 0.05 then dt = 0.05 end
 
     if GameState.current ~= lastState then
-        if GameState.current == "lobby" and lobby.load then lobby.load() end
-        if GameState.current == "game"  and game.load  then game.load()  end
+        if GameState.current == "lobby" then
+            if lobby.load then lobby.load() end
+        elseif GameState.current == "game" then
+            if game.load then game.load(SAVE_DATA.hasAzumSkin) end
+        elseif GameState.current == "shop" then
+            if shop.load then shop.load(SAVE_DATA) end
+        end
         lastState = GameState.current
     end
 
@@ -28,25 +56,17 @@ function love.update(dt)
         lobby.update(dt)
     elseif GameState.current == "game" then
         controls.update(dt)
-        
         if shotCooldown > 0 then
             shotCooldown = shotCooldown - dt
         end
-        
-        -- ========== ВЫСТРЕЛ С КЛАВИАТУРЫ (РАБОТАЕТ НА ВСЕХ ПЛАТФОРМАХ) ==========
         local shot, dx, dy = controls.getShot()
         if shot and shotCooldown <= 0 and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
             shotCooldown = SHOT_DELAY
         end
-        
         game.update(dt)
-    end
-
-    if GameState.current ~= lastState then
-        if GameState.current == "lobby" and lobby.load then lobby.load() end
-        if GameState.current == "game"  and game.load  then game.load()  end
-        lastState = GameState.current
+    elseif GameState.current == "shop" then
+        -- ничего не обновляем
     end
 end
 
@@ -56,12 +76,15 @@ function love.draw()
     elseif GameState.current == "game" then
         game.draw()
         controls.draw()
+    elseif GameState.current == "shop" then
+        shop.draw(SAVE_DATA.coins)
     end
 end
 
 function love.resize(w, h)
     if lobby.resize then lobby.resize(w, h) end
     if game.resize  then game.resize(w, h)  end
+    if shop.resize  then shop.resize()      end
     controls.resize()
 end
 
@@ -86,7 +109,21 @@ end
 local function dispatch(fn, id, x, y)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then lobby[fn](id, x, y)
-    elseif s == "game" and game[fn] then game[fn](id, x, y) end
+    elseif s == "game" and game[fn] then game[fn](id, x, y)
+    elseif s == "shop" and shop[fn] then
+        if fn == "touchpressed" then
+            local newCoins, bought = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
+            if newCoins ~= SAVE_DATA.coins then
+                SAVE_DATA.coins = newCoins
+                SAVE_SAVE()
+            end
+            if bought then
+                SAVE_SAVE()
+            end
+        else
+            shop[fn](id, x, y)
+        end
+    end
 end
 
 function love.touchpressed(id, x, y)
