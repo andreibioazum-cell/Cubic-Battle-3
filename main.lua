@@ -2,7 +2,7 @@ local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
 local shop = require("shop")
-local credits = require("credits")   -- подключаем титры
+local credits = require("credits")
 
 GameState = { current = "lobby" }
 
@@ -20,7 +20,7 @@ local function loadMusic()
     if ok and source then
         bgMusic = source
         bgMusic:setLooping(true)
-        bgMusic:setVolume(0.3)
+        bgMusic:setVolume(0.5)
         bgMusic:play()
         print("Фоновая музыка запущена")
     else
@@ -28,26 +28,45 @@ local function loadMusic()
     end
 end
 
--- ========== СОХРАНЕНИЕ ==========
+-- ========== СОХРАНЕНИЕ (ИСПРАВЛЕННОЕ) ==========
 SAVE_DATA = { coins = 0, hasAzumSkin = false }
+
 function SAVE_SAVE()
     local str = "return {\n"
     for k, v in pairs(SAVE_DATA) do
-        str = str .. "  [" .. tostring(k) .. "] = " .. tostring(v) .. ",\n"
+        local val
+        if type(v) == "string" then
+            val = string.format("%q", v)   -- экранирование строк
+        else
+            val = tostring(v)
+        end
+        str = str .. "  [" .. tostring(k) .. "] = " .. val .. ",\n"
     end
     str = str .. "}"
-    love.filesystem.write("save.lua", str)
+    local success, err = pcall(love.filesystem.write, "save.lua", str)
+    if not success then
+        print("Ошибка сохранения: " .. tostring(err))
+    else
+        print("Сохранено успешно")
+    end
 end
 
 local function loadSave()
-    local ok, data = pcall(love.filesystem.load, "save.lua")
-    if ok and type(data) == "table" then
-        SAVE_DATA = data
-    else
-        SAVE_DATA = { coins = 0, hasAzumSkin = false }
+    local chunk, err = love.filesystem.load("save.lua")
+    if chunk then
+        local ok, data = pcall(chunk)
+        if ok and type(data) == "table" then
+            SAVE_DATA = data
+            print("Сохранение загружено")
+            return
+        end
     end
+    -- Если файла нет или он повреждён – создаём новые данные
+    SAVE_DATA = { coins = 0, hasAzumSkin = false }
+    print("Создано новое сохранение")
 end
 
+-- ========== LOVE CALLBACKS ==========
 function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
     loadSave()
@@ -87,7 +106,7 @@ function love.update(dt)
     elseif GameState.current == "shop" then
         -- ничего
     elseif GameState.current == "credits" then
-        -- ничего не обновляем
+        -- ничего
     end
 end
 
