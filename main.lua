@@ -2,6 +2,7 @@ local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
 local shop = require("shop")
+local credits = require("credits")   -- подключаем титры
 
 GameState = { current = "lobby" }
 
@@ -15,12 +16,11 @@ local SHOT_DELAY = 0.15
 local bgMusic = nil
 
 local function loadMusic()
-    -- Пытаемся загрузить MP3-файл
     local ok, source = pcall(love.audio.newSource, "Kevin_MacLeod_-_Sneaky_Snitch_74768437.mp3", "stream")
     if ok and source then
         bgMusic = source
-        bgMusic:setLooping(true)    -- бесконечный повтор
-        bgMusic:setVolume(0.5)      -- громкость 50% (можно регулировать)
+        bgMusic:setLooping(true)
+        bgMusic:setVolume(0.5)
         bgMusic:play()
         print("Фоновая музыка запущена")
     else
@@ -52,7 +52,7 @@ function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
     loadSave()
     controls.load()
-    loadMusic()   -- загружаем и запускаем музыку
+    loadMusic()
 end
 
 function love.update(dt)
@@ -65,6 +65,8 @@ function love.update(dt)
             if game.load then game.load(SAVE_DATA.hasAzumSkin) end
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
+        elseif GameState.current == "credits" then
+            if credits.load then credits.load() end
         end
         lastState = GameState.current
     end
@@ -83,6 +85,8 @@ function love.update(dt)
         end
         game.update(dt)
     elseif GameState.current == "shop" then
+        -- ничего
+    elseif GameState.current == "credits" then
         -- ничего не обновляем
     end
 end
@@ -95,6 +99,8 @@ function love.draw()
         controls.draw()
     elseif GameState.current == "shop" then
         shop.draw(SAVE_DATA.coins)
+    elseif GameState.current == "credits" then
+        credits.draw()
     end
 end
 
@@ -102,6 +108,7 @@ function love.resize(w, h)
     if lobby.resize then lobby.resize(w, h) end
     if game.resize  then game.resize(w, h)  end
     if shop.resize  then shop.resize()      end
+    if credits.resize then credits.resize() end
     controls.resize()
 end
 
@@ -110,12 +117,15 @@ function love.keypressed(key)
     if GameState.current == "game" then
         controls.keypressed(key)
     end
-    
+
     if key == "escape" then
-        GameState.current = "lobby"
+        if GameState.current == "credits" then
+            GameState.current = "lobby"
+        else
+            GameState.current = "lobby"
+        end
     end
 
-    -- Дополнительно: клавиша M для вкл/выкл музыки
     if key == "m" and bgMusic then
         if bgMusic:isPlaying() then
             bgMusic:pause()
@@ -149,6 +159,8 @@ local function dispatch(fn, id, x, y)
         else
             shop[fn](id, x, y)
         end
+    elseif s == "credits" and credits[fn] then
+        credits[fn](id, x, y)
     end
 end
 
@@ -156,11 +168,11 @@ function love.touchpressed(id, x, y)
     local now = love.timer.getTime()
     if now - lastTap < 0.05 then return end
     lastTap = now
-    
+
     if GameState.current == "game" then
         controls.touchpressed(id, x, y)
     end
-    
+
     dispatch("touchpressed", id, x, y)
 end
 
