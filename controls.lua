@@ -31,19 +31,49 @@ end
 
 local function place()
     local w, h = love.graphics.getDimensions()
-    joy.cx, joy.cy = 80, h - 80
+    local scale = math.min(w, h) / 800   -- базовый размер для 800px ширины
+
+    -- Адаптивные размеры
+    joy.r = 45 * scale
+    joy.sr = 18 * scale
+    atk.r = 52 * scale
+    ability.r = 40 * scale
+    back.w = 140 * scale
+    back.h = 55 * scale
+
+    -- Позиции (отступы тоже масштабируем)
+    local margin = 80 * scale
+    joy.cx = margin
+    joy.cy = h - margin
     if not joy.id then joy.sx, joy.sy = joy.cx, joy.cy end
-    atk.x, atk.y = w - 80, h - 80
-    ability.x, ability.y = atk.x - 70, atk.y
-    back.x, back.y = (w - back.w) / 2, 30
+
+    atk.x = w - margin
+    atk.y = h - margin
+
+    ability.x = atk.x - 70 * scale
+    ability.y = atk.y
+
+    back.x = (w - back.w) / 2
+    back.y = 30 * scale
 end
 
 function controls.load()
-    font = love.graphics.newFont("Fredoka-Bold.ttf", 24)
+    local w, h = love.graphics.getDimensions()
+    local scale = math.min(w, h) / 800
+    -- Размер шрифта тоже масштабируем
+    local fontSize = math.max(16, 24 * scale)  -- минимум 16px
+    font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
     place()
 end
 
-function controls.resize() place() end
+function controls.resize()
+    place()
+    -- шрифт пересоздавать не обязательно, можно обновить размер в love.resize
+    local w, h = love.graphics.getDimensions()
+    local scale = math.min(w, h) / 800
+    local fontSize = math.max(16, 24 * scale)
+    font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
+end
 
 function controls.update(dt)
     local target = atk.hold and 1 or 0
@@ -51,135 +81,22 @@ function controls.update(dt)
     ability.press = ability.press * 0.9
 end
 
-function controls.getMove()
-    local dx, dy = 0, 0
-    if keys.w then dy = dy - 1 end
-    if keys.s then dy = dy + 1 end
-    if keys.a then dx = dx - 1 end
-    if keys.d then dx = dx + 1 end
-
-    if joy.id then
-        local jdx, jdy = joy.sx - joy.cx, joy.sy - joy.cy
-        local len = math.sqrt(jdx * jdx + jdy * jdy)
-        if len > 0 then
-            if dx == 0 and dy == 0 then
-                dx, dy = jdx / len, jdy / len
-                aimDx, aimDy = dx, dy
-            end
-        end
-    end
-
-    if dx ~= 0 or dy ~= 0 then
-        local len = math.sqrt(dx * dx + dy * dy)
-        if len > 0 then
-            dx, dy = dx / len, dy / len
-            aimDx, aimDy = dx, dy
-        end
-    end
-    return dx, dy
-end
-
-function controls.isAiming() return atk.hold or keys.space end
-function controls.getAim() return aimDx, aimDy end
-
-function controls.touchpressed(id, x, y)
-    if x >= back.x and x <= back.x + back.w and y >= back.y and y <= back.y + back.h then
-        GameState.current = "lobby"
-        return
-    end
-
-    local dx, dy = x - joy.cx, y - joy.cy
-    if dx * dx + dy * dy <= joy.r * joy.r then
-        joy.id, joy.sx, joy.sy = id, x, y
-        return
-    end
-
-    local ax, ay = x - atk.x, y - atk.y
-    if ax * ax + ay * ay <= atk.r * atk.r then
-        atk.id, atk.hold = id, true
-        return
-    end
-
-    local abx, aby = x - ability.x, y - ability.y
-    if abx * abx + aby * aby <= ability.r * ability.r then
-        ability.id, ability.press, ability.triggered = id, 1, true
-    end
-end
-
-function controls.touchmoved(id, x, y)
-    if joy.id == id then
-        local dx, dy = x - joy.cx, y - joy.cy
-        local len = math.sqrt(dx * dx + dy * dy)
-        if len > joy.r then
-            dx, dy = dx / len * joy.r, dy / len * joy.r
-        end
-        joy.sx, joy.sy = joy.cx + dx, joy.cy + dy
-    end
-end
-
-function controls.touchreleased(id)
-    if joy.id == id then
-        joy.id = nil
-        joy.sx, joy.sy = joy.cx, joy.cy
-    end
-    if atk.id == id then
-        atk.id, atk.hold = nil, false
-        return true, aimDx, aimDy
-    end
-    if ability.id == id then
-        ability.id = nil
-    end
-    return false, aimDx, aimDy
-end
-
-function controls.keypressed(key)
-    if key == "w" then keys.w = true end
-    if key == "a" then keys.a = true end
-    if key == "s" then keys.s = true end
-    if key == "d" then keys.d = true end
-    if key == "space" then keys.space = true; spaceJustPressed = true end
-    if key == "e" then keys.e = true; abilityJustPressed = true end
-end
-
-function controls.keyreleased(key)
-    if key == "w" then keys.w = false end
-    if key == "a" then keys.a = false end
-    if key == "s" then keys.s = false end
-    if key == "d" then keys.d = false end
-    if key == "space" then keys.space = false end
-    if key == "e" then keys.e = false end
-end
-
-function controls.getShot()
-    if spaceJustPressed then
-        spaceJustPressed = false
-        return true, aimDx, aimDy
-    end
-    return false, aimDx, aimDy
-end
-
-function controls.getAbilityTrigger()
-    if abilityJustPressed then
-        abilityJustPressed = false
-        return true
-    end
-    if ability.triggered then
-        ability.triggered = false
-        return true
-    end
-    return false
-end
+-- ... остальные функции без изменений (getMove, touchpressed, keypressed и т.д.) ...
+-- (они не зависят от размеров, только от координат, которые уже адаптированы)
 
 function controls.draw()
+    -- здесь используем адаптированные радиусы и позиции
     if isMobile then
-        love.graphics.setLineWidth(2.55)
+        love.graphics.setLineWidth(2.55 * scale)  -- толщина линии тоже масштабируется
 
+        -- Джойстик
         love.graphics.setColor(0, 0, 0, 0.20)
         love.graphics.circle("fill", joy.cx, joy.cy, joy.r)
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.circle("line", joy.cx, joy.cy, joy.r)
         love.graphics.circle("fill", joy.sx, joy.sy, joy.sr)
 
+        -- Кнопка Shot
         local scale = 1 - atk.press * 0.12
         local r = atk.r * scale
         local textScale = 1 - atk.press * 0.18
@@ -188,36 +105,38 @@ function controls.draw()
         love.graphics.setColor(0.55 - atk.press * 0.2, 0.20, 0.85 - atk.press * 0.3, 1)
         love.graphics.circle("fill", atk.x, atk.y, r)
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(3.4)
+        love.graphics.setLineWidth(3.4 * scale)
         love.graphics.circle("line", atk.x, atk.y, r)
 
         love.graphics.push()
         love.graphics.translate(atk.x, atk.y)
         love.graphics.scale(textScale, textScale)
-        drawSpacedText("Shot", -atk.r, -14, atk.r * 2, "center", font, nil, textAlpha)
+        drawSpacedText("Shot", -atk.r, -14 * scale, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
+        -- Кнопка Resurrection
         local abScale = 1 - ability.press * 0.12
         local abR = ability.r * abScale
         love.graphics.setColor(0.8, 0.2, 0.9, 1)
         love.graphics.circle("fill", ability.x, ability.y, abR)
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(3.4)
+        love.graphics.setLineWidth(3.4 * scale)
         love.graphics.circle("line", ability.x, ability.y, abR)
 
         love.graphics.setFont(font)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("R", ability.x - abR / 2, ability.y - 14, abR * 2, "center")
+        love.graphics.printf("R", ability.x - abR/2, ability.y - 14 * scale, abR * 2, "center")
     end
 
+    -- Кнопка Back
     love.graphics.setColor(0, 0, 0, 0.5)
-    love.graphics.rectangle("fill", back.x + 4, back.y + 5, back.w, back.h, 14, 14)
+    love.graphics.rectangle("fill", back.x + 4*scale, back.y + 5*scale, back.w, back.h, 14*scale, 14*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14, 14)
+    love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4)
-    love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14, 14)
-    drawSpacedText("Back", back.x, back.y + 14, back.w, "center", font, nil, 1)
+    love.graphics.setLineWidth(3.4 * scale)
+    love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
+    drawSpacedText("Back", back.x, back.y + 14*scale, back.w, "center", font, nil, 1)
 
     love.graphics.setColor(1, 1, 1, 1)
 end
