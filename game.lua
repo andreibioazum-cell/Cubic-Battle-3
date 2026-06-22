@@ -19,13 +19,12 @@ local dead = false
 local hasAzumSkin = false
 local resurrectionUsed = false
 
--- ========== ПУЛИ ИГРОКА (с направлением) ==========
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
         x = x, y = y,
         vx = dx * BULLET_SPEED,
         vy = dy * BULLET_SPEED,
-        dirX = dx, dirY = dy,   -- нормализованное направление для врага
+        dirX = dx, dirY = dy,
         life = 3
     })
 end
@@ -85,7 +84,6 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Способность (воскрешение) только по кнопке
     if controls.getAbilityTrigger() then
         if hasAzumSkin and not resurrectionUsed and cube.hp <= 1 then
             cube.hp = 5
@@ -102,14 +100,12 @@ function game.update(dt)
     end
     cube.hit = math.max(0, cube.hit - dt * 3)
 
-    -- Камера
     local targetX = cube.x - love.graphics.getWidth() / 2
     local targetY = cube.y - love.graphics.getHeight() / 2
     local k = 1 - math.exp(-dt * 7.3)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Пули игрока
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -118,7 +114,6 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
-    -- Враг
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
         SAVE_DATA.coins = (SAVE_DATA.coins or 0) + 10
@@ -127,7 +122,6 @@ function game.update(dt)
         return
     end
 
-    -- Попадания пуль врага
     local eBullets = enemy.getBullets()
     for i = #eBullets, 1, -1 do
         local b = eBullets[i]
@@ -146,7 +140,6 @@ function game.draw()
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
-    -- Фон (тайлы)
     local w, h = love.graphics.getDimensions()
     local tw, th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x / tw) * tw
@@ -157,14 +150,12 @@ function game.draw()
         end
     end
 
-    -- Пули игрока
     love.graphics.setColor(0, 0, 0, 1)
     for _, b in ipairs(bullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
     enemy.drawBullets()
 
-    -- Линия прицела
     if controls.isAiming() then
         local ax, ay = controls.getAim()
         love.graphics.setColor(0, 0, 0, 0.55)
@@ -174,7 +165,6 @@ function game.draw()
 
     enemy.draw()
 
-    -- Игрок (скин)
     local imgToDraw = hasAzumSkin and azumImg or playerImg
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
@@ -193,7 +183,6 @@ function game.draw()
 
     love.graphics.pop()
 
-    -- HUD
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)
     local barW, barH = 200, 18
@@ -225,5 +214,7 @@ function game.spawnPlayerBullet(dx, dy)
     if dead then return end
     spawnBullet(cube.x, cube.y, dx, dy)
 end
+
+return game
 
 return game
