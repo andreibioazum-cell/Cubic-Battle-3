@@ -77,7 +77,9 @@ function game.load(hasAzum)
     enemy.reset()
 end
 
-function game.resize() controls.resize() end
+function game.resize()
+    controls.resize()
+end
 
 function game.update(dt)
     if dead then return end
@@ -111,7 +113,9 @@ function game.update(dt)
         b.x = b.x + b.vx * dt
         b.y = b.y + b.vy * dt
         b.life = b.life - dt
-        if b.life <= 0 then table.remove(bullets, i) end
+        if b.life <= 0 then
+            table.remove(bullets, i)
+        end
     end
 
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
@@ -133,7 +137,7 @@ function game.update(dt)
             if dead then return end
         end
     end
-end
+end   -- <-- ВАЖНО: ЭТОТ END ЗАКРЫВАЕТ game.update
 
 function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
@@ -201,13 +205,21 @@ function game.draw()
     end
 
     controls.draw()
+end   -- <-- ЭТОТ END ЗАКРЫВАЕТ game.draw
+
+function game.touchpressed(id, x, y)
+    controls.touchpressed(id, x, y)
 end
 
-function game.touchpressed(id, x, y) controls.touchpressed(id, x, y) end
-function game.touchmoved(id, x, y) controls.touchmoved(id, x, y) end
+function game.touchmoved(id, x, y)
+    controls.touchmoved(id, x, y)
+end
+
 function game.touchreleased(id, x, y)
     local shot, dx, dy = controls.touchreleased(id)
-    if shot then spawnBullet(cube.x, cube.y, dx, dy) end
+    if shot then
+        spawnBullet(cube.x, cube.y, dx, dy)
+    end
 end
 
 function game.spawnPlayerBullet(dx, dy)
@@ -215,6 +227,4 @@ function game.spawnPlayerBullet(dx, dy)
     spawnBullet(cube.x, cube.y, dx, dy)
 end
 
-return game
-
-return game
+return game   -- <-- КОНЕЦ ФАЙЛА
