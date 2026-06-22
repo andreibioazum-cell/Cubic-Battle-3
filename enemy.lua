@@ -29,13 +29,12 @@ local lastDodgeTime = 0
 local reactionTimer = 0
 local currentDodgeDir = 1
 
--- ========== ПУЛИ ВРАГА (с направлением) ==========
 local function spawnBullet(x, y, dx, dy)
     table.insert(eBullets, {
         x = x, y = y,
         vx = dx * BULLET_SPEED,
         vy = dy * BULLET_SPEED,
-        dirX = dx, dirY = dy,   -- нормализованное направление
+        dirX = dx, dirY = dy,
         life = 3
     })
 end
@@ -82,14 +81,12 @@ function enemy.get() return e, SIZE, MAX_HP end
 function enemy.getBullets() return eBullets end
 
 function enemy.update(dt, px, py, playerBullets, onHitPlayer)
-    -- Обновление пуль врага
-    local eBulletsLocal = eBullets
-    for i = #eBulletsLocal, 1, -1 do
-        local b = eBulletsLocal[i]
+    for i = #eBullets, 1, -1 do
+        local b = eBullets[i]
         b.x = b.x + b.vx * dt
         b.y = b.y + b.vy * dt
         b.life = b.life - dt
-        if b.life <= 0 then table.remove(eBulletsLocal, i) end
+        if b.life <= 0 then table.remove(eBullets, i) end
     end
 
     if not e then
@@ -106,10 +103,6 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
     local dy = py - eY
     local dist = math.sqrt(dx * dx + dy * dy) + 0.0001
     local nx, ny = dx / dist, dy / dist
-
-    -- ========== УЛУЧШЕННОЕ УКЛОНЕНИЕ (с квадратами расстояний) ==========
-    local dodging = false
-    local dodgeDx, dodgeDy = 0, 0
 
     if e.dodgeCooldown > 0 then
         e.dodgeCooldown = e.dodgeCooldown - dt
@@ -132,14 +125,12 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
             local by = b.y - eY
             local distSq = bx * bx + by * by
             if distSq < closestDistSq then
-                -- Проверяем, летит ли пуля в сторону врага (скалярное произведение > 0)
                 if b.dirX and b.dirY then
                     if b.dirX * bx + b.dirY * by > 0 then
                         closestDistSq = distSq
                         closestBullet = b
                     end
                 else
-                    -- fallback (если пули без dir)
                     closestDistSq = distSq
                     closestBullet = b
                 end
@@ -150,11 +141,9 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
             local b = closestBullet
             local bx = b.x - eX
             local by = b.y - eY
-
-            local distFactor = 1 - math.sqrt(closestDistSq) / DANGER_THRESHOLD  -- всё равно нужен sqrt для фактора, но можно заменить на distSq / DANGER_THRESHOLD_SQ
+            local distFactor = 1 - math.sqrt(closestDistSq) / DANGER_THRESHOLD
             local dodgeChance = math.min(0.9, DODGE_CHANCE * (1 + distFactor * 0.5))
             if math.random() < dodgeChance then
-                dodging = true
                 local cross = b.vx * by - b.vy * bx
                 if cross > 0 then
                     e.dodgeDirX, e.dodgeDirY = b.vy, -b.vx
@@ -171,7 +160,6 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         end
     end
 
-    -- ========== ДВИЖЕНИЕ ==========
     if e.isDodging then
         e.state = "dodge"
         e.x = e.x + e.dodgeDirX * e.dodgeSpeed * dt
@@ -232,7 +220,6 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
     e.angle = math.atan2(dy, dx) + math.pi / 2
     e.hit = math.max(0, e.hit - dt * 3)
 
-    -- ========== ПОПАДАНИЯ ПУЛЬ ИГРОКА ==========
     local eHP = e.hp
     for i = #playerBullets, 1, -1 do
         local b = playerBullets[i]
