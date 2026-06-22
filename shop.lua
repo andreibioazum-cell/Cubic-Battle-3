@@ -7,10 +7,14 @@ local skinOwned = false
 local skinPrice = 100
 local skinName = "AZUM CUBE"
 
-local function drawSpacedText(text, x, y, w, align, font, spacing)
+-- Скопируем функцию из controls.lua (работает)
+local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
+    alpha = alpha or 1
     spacing = spacing or 0
     love.graphics.setFont(font)
-    local totalW, widths = 0, {}
+
+    local totalW = 0
+    local widths = {}
     for i=1, #text do
         local ch = text:sub(i,i)
         local cw = font:getWidth(ch)
@@ -18,25 +22,32 @@ local function drawSpacedText(text, x, y, w, align, font, spacing)
         totalW = totalW + cw
     end
     totalW = totalW + spacing * (#text - 1)
+
     local startX = x
     if align == "center" then startX = x + (w - totalW)/2
     elseif align == "right" then startX = x + (w - totalW) end
+
     local outline = 2
-    love.graphics.setColor(0,0,0,1)
+
+    love.graphics.setColor(0,0,0,alpha)
     local cx = startX
     for i=1, #text do
         local ch = text:sub(i,i)
         for dx=-outline, outline, outline do
             for dy=-outline, outline, outline do
-                if dx~=0 or dy~=0 then love.graphics.print(ch, cx+dx, y+dy) end
+                if dx ~= 0 or dy ~= 0 then
+                    love.graphics.print(ch, cx+dx, y+dy)
+                end
             end
         end
         cx = cx + widths[i] + spacing
     end
-    love.graphics.setColor(1,1,1,1)
+
+    love.graphics.setColor(1,1,1,alpha)
     cx = startX
     for i=1, #text do
-        love.graphics.print(text:sub(i,i), cx, y)
+        local ch = text:sub(i,i)
+        love.graphics.print(ch, cx, y)
         cx = cx + widths[i] + spacing
     end
 end
@@ -47,8 +58,9 @@ function shop.load(saveData)
     btnBack.x = (w - btnBack.w) / 2
     btnBuy.x  = (w - btnBuy.w) / 2
     btnBuy.y  = h/2 + 30
-    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", 48)
-    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", 28)
+    -- Используем системные шрифты (без файла) для избежания проблем
+    fontTitle = love.graphics.newFont(48)
+    fontBtn   = love.graphics.newFont(28)
 end
 
 function shop.resize()
@@ -62,15 +74,15 @@ function shop.draw(coins)
     love.graphics.setColor(0.05, 0.02, 0.15, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
-    drawSpacedText("SHOP", 0, 70, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A")*0.05)
-    drawSpacedText("COINS: " .. coins, 0, 140, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
+    drawSpacedText("SHOP", 0, 70, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A")*0.05, 1)
+    drawSpacedText("COINS: " .. coins, 0, 140, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05, 1)
 
     local infoY = love.graphics.getHeight()/2 - 80
-    drawSpacedText(skinName, 0, infoY, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
+    drawSpacedText(skinName, 0, infoY, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05, 1)
     if skinOwned then
-        drawSpacedText("✅ OWNED", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
+        drawSpacedText("OWNED", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05, 1)
     else
-        drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
+        drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05, 1)
     end
 
     if not skinOwned then
@@ -81,7 +93,7 @@ function shop.draw(coins)
         love.graphics.setColor(0,0,0,1)
         love.graphics.setLineWidth(3.4)
         love.graphics.rectangle("line", btnBuy.x, btnBuy.y, btnBuy.w, btnBuy.h, 16,16)
-        drawSpacedText("BUY", btnBuy.x, btnBuy.y+20, btnBuy.w, "center", fontBtn, fontBtn:getWidth("A")*0.05)
+        drawSpacedText("BUY", btnBuy.x, btnBuy.y+20, btnBuy.w, "center", fontBtn, fontBtn:getWidth("A")*0.05, 1)
     end
 
     love.graphics.setColor(0.1,0.0,0.2,0.5)
@@ -91,7 +103,7 @@ function shop.draw(coins)
     love.graphics.setColor(0,0,0,1)
     love.graphics.setLineWidth(3.4)
     love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14,14)
-    drawSpacedText("BACK", btnBack.x, btnBack.y+14, btnBack.w, "center", fontBtn, fontBtn:getWidth("A")*0.05)
+    drawSpacedText("BACK", btnBack.x, btnBack.y+14, btnBack.w, "center", fontBtn, fontBtn:getWidth("A")*0.05, 1)
 end
 
 function shop.touchpressed(id, x, y, coins, saveData)
