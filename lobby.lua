@@ -19,7 +19,7 @@ end
 
 local function generateStars(w, h)
     stars = {}
-    for i = 1, 100 do   -- уменьшено с 150 до 100
+    for i = 1, 100 do
         table.insert(stars, {
             x = math.random(w),
             y = math.random(h),
@@ -45,44 +45,21 @@ local function place()
     btns.shop.y = h / 2 + 50
 end
 
--- Оптимизированная версия (тень)
-local function drawSpacedText(text, x, y, w, align, font, spacing)
-    spacing = spacing or 0
+local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
+    alpha = alpha or 1
     love.graphics.setFont(font)
-
-    local totalW = 0
-    local widths = {}
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        local cw = font:getWidth(ch)
-        widths[i] = cw
-        totalW = totalW + cw
-    end
-    totalW = totalW + spacing * (#text - 1)
-
+    local tw = font:getWidth(text)
     local startX = x
     if align == "center" then
-        startX = x + (w - totalW) / 2
+        startX = x + (w - tw) / 2
     elseif align == "right" then
-        startX = x + (w - totalW)
+        startX = x + (w - tw)
     end
-
     local shadow = 2
-    love.graphics.setColor(0, 0, 0, 1)
-    local cx = startX
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        love.graphics.print(ch, cx + shadow, y + shadow)
-        cx = cx + widths[i] + spacing
-    end
-
-    love.graphics.setColor(1, 1, 1, 1)
-    cx = startX
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        love.graphics.print(ch, cx, y)
-        cx = cx + widths[i] + spacing
-    end
+    love.graphics.setColor(0, 0, 0, alpha * 0.8)
+    love.graphics.print(text, startX + shadow, y + shadow)
+    love.graphics.setColor(1, 1, 1, alpha)
+    love.graphics.print(text, startX, y)
 end
 
 function lobby.load()
@@ -127,10 +104,9 @@ function lobby.draw()
         love.graphics.rectangle("fill", s.x, s.y, s.size, s.size)
     end
 
-    drawSpacedText("Cubic Battle", 0, love.graphics.getHeight() / 2 - 150, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A") * 0.05)
-    drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight() / 2 - 60, love.graphics.getWidth(), "center", fontSub, fontSub:getWidth("A") * 0.05)
+    drawSpacedText("Cubic Battle", 0, love.graphics.getHeight() / 2 - 150, love.graphics.getWidth(), "center", fontTitle)
+    drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight() / 2 - 60, love.graphics.getWidth(), "center", fontSub)
 
-    -- Кнопка Play
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btns.play.x + 5, btns.play.y + 6, btns.play.w, btns.play.h, 16, 16)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -138,9 +114,8 @@ function lobby.draw()
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4)
     love.graphics.rectangle("line", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16, 16)
-    drawSpacedText("Play", btns.play.x, btns.play.y + 20, btns.play.w, "center", fontBtn, fontBtn:getWidth("A") * 0.05)
+    drawSpacedText("Play", btns.play.x, btns.play.y + 20, btns.play.w, "center", fontBtn)
 
-    -- Кнопка Shop
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btns.shop.x + 5, btns.shop.y + 6, btns.shop.w, btns.shop.h, 16, 16)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -148,7 +123,7 @@ function lobby.draw()
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4)
     love.graphics.rectangle("line", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16, 16)
-    drawSpacedText("Shop", btns.shop.x, btns.shop.y + 20, btns.shop.w, "center", fontBtn, fontBtn:getWidth("A") * 0.05)
+    drawSpacedText("Shop", btns.shop.x, btns.shop.y + 20, btns.shop.w, "center", fontBtn)
 end
 
 function lobby.touchpressed(id, x, y)
