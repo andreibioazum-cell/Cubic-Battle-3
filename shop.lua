@@ -1,51 +1,27 @@
 local shop = {}
 
 local fontTitle, fontBtn
-local btnBack = { w=140, h=55, x=0, y=30 }
-local btnBuy  = { w=220, h=75, x=0, y=0 }
+local btnBack = { w = 140, h = 55, x = 0, y = 30 }
+local btnBuy  = { w = 220, h = 75, x = 0, y = 0 }
 local skinOwned = false
 local skinPrice = 100
 local skinName = "AZUM CUBE"
 
--- Оптимизированная версия: тень вместо обводки
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
-    spacing = spacing or 0
     love.graphics.setFont(font)
-
-    local totalW = 0
-    local widths = {}
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        local cw = font:getWidth(ch)
-        widths[i] = cw
-        totalW = totalW + cw
-    end
-    totalW = totalW + spacing * (#text - 1)
-
+    local tw = font:getWidth(text)
     local startX = x
     if align == "center" then
-        startX = x + (w - totalW) / 2
+        startX = x + (w - tw) / 2
     elseif align == "right" then
-        startX = x + (w - totalW)
+        startX = x + (w - tw)
     end
-
     local shadow = 2
     love.graphics.setColor(0, 0, 0, alpha * 0.8)
-    local cx = startX
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        love.graphics.print(ch, cx + shadow, y + shadow)
-        cx = cx + widths[i] + spacing
-    end
-
+    love.graphics.print(text, startX + shadow, y + shadow)
     love.graphics.setColor(1, 1, 1, alpha)
-    cx = startX
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        love.graphics.print(ch, cx, y)
-        cx = cx + widths[i] + spacing
-    end
+    love.graphics.print(text, startX, y)
 end
 
 function shop.load(saveData)
@@ -69,15 +45,15 @@ function shop.draw(coins)
     love.graphics.setColor(0.05, 0.02, 0.15, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
-    drawSpacedText("SHOP", 0, 70, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A") * 0.05, 1)
-    drawSpacedText("COINS: " .. coins, 0, 140, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A") * 0.05, 1)
+    drawSpacedText("SHOP", 0, 70, love.graphics.getWidth(), "center", fontTitle, nil, 1)
+    drawSpacedText("COINS: " .. coins, 0, 140, love.graphics.getWidth(), "center", fontBtn, nil, 1)
 
     local infoY = love.graphics.getHeight() / 2 - 80
-    drawSpacedText(skinName, 0, infoY, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A") * 0.05, 1)
+    drawSpacedText(skinName, 0, infoY, love.graphics.getWidth(), "center", fontBtn, nil, 1)
     if skinOwned then
-        drawSpacedText("OWNED", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A") * 0.05, 1)
+        drawSpacedText("OWNED", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, nil, 1)
     else
-        drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A") * 0.05, 1)
+        drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, nil, 1)
     end
 
     if not skinOwned then
@@ -88,7 +64,7 @@ function shop.draw(coins)
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.setLineWidth(3.4)
         love.graphics.rectangle("line", btnBuy.x, btnBuy.y, btnBuy.w, btnBuy.h, 16, 16)
-        drawSpacedText("BUY", btnBuy.x, btnBuy.y + 20, btnBuy.w, "center", fontBtn, fontBtn:getWidth("A") * 0.05, 1)
+        drawSpacedText("BUY", btnBuy.x, btnBuy.y + 20, btnBuy.w, "center", fontBtn, nil, 1)
     end
 
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
@@ -98,7 +74,7 @@ function shop.draw(coins)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4)
     love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14, 14)
-    drawSpacedText("BACK", btnBack.x, btnBack.y + 14, btnBack.w, "center", fontBtn, fontBtn:getWidth("A") * 0.05, 1)
+    drawSpacedText("BACK", btnBack.x, btnBack.y + 14, btnBack.w, "center", fontBtn, nil, 1)
 end
 
 function shop.touchpressed(id, x, y, coins, saveData)
