@@ -72,6 +72,9 @@ function game.load(hasAzum)
     azumImg:setFilter("nearest", "nearest")
     font = font or love.graphics.newFont("Fredoka-Bold.ttf", 18)
 
+    -- Устанавливаем доступность способности
+    controls.setAbilityAvailable(hasAzumSkin and not resurrectionUsed)
+
     controls.load()
     enemy.load()
     enemy.reset()
@@ -86,11 +89,14 @@ function game.update(dt)
 
     controls.update(dt)
 
+    -- Проверяем активацию способности
     if controls.getAbilityTrigger() then
         if hasAzumSkin and not resurrectionUsed and cube.hp <= 1 then
             cube.hp = 5
             resurrectionUsed = true
             cube.hit = 0
+            -- Способность использована – скрываем кнопку
+            controls.setAbilityAvailable(false)
         end
     end
 
@@ -137,7 +143,7 @@ function game.update(dt)
             if dead then return end
         end
     end
-end   -- <-- ВАЖНО: ЭТОТ END ЗАКРЫВАЕТ game.update
+end
 
 function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
@@ -205,7 +211,7 @@ function game.draw()
     end
 
     controls.draw()
-end   -- <-- ЭТОТ END ЗАКРЫВАЕТ game.draw
+end
 
 function game.touchpressed(id, x, y)
     controls.touchpressed(id, x, y)
@@ -227,4 +233,4 @@ function game.spawnPlayerBullet(dx, dy)
     spawnBullet(cube.x, cube.y, dx, dy)
 end
 
-return game   -- <-- КОНЕЦ ФАЙЛА
+return game
