@@ -13,10 +13,10 @@ local DODGE_RADIUS = 140
 local DODGE_SPEED = 320
 
 -- ========== ПАРАМЕТРЫ УКЛОНЕНИЯ ==========
-local DODGE_CHANCE = 0.6           -- 60% шанс уклонения
+local DODGE_CHANCE = 0.3         -- 60% шанс уклонения
 local REACTION_DELAY = 0.2         -- Задержка реакции на пули
-local DODGE_COOLDOWN = 1.0         -- Задержка между уклонениями
-local MAX_DODGE_TIME = 0.4         -- Время уклонения
+local DODGE_COOLDOWN = 0.8         -- Задержка между уклонениями
+local MAX_DODGE_TIME = 0.5         -- Время уклонения
 local DANGER_THRESHOLD = 200       -- Радиус опасности
 
 local e
