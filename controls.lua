@@ -259,7 +259,7 @@ function controls.draw()
 
             love.graphics.setFont(font)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.printf("R", ability.x - abR/2, ability.y - 14 * scale, abR * 2, "center")
+            love.graphics.printf("SuperAttacks", ability.x - abR/2, ability.y - 14 * scale, abR * 2, "center")
         end
     end
 
