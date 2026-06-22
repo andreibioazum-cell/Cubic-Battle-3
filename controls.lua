@@ -14,7 +14,10 @@ local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iO
 local spaceJustPressed = false
 local abilityJustPressed = false
 
--- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ (без мусора) ==========
+-- ========== ФЛАГ ДОСТУПНОСТИ СПОСОБНОСТИ ==========
+local abilityAvailable = false   -- показывает, рисовать ли кнопку способности
+
+-- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -35,9 +38,8 @@ end
 -- ========== РАЗМЕЩЕНИЕ ЭЛЕМЕНТОВ (АДАПТИВНО) ==========
 local function place()
     local w, h = love.graphics.getDimensions()
-    local scale = math.min(w, h) / 800   -- база 800px
+    local scale = math.min(w, h) / 800
 
-    -- Масштабируем размеры
     joy.r = 45 * scale
     joy.sr = 18 * scale
     atk.r = 52 * scale
@@ -45,7 +47,6 @@ local function place()
     back.w = 140 * scale
     back.h = 55 * scale
 
-    -- Позиции
     local margin = 80 * scale
     joy.cx = margin
     joy.cy = h - margin
@@ -115,6 +116,11 @@ end
 function controls.isAiming() return atk.hold or keys.space end
 function controls.getAim() return aimDx, aimDy end
 
+-- ========== УСТАНОВКА ДОСТУПНОСТИ СПОСОБНОСТИ ==========
+function controls.setAbilityAvailable(available)
+    abilityAvailable = available
+end
+
 -- ========== ОБРАБОТЧИКИ ТАЧ ==========
 function controls.touchpressed(id, x, y)
     if x >= back.x and x <= back.x + back.w and y >= back.y and y <= back.y + back.h then
@@ -134,9 +140,12 @@ function controls.touchpressed(id, x, y)
         return
     end
 
-    local abx, aby = x - ability.x, y - ability.y
-    if abx * abx + aby * aby <= ability.r * ability.r then
-        ability.id, ability.press, ability.triggered = id, 1, true
+    -- Обрабатываем нажатие на кнопку способности, только если она доступна
+    if abilityAvailable then
+        local abx, aby = x - ability.x, y - ability.y
+        if abx * abx + aby * aby <= ability.r * ability.r then
+            ability.id, ability.press, ability.triggered = id, 1, true
+        end
     end
 end
 
@@ -205,9 +214,10 @@ function controls.getAbilityTrigger()
     return false
 end
 
--- ========== ОТРИСОВКА (АДАПТИВНАЯ) ==========
+-- ========== ОТРИСОВКА ==========
 function controls.draw()
-    local scale = math.min(love.graphics.getWidth(), love.graphics.getHeight()) / 800
+    local w, h = love.graphics.getDimensions()
+    local scale = math.min(w, h) / 800
 
     if isMobile then
         love.graphics.setLineWidth(2.55 * scale)
@@ -237,18 +247,20 @@ function controls.draw()
         drawSpacedText("Shot", -atk.r, -14 * scale, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
-        -- Кнопка Resurrection
-        local abPress = ability.press
-        local abR = ability.r * (1 - abPress * 0.12)
-        love.graphics.setColor(0.8, 0.2, 0.9, 1)
-        love.graphics.circle("fill", ability.x, ability.y, abR)
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(3.4 * scale)
-        love.graphics.circle("line", ability.x, ability.y, abR)
+        -- ========== КНОПКА СПОСОБНОСТИ (РИСУЕМ ТОЛЬКО ЕСЛИ ДОСТУПНА) ==========
+        if abilityAvailable then
+            local abPress = ability.press
+            local abR = ability.r * (1 - abPress * 0.12)
+            love.graphics.setColor(0.8, 0.2, 0.9, 1)
+            love.graphics.circle("fill", ability.x, ability.y, abR)
+            love.graphics.setColor(0, 0, 0, 1)
+            love.graphics.setLineWidth(3.4 * scale)
+            love.graphics.circle("line", ability.x, ability.y, abR)
 
-        love.graphics.setFont(font)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("R", ability.x - abR/2, ability.y - 14 * scale, abR * 2, "center")
+            love.graphics.setFont(font)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.printf("R", ability.x - abR/2, ability.y - 14 * scale, abR * 2, "center")
+        end
     end
 
     -- Кнопка Back (общая для всех)
