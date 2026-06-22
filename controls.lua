@@ -1,12 +1,10 @@
 local controls = {}
 
--- ========== ТАЧ УПРАВЛЕНИЕ (ДЖОСТИКИ) ==========
 local joy  = { id = nil, cx = 0, cy = 0, sx = 0, sy = 0, r = 45, sr = 18 }
 local atk  = { id = nil, x = 0, y = 0, r = 52, hold = false, press = 0 }
 local back = { x = 20, y = 20, w = 140, h = 55 }
 local ability = { id = nil, x = 0, y = 0, r = 40, press = 0, triggered = false }
 
--- ========== КЛАВИАТУРА ==========
 local keys = { w = false, a = false, s = false, d = false, space = false, e = false }
 local font
 local aimDx, aimDy = 0, -1
@@ -14,48 +12,23 @@ local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iO
 local spaceJustPressed = false
 local abilityJustPressed = false
 
--- ========== ОПТИМИЗИРОВАННАЯ ОТРИСОВКА ТЕКСТА (тень) ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
-    spacing = spacing or 0
     love.graphics.setFont(font)
-
-    local totalW = 0
-    local widths = {}
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        local cw = font:getWidth(ch)
-        widths[i] = cw
-        totalW = totalW + cw
-    end
-    totalW = totalW + spacing * (#text - 1)
-
+    local tw = font:getWidth(text)
     local startX = x
     if align == "center" then
-        startX = x + (w - totalW) / 2
+        startX = x + (w - tw) / 2
     elseif align == "right" then
-        startX = x + (w - totalW)
+        startX = x + (w - tw)
     end
-
     local shadow = 2
     love.graphics.setColor(0, 0, 0, alpha * 0.8)
-    local cx = startX
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        love.graphics.print(ch, cx + shadow, y + shadow)
-        cx = cx + widths[i] + spacing
-    end
-
+    love.graphics.print(text, startX + shadow, y + shadow)
     love.graphics.setColor(1, 1, 1, alpha)
-    cx = startX
-    for i = 1, #text do
-        local ch = text:sub(i, i)
-        love.graphics.print(ch, cx, y)
-        cx = cx + widths[i] + spacing
-    end
+    love.graphics.print(text, startX, y)
 end
 
--- ========== РАЗМЕЩЕНИЕ ==========
 local function place()
     local w, h = love.graphics.getDimensions()
     joy.cx, joy.cy = 80, h - 80
@@ -78,7 +51,6 @@ function controls.update(dt)
     ability.press = ability.press * 0.9
 end
 
--- ========== УПРАВЛЕНИЕ ==========
 function controls.getMove()
     local dx, dy = 0, 0
     if keys.w then dy = dy - 1 end
@@ -110,7 +82,6 @@ end
 function controls.isAiming() return atk.hold or keys.space end
 function controls.getAim() return aimDx, aimDy end
 
--- ========== ТАЧ ==========
 function controls.touchpressed(id, x, y)
     if x >= back.x and x <= back.x + back.w and y >= back.y and y <= back.y + back.h then
         GameState.current = "lobby"
@@ -161,7 +132,6 @@ function controls.touchreleased(id)
     return false, aimDx, aimDy
 end
 
--- ========== КЛАВИАТУРА ==========
 function controls.keypressed(key)
     if key == "w" then keys.w = true end
     if key == "a" then keys.a = true end
@@ -200,19 +170,16 @@ function controls.getAbilityTrigger()
     return false
 end
 
--- ========== ОТРИСОВКА ==========
 function controls.draw()
     if isMobile then
         love.graphics.setLineWidth(2.55)
 
-        -- Джойстик
         love.graphics.setColor(0, 0, 0, 0.20)
         love.graphics.circle("fill", joy.cx, joy.cy, joy.r)
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.circle("line", joy.cx, joy.cy, joy.r)
         love.graphics.circle("fill", joy.sx, joy.sy, joy.sr)
 
-        -- Кнопка Shot
         local scale = 1 - atk.press * 0.12
         local r = atk.r * scale
         local textScale = 1 - atk.press * 0.18
@@ -227,10 +194,9 @@ function controls.draw()
         love.graphics.push()
         love.graphics.translate(atk.x, atk.y)
         love.graphics.scale(textScale, textScale)
-        drawSpacedText("Shot", -atk.r, -14, atk.r * 2, "center", font, font:getWidth("A") * 0.05, textAlpha)
+        drawSpacedText("Shot", -atk.r, -14, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
-        -- Кнопка Resurrection
         local abScale = 1 - ability.press * 0.12
         local abR = ability.r * abScale
         love.graphics.setColor(0.8, 0.2, 0.9, 1)
@@ -244,7 +210,6 @@ function controls.draw()
         love.graphics.printf("R", ability.x - abR / 2, ability.y - 14, abR * 2, "center")
     end
 
-    -- Кнопка Back
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", back.x + 4, back.y + 5, back.w, back.h, 14, 14)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -252,7 +217,7 @@ function controls.draw()
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4)
     love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14, 14)
-    drawSpacedText("Back", back.x, back.y + 14, back.w, "center", font, font:getWidth("A") * 0.05, 1)
+    drawSpacedText("Back", back.x, back.y + 14, back.w, "center", font, nil, 1)
 
     love.graphics.setColor(1, 1, 1, 1)
 end
