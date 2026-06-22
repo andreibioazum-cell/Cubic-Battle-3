@@ -29,26 +29,27 @@ function shop.load(saveData)
     local w, h = love.graphics.getDimensions()
     btnBack.x = (w - btnBack.w) / 2
     btnBuy.x  = (w - btnBuy.w) / 2
-    btnBuy.y  = h / 2 + 30
-    fontTitle = love.graphics.newFont(48)
-    fontBtn   = love.graphics.newFont(28)
+    btnBuy.y  = h / 2 + 80          -- опустили кнопку покупки
+    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", 48)
+    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", 28)
 end
 
 function shop.resize()
     local w, h = love.graphics.getDimensions()
     btnBack.x = (w - btnBack.w) / 2
     btnBuy.x  = (w - btnBuy.w) / 2
-    btnBuy.y  = h / 2 + 30
+    btnBuy.y  = h / 2 + 80
 end
 
 function shop.draw(coins)
     love.graphics.setColor(0.05, 0.02, 0.15, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
-    drawSpacedText("SHOP", 0, 70, love.graphics.getWidth(), "center", fontTitle, nil, 1)
-    drawSpacedText("COINS: " .. coins, 0, 140, love.graphics.getWidth(), "center", fontBtn, nil, 1)
+    -- Заголовки опущены ниже
+    drawSpacedText("SHOP", 0, 100, love.graphics.getWidth(), "center", fontTitle, nil, 1)   -- было 70
+    drawSpacedText("COINS: " .. coins, 0, 170, love.graphics.getWidth(), "center", fontBtn, nil, 1) -- было 140
 
-    local infoY = love.graphics.getHeight() / 2 - 80
+    local infoY = love.graphics.getHeight() / 2 - 40   -- было -80 (подняли информацию о скине)
     drawSpacedText(skinName, 0, infoY, love.graphics.getWidth(), "center", fontBtn, nil, 1)
     if skinOwned then
         drawSpacedText("OWNED", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, nil, 1)
