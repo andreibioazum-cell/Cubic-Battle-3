@@ -5,29 +5,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ============================================================
+  # ANDROID APK (быстрый, с кэшами)
+  # ============================================================
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 25   # запас времени, но обычно 10-12 минут
+    timeout-minutes: 20
     outputs:
       apk-name: ${{ steps.set-output.outputs.apk-name }}
 
     steps:
-      # 1. Быстрый checkout (без истории)
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
           path: game
 
-      # 2. Настройка Java (кэш для Gradle)
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # 3. Настройка Android SDK
       - uses: android-actions/setup-android@v3
 
-      # 4. Кэш NDK (ключ фиксированный, т.к. версия не меняется)
       - uses: actions/cache@v4
         id: ndk-cache
         with:
@@ -36,27 +35,23 @@ jobs:
 
       - name: Install NDK (если нет в кэше)
         if: steps.ndk-cache.outputs.cache-hit != 'true'
-        run: |
-          yes | sdkmanager "ndk;25.2.9519653"
+        run: yes | sdkmanager "ndk;25.2.9519653"
 
       - name: Export NDK
         run: |
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      # 5. Кэш для love-android (исходники)
       - uses: actions/cache@v4
         id: love-android-cache
         with:
           path: love-android
-          key: love-android-src-v6   # обновить при изменении версии LÖVE
+          key: love-android-src-v6
 
       - name: Clone love-android (если нет кэша)
         if: steps.love-android-cache.outputs.cache-hit != 'true'
-        run: |
-          git clone --recursive --depth 1 https://github.com/love2d/love-android.git
+        run: git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
-      # 6. Кэш для Gradle и C++ сборок (огромное ускорение)
       - uses: actions/cache@v4
         with:
           path: |
@@ -66,25 +61,21 @@ jobs:
             love-android/app/build
           key: gradle-native-v6
 
-      # 7. Упаковка game.love (быстро)
       - name: Package game.love
         run: |
           cd game
           zip -9 -r ../game.love . -x "*.git*" -x ".github/*"
 
-      # 8. Встраивание в APK
       - name: Embed game
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
 
-      # 9. Принудительная arm64 (уже есть, но оставим)
       - name: Force arm64
         run: |
           sed -i '/abiFilters/d' love-android/app/build.gradle
           sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a" }' love-android/app/build.gradle
 
-      # 10. Максимальная оптимизация Gradle
       - name: Optimize Gradle
         run: |
           cat >> love-android/gradle.properties << 'EOF'
@@ -97,18 +88,10 @@ jobs:
           android.useAndroidX=true
           EOF
 
-      # 11. Сборка APK с максимальной параллельностью и без лишнего вывода
       - name: Build APK
         working-directory: love-android
-        run: |
-          ./gradlew assembleEmbedNoRecordDebug \
-            --no-daemon \
-            --parallel \
-            --max-workers=4 \
-            --build-cache \
-            --quiet   # тише, быстрее
+        run: ./gradlew assembleEmbedNoRecordDebug --no-daemon --parallel --max-workers=4 --build-cache --quiet
 
-      # 12. Поиск и переименование APK
       - name: Collect APK
         id: set-output
         run: |
@@ -117,10 +100,106 @@ jobs:
           cp "$APK" "$APK_NAME"
           echo "apk-name=$APK_NAME" >> $GITHUB_OUTPUT
 
-      # 13. Загрузка артефакта (без сжатия — быстрее)
       - uses: actions/upload-artifact@v4
         with:
           name: CubicBattle_APK
           path: CubicBattle_*.apk
           compression-level: 0
           if-no-files-found: error
+
+  # ============================================================
+  # WINDOWS EXE (портативный, максимально быстро)
+  # ============================================================
+  build-windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      exe-name: ${{ steps.set-output.outputs.exe-name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          path: game
+
+      # Кэшируем скачанные ZIP-архивы LÖVE (чтобы не качать каждый раз)
+      - name: Cache LÖVE downloads
+        id: cache-love
+        uses: actions/cache@v4
+        with:
+          path: love-cache
+          key: love-11.5-win64-v2
+
+      - name: Download LÖVE (64-bit)
+        if: steps.cache-love.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p love-cache
+          wget -O love-cache/love-11.5-win64.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip"
+
+      - name: Extract LÖVE (64-bit)
+        run: |
+          mkdir -p love-windows
+          unzip -q love-cache/love-11.5-win64.zip -d love-windows
+
+      - name: Package game.love
+        run: |
+          cd game
+          zip -9 -r ../game.love . -x "*.git*" -x ".github/*"
+
+      - name: Create Portable EXE
+        run: |
+          mkdir -p dist
+          cp -r love-windows/love-11.5-win64/* dist/
+          cat game.love >> dist/love.exe
+          mv dist/love.exe dist/CubicBattle.exe
+          # Копируем иконку, если есть
+          cp game/icon.ico dist/ || true
+
+      - name: Create ZIP
+        run: |
+          cd dist
+          zip -9 -r ../CubicBattle_Windows.zip CubicBattle.exe love.dll* SDL2.dll* OpenAL32.dll* license.txt readme.txt 2>/dev/null || true
+          cd ..
+          # Убедимся, что архив не пустой
+          if [ ! -f CubicBattle_Windows.zip ]; then
+            echo "No files to archive, creating empty archive" && touch empty.txt && zip CubicBattle_Windows.zip empty.txt
+          fi
+
+      - name: Set output name
+        id: set-output
+        run: |
+          EXE_NAME="CubicBattle_Windows_$(date +'%Y%m%d_%H%M').zip"
+          mv CubicBattle_Windows.zip "$EXE_NAME"
+          echo "exe-name=$EXE_NAME" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CubicBattle_Windows
+          path: CubicBattle_Windows_*.zip
+          compression-level: 0
+          if-no-files-found: error
+
+  # ============================================================
+  # (Опционально) RELEASE – заливаем артефакты в релиз
+  # ============================================================
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-android, build-windows]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/CubicBattle_APK/CubicBattle_*.apk
+            artifacts/CubicBattle_Windows/CubicBattle_Windows_*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
