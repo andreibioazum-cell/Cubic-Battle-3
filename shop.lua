@@ -5,7 +5,7 @@ local btnBack = { w=140, h=55, x=0, y=30 }
 local btnBuy  = { w=220, h=75, x=0, y=0 }
 local skinOwned = false
 local skinPrice = 100
-local skinName = "Азум-кубик"
+local skinName = "AZUM CUBE"
 
 local function drawSpacedText(text, x, y, w, align, font, spacing)
     spacing = spacing or 0
@@ -62,15 +62,15 @@ function shop.draw(coins)
     love.graphics.setColor(0.05, 0.02, 0.15, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
-    drawSpacedText("МАГАЗИН", 0, 70, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A")*0.05)
-    drawSpacedText("Монет: " .. coins, 0, 140, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
+    drawSpacedText("SHOP", 0, 70, love.graphics.getWidth(), "center", fontTitle, fontTitle:getWidth("A")*0.05)
+    drawSpacedText("COINS: " .. coins, 0, 140, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
 
     local infoY = love.graphics.getHeight()/2 - 80
     drawSpacedText(skinName, 0, infoY, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
     if skinOwned then
-        drawSpacedText("✅ КУПЛЕН", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
+        drawSpacedText("✅ OWNED", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
     else
-        drawSpacedText("Цена: " .. skinPrice .. " монет", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
+        drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50, love.graphics.getWidth(), "center", fontBtn, fontBtn:getWidth("A")*0.05)
     end
 
     if not skinOwned then
@@ -81,10 +81,9 @@ function shop.draw(coins)
         love.graphics.setColor(0,0,0,1)
         love.graphics.setLineWidth(3.4)
         love.graphics.rectangle("line", btnBuy.x, btnBuy.y, btnBuy.w, btnBuy.h, 16,16)
-        drawSpacedText("Купить", btnBuy.x, btnBuy.y+20, btnBuy.w, "center", fontBtn, fontBtn:getWidth("A")*0.05)
+        drawSpacedText("BUY", btnBuy.x, btnBuy.y+20, btnBuy.w, "center", fontBtn, fontBtn:getWidth("A")*0.05)
     end
 
-    -- Кнопка "Назад"
     love.graphics.setColor(0.1,0.0,0.2,0.5)
     love.graphics.rectangle("fill", btnBack.x+4, btnBack.y+5, btnBack.w, btnBack.h, 14,14)
     love.graphics.setColor(0.35,0.15,0.75,1)
@@ -92,7 +91,7 @@ function shop.draw(coins)
     love.graphics.setColor(0,0,0,1)
     love.graphics.setLineWidth(3.4)
     love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14,14)
-    drawSpacedText("Назад", btnBack.x, btnBack.y+14, btnBack.w, "center", fontBtn, fontBtn:getWidth("A")*0.05)
+    drawSpacedText("BACK", btnBack.x, btnBack.y+14, btnBack.w, "center", fontBtn, fontBtn:getWidth("A")*0.05)
 end
 
 function shop.touchpressed(id, x, y, coins, saveData)
