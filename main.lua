@@ -11,12 +11,28 @@ local lastState = nil
 local shotCooldown = 0
 local SHOT_DELAY = 0.15
 
+-- ========== ФОНОВАЯ МУЗЫКА ==========
+local bgMusic = nil
+
+local function loadMusic()
+    -- Пытаемся загрузить MP3-файл
+    local ok, source = pcall(love.audio.newSource, "Kevin_MacLeod_-_Sneaky_Snitch_74768437.mp3", "stream")
+    if ok and source then
+        bgMusic = source
+        bgMusic:setLooping(true)    -- бесконечный повтор
+        bgMusic:setVolume(0.5)      -- громкость 50% (можно регулировать)
+        bgMusic:play()
+        print("Фоновая музыка запущена")
+    else
+        print("Не удалось загрузить музыку: файл не найден или формат не поддерживается")
+    end
+end
+
 -- ========== СОХРАНЕНИЕ ==========
 SAVE_DATA = { coins = 0, hasAzumSkin = false }
 function SAVE_SAVE()
-    -- Простая сериализация (если нет инспекта, используем свой вариант)
     local str = "return {\n"
-    for k,v in pairs(SAVE_DATA) do
+    for k, v in pairs(SAVE_DATA) do
         str = str .. "  [" .. tostring(k) .. "] = " .. tostring(v) .. ",\n"
     end
     str = str .. "}"
@@ -36,6 +52,7 @@ function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
     loadSave()
     controls.load()
+    loadMusic()   -- загружаем и запускаем музыку
 end
 
 function love.update(dt)
@@ -96,6 +113,15 @@ function love.keypressed(key)
     
     if key == "escape" then
         GameState.current = "lobby"
+    end
+
+    -- Дополнительно: клавиша M для вкл/выкл музыки
+    if key == "m" and bgMusic then
+        if bgMusic:isPlaying() then
+            bgMusic:pause()
+        else
+            bgMusic:play()
+        end
     end
 end
 
