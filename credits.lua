@@ -80,9 +80,9 @@ function credits.draw()
 
     drawSpacedText("Developers:", 0, y, w, "center", fontText)
     y = y + 55 * scale
-    drawSpacedText("Dima Saraev – Creator (10 yeаrs)", 0, y, w, "center", fontText)
+    drawSpacedText("Dima Saraev – Creator (10 years)", 0, y, w, "center", fontText)
     y = y + 50 * scale
-    drawSpacedText("Dima Gustenyov – Owner (11 yeаrs)", 0, y, w, "center", fontText)
+    drawSpacedText("Dima Gustenyov – Owner (11 years)", 0, y, w, "center", fontText)
     y = y + 80 * scale
 
     drawSpacedText("Music:", 0, y, w, "center", fontText)
