@@ -17,6 +17,20 @@ local abilityJustPressed = false
 -- ========== ФЛАГ ДОСТУПНОСТИ СПОСОБНОСТИ ==========
 local abilityAvailable = false
 
+-- ========== НОРМАЛЬНЫЙ РАСЧЕТ МАСШТАБА ==========
+local function getScale()
+    local w, h = love.graphics.getDimensions()
+    -- БЛЯТЬ, ИСПОЛЬЗУЙ МАКСИМАЛЬНЫЙ РАЗМЕР, А НЕ МИНИМАЛЬНЫЙ
+    -- НА ТЕЛЕФОНЕ ЭКРАН ШИРОКИЙ, А ВЫСОТА МАЛЕНЬКАЯ
+    -- ПОЭТОМУ ЮЗАЙ МИН(ШИРИНА/ВЫСОТА) ДЛЯ КВАДРАТНЫХ ЭЛЕМЕНТОВ, НО БАЗУ 600
+    local base = 600
+    if isMobile then
+        -- НА МОБИЛКЕ БАЗА МЕНЬШЕ, ЧТОБЫ ВСЁ БЫЛО КРУПНЕЕ
+        base = 450
+    end
+    return math.min(w, h) / base
+end
+
 -- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
@@ -38,43 +52,41 @@ end
 -- ========== РАЗМЕЩЕНИЕ ЭЛЕМЕНТОВ (АДАПТИВНО) ==========
 local function place()
     local w, h = love.graphics.getDimensions()
-    local scale = math.min(w, h) / 800
+    local scale = getScale()
 
-    joy.r = 45 * scale
-    joy.sr = 18 * scale
-    atk.r = 52 * scale
-    ability.r = 40 * scale
-    back.w = 140 * scale
-    back.h = 55 * scale
+    joy.r = 55 * scale  -- БОЛЬШЕ ЕБАНУТЫЙ ДЖОЙСТИК
+    joy.sr = 22 * scale
+    atk.r = 60 * scale  -- БОЛЬШЕ КНОПКА
+    ability.r = 48 * scale
+    back.w = 160 * scale
+    back.h = 60 * scale
 
-    local margin = 80 * scale
+    local margin = 60 * scale
     joy.cx = margin
     joy.cy = h - margin
     if not joy.id then joy.sx, joy.sy = joy.cx, joy.cy end
 
-    atk.x = w - margin
+    atk.x = w - margin - 20 * scale
     atk.y = h - margin
 
-    ability.x = atk.x - 70 * scale
+    ability.x = atk.x - 80 * scale
     ability.y = atk.y
 
     back.x = (w - back.w) / 2
-    back.y = 30 * scale
+    back.y = 25 * scale
 end
 
 function controls.load()
-    local w, h = love.graphics.getDimensions()
-    local scale = math.min(w, h) / 800
-    local fontSize = math.max(16, 24 * scale)
+    local scale = getScale()
+    local fontSize = math.max(18, 28 * scale)  -- БОЛЬШЕ ШРИФТ
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
     place()
 end
 
 function controls.resize()
     place()
-    local w, h = love.graphics.getDimensions()
-    local scale = math.min(w, h) / 800
-    local fontSize = math.max(16, 24 * scale)
+    local scale = getScale()
+    local fontSize = math.max(18, 28 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
 end
 
@@ -122,7 +134,6 @@ end
 
 -- ========== ОБРАБОТЧИКИ ТАЧ ==========
 function controls.touchpressed(id, x, y)
-    -- Back button (звук при нажатии)
     if x >= back.x and x <= back.x + back.w and y >= back.y and y <= back.y + back.h then
         playButtonSound()
         GameState.current = "lobby"
@@ -217,13 +228,13 @@ end
 -- ========== ОТРИСОВКА ==========
 function controls.draw()
     local w, h = love.graphics.getDimensions()
-    local scale = math.min(w, h) / 800
+    local scale = getScale()
 
     if isMobile then
-        love.graphics.setLineWidth(2.55 * scale)
+        love.graphics.setLineWidth(2.8 * scale)
 
         -- Джойстик
-        love.graphics.setColor(0, 0, 0, 0.20)
+        love.graphics.setColor(0, 0, 0, 0.25)
         love.graphics.circle("fill", joy.cx, joy.cy, joy.r)
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.circle("line", joy.cx, joy.cy, joy.r)
@@ -238,13 +249,13 @@ function controls.draw()
         love.graphics.setColor(0.55 - press * 0.2, 0.20, 0.85 - press * 0.3, 1)
         love.graphics.circle("fill", atk.x, atk.y, r)
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(3.4 * scale)
+        love.graphics.setLineWidth(3.8 * scale)
         love.graphics.circle("line", atk.x, atk.y, r)
 
         love.graphics.push()
         love.graphics.translate(atk.x, atk.y)
         love.graphics.scale(textScale, textScale)
-        drawSpacedText("Shot", -atk.r, -14 * scale, atk.r * 2, "center", font, nil, textAlpha)
+        drawSpacedText("Shot", -atk.r, -16 * scale, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
         -- Кнопка способности
@@ -254,12 +265,12 @@ function controls.draw()
             love.graphics.setColor(0.8, 0.2, 0.9, 1)
             love.graphics.circle("fill", ability.x, ability.y, abR)
             love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.setLineWidth(3.4 * scale)
+            love.graphics.setLineWidth(3.8 * scale)
             love.graphics.circle("line", ability.x, ability.y, abR)
 
             love.graphics.setFont(font)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.printf("SuperAttacks", ability.x - abR/2, ability.y - 14 * scale, abR * 2, "center")
+            love.graphics.printf("Super", ability.x - abR/2, ability.y - 16 * scale, abR * 2, "center")
         end
     end
 
@@ -269,9 +280,9 @@ function controls.draw()
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
     love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
+    love.graphics.setLineWidth(3.8 * scale)
     love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
-    drawSpacedText("Back", back.x, back.y + 14*scale, back.w, "center", font, nil, 1)
+    drawSpacedText("Back", back.x, back.y + 16*scale, back.w, "center", font, nil, 1)
 
     love.graphics.setColor(1, 1, 1, 1)
 end
