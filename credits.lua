@@ -113,4 +113,4 @@ end
 function credits.touchmoved() end
 function credits.touchreleased() end
 
-return creditsщ
+return credits
