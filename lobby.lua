@@ -9,6 +9,9 @@ local fontTitle, fontSub, fontBtn
 local spaceCanvas
 local stars = {}
 
+-- Кнопка музыки (будет в левом верхнем углу)
+local btnMusic = { x = 0, y = 0, w = 0, h = 0 }
+
 -- ========== ГРАДИЕНТНЫЙ МЕШ ==========
 local function mkGrad(w, h)
     return love.graphics.newMesh({
@@ -57,6 +60,14 @@ local function place()
     btns.shop.y = h/2 + 100 * scale
     btns.credits.x = w/2 - btns.credits.w/2
     btns.credits.y = h/2 + 190 * scale
+
+    -- Кнопка музыки в левом верхнем углу
+    local musicW = 150 * scale
+    local musicH = 50 * scale
+    btnMusic.w = musicW
+    btnMusic.h = musicH
+    btnMusic.x = 20 * scale
+    btnMusic.y = 20 * scale
 end
 
 -- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
@@ -169,9 +180,28 @@ function lobby.draw()
     love.graphics.setLineWidth(3.4 * scale)
     love.graphics.rectangle("line", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
     drawSpacedText("Credits", btns.credits.x, btns.credits.y + 14*scale, btns.credits.w, "center", fontBtn)
+
+    -- ========== КНОПКА МУЗЫКИ (левый верхний угол) ==========
+    local musicText = musicOn and "Music: ON" or "Music: OFF"
+    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    love.graphics.rectangle("fill", btnMusic.x + 4*scale, btnMusic.y + 5*scale, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
+    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.rectangle("fill", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(2.5 * scale)
+    love.graphics.rectangle("line", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
+    drawSpacedText(musicText, btnMusic.x, btnMusic.y + 12*scale, btnMusic.w, "center", fontBtn, nil, 1)
 end
 
 function lobby.touchpressed(id, x, y)
+    -- Проверяем кнопку музыки (она выше всех, поэтому проверяем первой)
+    if x >= btnMusic.x and x <= btnMusic.x + btnMusic.w and y >= btnMusic.y and y <= btnMusic.y + btnMusic.h then
+        if toggleMusic then
+            toggleMusic()
+        end
+        return
+    end
+
     if x >= btns.play.x and x <= btns.play.x + btns.play.w and y >= btns.play.y and y <= btns.play.y + btns.play.h then
         GameState.current = "game"
     elseif x >= btns.shop.x and x <= btns.shop.x + btns.shop.w and y >= btns.shop.y and y <= btns.shop.y + btns.shop.h then
