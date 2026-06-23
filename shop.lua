@@ -178,6 +178,8 @@ function shop.touchpressed(id, x, y, coins, saveData)
             if coins >= skinPrice then
                 coins = coins - skinPrice
                 saveData.ownedSkin = skinName
+                -- Обновляем локальные переменные
+                ownedSkin = skinName
                 changed = true
                 print("Куплен скин " .. skinName)
             end
@@ -188,6 +190,7 @@ function shop.touchpressed(id, x, y, coins, saveData)
         if not isEquipped then
             if x >= btnEquip.x and x <= btnEquip.x + btnEquip.w and y >= btnEquip.y and y <= btnEquip.y + btnEquip.h then
                 saveData.equippedSkin = skinName
+                equippedSkin = skinName  -- обновляем локальную
                 changed = true
                 print("Надет скин " .. skinName)
                 return coins, changed
@@ -196,6 +199,7 @@ function shop.touchpressed(id, x, y, coins, saveData)
             -- Кнопка UNEQUIP
             if x >= btnUnequip.x and x <= btnUnequip.x + btnUnequip.w and y >= btnUnequip.y and y <= btnUnequip.y + btnUnequip.h then
                 saveData.equippedSkin = "NONE"
+                equippedSkin = "NONE"   -- обновляем локальную
                 changed = true
                 print("Снят скин " .. skinName)
                 return coins, changed
