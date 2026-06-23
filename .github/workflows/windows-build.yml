@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-windows:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest              # ← изменено на Windows
     timeout-minutes: 15
     outputs:
       exe-name: ${{ steps.set-output.outputs.exe-name }}
@@ -16,21 +16,25 @@ jobs:
         with:
           path: game
 
+      # Упаковка game.love через PowerShell
       - name: Package game.love
         run: |
           cd game
-          zip -9 -r ../game.love . -x "*.git*" -x ".github/*"
+          powershell -Command "Compress-Archive -Path * -DestinationPath ../game.love -CompressionLevel Optimal -Force"
 
-      - name: Download LÖVE Windows
+      # Скачивание LÖVE для Windows (64-bit)
+      - name: Download LÖVE Windows 64-bit
         run: |
-          wget -O love-windows.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip"
+          curl -L -o love-windows.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip"
           unzip love-windows.zip -d love-windows
 
+      # Скачивание LÖVE для Windows (32-bit)
       - name: Download LÖVE Windows 32-bit
         run: |
-          wget -O love-windows32.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win32.zip"
+          curl -L -o love-windows32.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win32.zip"
           unzip love-windows32.zip -d love-windows32
 
+      # Создание портативного EXE (64-bit)
       - name: Create Portable EXE (64-bit)
         run: |
           mkdir -p dist/CubicBattle
@@ -38,6 +42,7 @@ jobs:
           cat game.love >> dist/CubicBattle/love.exe
           mv dist/CubicBattle/love.exe dist/CubicBattle/CubicBattle.exe
 
+      # Создание портативного EXE (32-bit)
       - name: Create Portable EXE (32-bit)
         run: |
           mkdir -p dist/CubicBattle32
@@ -45,38 +50,42 @@ jobs:
           cat game.love >> dist/CubicBattle32/love.exe
           mv dist/CubicBattle32/love.exe dist/CubicBattle32/CubicBattle32.exe
 
-      # ===== ВСТРАИВАЕМ ИКОНКУ В EXE =====
+      # Скачиваем rcedit (утилита для замены иконки)
       - name: Download rcedit
         run: |
-          wget -O rcedit-x64.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
-          chmod +x rcedit-x64.exe
+          curl -L -o rcedit-x64.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
 
+      # Устанавливаем иконку для 64-bit EXE (если есть icon.ico)
       - name: Set icon for 64-bit EXE
         run: |
-          if [ -f "game/icon.ico" ]; then
-            ./rcedit-x64.exe dist/CubicBattle/CubicBattle.exe --set-icon game/icon.ico
-          fi
-        continue-on-error: true
+          if (Test-Path "game/icon.ico") {
+            .\rcedit-x64.exe dist/CubicBattle/CubicBattle.exe --set-icon game/icon.ico
+          }
+        shell: pwsh
 
+      # Устанавливаем иконку для 32-bit EXE
       - name: Set icon for 32-bit EXE
         run: |
-          if [ -f "game/icon.ico" ]; then
-            ./rcedit-x64.exe dist/CubicBattle32/CubicBattle32.exe --set-icon game/icon.ico
-          fi
-        continue-on-error: true
+          if (Test-Path "game/icon.ico") {
+            .\rcedit-x64.exe dist/CubicBattle32/CubicBattle32.exe --set-icon game/icon.ico
+          }
+        shell: pwsh
 
+      # Упаковываем в ZIP через PowerShell
       - name: Create ZIP
         run: |
-          cd dist
-          zip -9 -r ../CubicBattle_Windows_Portable.zip CubicBattle/ CubicBattle32/
+          powershell -Command "Compress-Archive -Path dist/CubicBattle, dist/CubicBattle32 -DestinationPath CubicBattle_Windows_Portable.zip -CompressionLevel Optimal -Force"
 
+      # Задаём имя артефакта с датой
       - name: Set EXE name
         id: set-output
         run: |
-          EXE_NAME="CubicBattle_Windows_$(date +'%Y%m%d_%H%M').zip"
-          mv CubicBattle_Windows_Portable.zip "$EXE_NAME"
-          echo "exe-name=$EXE_NAME" >> $GITHUB_OUTPUT
+          $EXE_NAME = "CubicBattle_Windows_$(Get-Date -Format 'yyyyMMdd_HHmm').zip"
+          Move-Item CubicBattle_Windows_Portable.zip $EXE_NAME
+          echo "exe-name=$EXE_NAME" >> $env:GITHUB_OUTPUT
+        shell: pwsh
 
+      # Загружаем артефакт
       - uses: actions/upload-artifact@v4
         with:
           name: CubicBattle_Windows
