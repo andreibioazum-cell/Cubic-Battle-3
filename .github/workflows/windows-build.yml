@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       exe-name: ${{ steps.set-output.outputs.exe-name }}
@@ -16,126 +16,69 @@ jobs:
         with:
           path: game
 
-      # 1. Создаём game.love
       - name: Package game.love
         run: |
-          $gamePath = Join-Path $env:GITHUB_WORKSPACE "game"
-          $lovePath = Join-Path $env:GITHUB_WORKSPACE "game.love"
-          Compress-Archive -Path "$gamePath\*" -DestinationPath $lovePath -CompressionLevel Optimal -Force
-          if (Test-Path $lovePath) {
-            Write-Host "✅ game.love создан, размер: $((Get-Item $lovePath).Length) байт"
-          } else {
-            Write-Error "❌ Не удалось создать game.love"
-            exit 1
-          }
-        shell: pwsh
+          cd game
+          zip -9 -r ../game.love . -x "*.git*" -x ".github/*"
 
-      # 2. Скачиваем LÖVE
-      - name: Download LÖVE 64-bit
+      - name: Download LÖVE Windows 64-bit
         run: |
-          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
-          Expand-Archive -Path love-windows.zip -DestinationPath love-windows
-        shell: pwsh
+          wget -O love-windows.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip"
+          unzip love-windows.zip -d love-windows
 
-      - name: Download LÖVE 32-bit
+      - name: Download LÖVE Windows 32-bit
         run: |
-          curl -L -o love-windows32.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win32.zip
-          Expand-Archive -Path love-windows32.zip -DestinationPath love-windows32
-        shell: pwsh
+          wget -O love-windows32.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win32.zip"
+          unzip love-windows32.zip -d love-windows32
 
-      # 3. Создаём портативные EXE с абсолютными путями
       - name: Create Portable EXE (64-bit)
         run: |
-          $workspace = $env:GITHUB_WORKSPACE
-          New-Item -ItemType Directory -Force -Path "$workspace\dist\CubicBattle"
-          Copy-Item -Path "$workspace\love-windows\love-11.5-win64\*" -Destination "$workspace\dist\CubicBattle\" -Recurse
-          # Используем абсолютный путь к game.love
-          cmd /c copy /b "$workspace\dist\CubicBattle\love.exe" + "$workspace\game.love" "$workspace\dist\CubicBattle\CubicBattle.exe"
-          if (Test-Path "$workspace\dist\CubicBattle\CubicBattle.exe") {
-            Write-Host "✅ 64-bit EXE создан"
-          } else {
-            Write-Error "❌ Не удалось создать 64-bit EXE"
-            exit 1
-          }
-        shell: pwsh
+          mkdir -p dist/CubicBattle
+          cp love-windows/love-11.5-win64/* dist/CubicBattle/
+          cat game.love >> dist/CubicBattle/love.exe
+          mv dist/CubicBattle/love.exe dist/CubicBattle/CubicBattle.exe
 
       - name: Create Portable EXE (32-bit)
         run: |
-          $workspace = $env:GITHUB_WORKSPACE
-          New-Item -ItemType Directory -Force -Path "$workspace\dist\CubicBattle32"
-          Copy-Item -Path "$workspace\love-windows32\love-11.5-win32\*" -Destination "$workspace\dist\CubicBattle32\" -Recurse
-          cmd /c copy /b "$workspace\dist\CubicBattle32\love.exe" + "$workspace\game.love" "$workspace\dist\CubicBattle32\CubicBattle32.exe"
-          if (Test-Path "$workspace\dist\CubicBattle32\CubicBattle32.exe") {
-            Write-Host "✅ 32-bit EXE создан"
-          } else {
-            Write-Error "❌ Не удалось создать 32-bit EXE"
-            exit 1
-          }
-        shell: pwsh
+          mkdir -p dist/CubicBattle32
+          cp love-windows32/love-11.5-win32/* dist/CubicBattle32/
+          cat game.love >> dist/CubicBattle32/love.exe
+          mv dist/CubicBattle32/love.exe dist/CubicBattle32/CubicBattle32.exe
 
-      # 4. Иконка (только если icon.ico валидный)
-      - name: Download rcedit
+      # ----- Установка Wine и rcedit для иконки -----
+      - name: Install Wine and rcedit
         run: |
-          curl -L -o rcedit-x64.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
-        shell: pwsh
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine wine32 wine64
+          wget -O rcedit-x64.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
 
       - name: Set icon for 64-bit EXE
         run: |
-          $workspace = $env:GITHUB_WORKSPACE
-          $iconPath = "$workspace\game\icon.ico"
-          if (Test-Path $iconPath) {
-            $bytes = [System.IO.File]::ReadAllBytes($iconPath)
-            if ($bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 1 -and $bytes[3] -eq 0) {
-              .\rcedit-x64.exe "$workspace\dist\CubicBattle\CubicBattle.exe" --set-icon $iconPath
-              Write-Host "✅ Иконка установлена для 64-bit"
-            } else {
-              Write-Warning "⚠️ icon.ico не является корректным ICO, пропускаем"
-            }
-          }
-        shell: pwsh
+          if [ -f "game/icon.ico" ]; then
+            wine rcedit-x64.exe dist/CubicBattle/CubicBattle.exe --set-icon game/icon.ico
+          fi
         continue-on-error: true
 
       - name: Set icon for 32-bit EXE
         run: |
-          $workspace = $env:GITHUB_WORKSPACE
-          $iconPath = "$workspace\game\icon.ico"
-          if (Test-Path $iconPath) {
-            $bytes = [System.IO.File]::ReadAllBytes($iconPath)
-            if ($bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 1 -and $bytes[3] -eq 0) {
-              .\rcedit-x64.exe "$workspace\dist\CubicBattle32\CubicBattle32.exe" --set-icon $iconPath
-              Write-Host "✅ Иконка установлена для 32-bit"
-            } else {
-              Write-Warning "⚠️ icon.ico не является корректным ICO, пропускаем"
-            }
-          }
-        shell: pwsh
+          if [ -f "game/icon.ico" ]; then
+            wine rcedit-x64.exe dist/CubicBattle32/CubicBattle32.exe --set-icon game/icon.ico
+          fi
         continue-on-error: true
 
-      # 5. Упаковка в ZIP
-      - name: Create ZIP archive
+      - name: Create ZIP
         run: |
-          $workspace = $env:GITHUB_WORKSPACE
-          $zipPath = "$workspace\CubicBattle_Windows_Portable.zip"
-          Compress-Archive -Path "$workspace\dist\CubicBattle", "$workspace\dist\CubicBattle32" -DestinationPath $zipPath -CompressionLevel Optimal -Force
-          if (Test-Path $zipPath) {
-            Write-Host "✅ ZIP создан"
-          } else {
-            Write-Error "❌ Не удалось создать ZIP"
-            exit 1
-          }
-        shell: pwsh
+          cd dist
+          zip -9 -r ../CubicBattle_Windows_Portable.zip CubicBattle/ CubicBattle32/
 
-      # 6. Переименовываем с датой
       - name: Set EXE name
         id: set-output
         run: |
-          $date = Get-Date -Format 'yyyyMMdd_HHmm'
-          $newName = "CubicBattle_Windows_$date.zip"
-          Move-Item CubicBattle_Windows_Portable.zip $newName
-          echo "exe-name=$newName" >> $env:GITHUB_OUTPUT
-        shell: pwsh
+          EXE_NAME="CubicBattle_Windows_$(date +'%Y%m%d_%H%M').zip"
+          mv CubicBattle_Windows_Portable.zip "$EXE_NAME"
+          echo "exe-name=$EXE_NAME" >> $GITHUB_OUTPUT
 
-      # 7. Загружаем артефакт
       - uses: actions/upload-artifact@v4
         with:
           name: CubicBattle_Windows
