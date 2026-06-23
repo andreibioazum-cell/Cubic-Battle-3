@@ -12,9 +12,7 @@ jobs:
       apk-name: ${{ steps.set-output.outputs.apk-name }}
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: game
+      - uses: actions/checkout@v4          # теперь файлы будут в корне, а не в папке game
 
       - uses: actions/setup-java@v4
         with:
@@ -50,33 +48,33 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
-      # ===== КОПИРУЕМ ИКОНКИ ДЛЯ ANDROID =====
-      - name: Prepare Android icons
+      # ===== УСТАНОВКА ИКОНКИ (ищем icon.png в корне) =====
+      - name: Set Android icon
         run: |
-          # Создаём папки для всех плотностей, если их нет
-          mkdir -p love-android/app/src/main/res/mipmap-mdpi
-          mkdir -p love-android/app/src/main/res/mipmap-hdpi
-          mkdir -p love-android/app/src/main/res/mipmap-xhdpi
-          mkdir -p love-android/app/src/main/res/mipmap-xxhdpi
-          mkdir -p love-android/app/src/main/res/mipmap-xxxhdpi
+          # Проверяем наличие icon.png в корне (там, где лежит main.lua)
+          if [ -f "icon.png" ]; then
+            mkdir -p love-android/app/src/main/res/mipmap-mdpi
+            mkdir -p love-android/app/src/main/res/mipmap-hdpi
+            mkdir -p love-android/app/src/main/res/mipmap-xhdpi
+            mkdir -p love-android/app/src/main/res/mipmap-xxhdpi
+            mkdir -p love-android/app/src/main/res/mipmap-xxxhdpi
 
-          # Копируем подготовленные иконки (если они есть в папке game/icons/android/)
-          # Если такой структуры нет, можно скопировать один большой PNG во все папки
-          if [ -d "game/icons/android" ]; then
-            cp game/icons/android/mipmap-mdpi/ic_launcher.png love-android/app/src/main/res/mipmap-mdpi/ 2>/dev/null || true
-            cp game/icons/android/mipmap-hdpi/ic_launcher.png love-android/app/src/main/res/mipmap-hdpi/ 2>/dev/null || true
-            cp game/icons/android/mipmap-xhdpi/ic_launcher.png love-android/app/src/main/res/mipmap-xhdpi/ 2>/dev/null || true
-            cp game/icons/android/mipmap-xxhdpi/ic_launcher.png love-android/app/src/main/res/mipmap-xxhdpi/ 2>/dev/null || true
-            cp game/icons/android/mipmap-xxxhdpi/ic_launcher.png love-android/app/src/main/res/mipmap-xxxhdpi/ 2>/dev/null || true
+            cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+            cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+            cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+            cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+            cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+            # Также копируем для круглой иконки (если используется)
+            cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+            cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+            cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
+            cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+            cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+
+            echo "✅ Иконка скопирована из корня репозитория"
           else
-            # Если нет готовых, используем один файл icon.png из корня игры
-            if [ -f "game/icon.png" ]; then
-              cp game/icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-              cp game/icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-              cp game/icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-              cp game/icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-              cp game/icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-            fi
+            echo "⚠️ Файл icon.png не найден в корне, иконка не заменена"
           fi
 
       - uses: actions/cache@v4
@@ -95,8 +93,8 @@ jobs:
 
       - name: Package game.love
         run: |
-          cd game
-          zip -9 -r ../game.love . -x "*.git*" -x ".github/*"
+          # Упаковываем всё, что есть в корне (main.lua и все файлы)
+          zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
 
       - name: Embed game
         run: |
