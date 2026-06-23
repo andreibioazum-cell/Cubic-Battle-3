@@ -50,6 +50,35 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
+      # ===== КОПИРУЕМ ИКОНКИ ДЛЯ ANDROID =====
+      - name: Prepare Android icons
+        run: |
+          # Создаём папки для всех плотностей, если их нет
+          mkdir -p love-android/app/src/main/res/mipmap-mdpi
+          mkdir -p love-android/app/src/main/res/mipmap-hdpi
+          mkdir -p love-android/app/src/main/res/mipmap-xhdpi
+          mkdir -p love-android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p love-android/app/src/main/res/mipmap-xxxhdpi
+
+          # Копируем подготовленные иконки (если они есть в папке game/icons/android/)
+          # Если такой структуры нет, можно скопировать один большой PNG во все папки
+          if [ -d "game/icons/android" ]; then
+            cp game/icons/android/mipmap-mdpi/ic_launcher.png love-android/app/src/main/res/mipmap-mdpi/ 2>/dev/null || true
+            cp game/icons/android/mipmap-hdpi/ic_launcher.png love-android/app/src/main/res/mipmap-hdpi/ 2>/dev/null || true
+            cp game/icons/android/mipmap-xhdpi/ic_launcher.png love-android/app/src/main/res/mipmap-xhdpi/ 2>/dev/null || true
+            cp game/icons/android/mipmap-xxhdpi/ic_launcher.png love-android/app/src/main/res/mipmap-xxhdpi/ 2>/dev/null || true
+            cp game/icons/android/mipmap-xxxhdpi/ic_launcher.png love-android/app/src/main/res/mipmap-xxxhdpi/ 2>/dev/null || true
+          else
+            # Если нет готовых, используем один файл icon.png из корня игры
+            if [ -f "game/icon.png" ]; then
+              cp game/icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+              cp game/icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+              cp game/icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+              cp game/icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+              cp game/icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+            fi
+          fi
+
       - uses: actions/cache@v4
         with:
           path: |
