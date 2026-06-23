@@ -3,25 +3,29 @@ local shop = {}
 local fontTitle, fontBtn
 local btnBack = { w = 140, h = 55, x = 0, y = 30 }
 local btnMain = { w = 220, h = 75, x = 0, y = 0 }  -- главная кнопка (BUY / EQUIP / UNEQUIP)
-local skinPrice = 100
-local skinName = "AZUM CUBE"
+local btnLeft = { w = 60, h = 60, x = 0, y = 0 }   -- стрелка влево
+local btnRight = { w = 60, h = 60, x = 0, y = 0 }  -- стрелка вправо
+
+-- Список доступных скинов (легко расширять)
+local SKINS = {
+    { name = "AZUM CUBE", price = 100 },
+    { name = "NASTYA CUBE", price = 150 },
+}
+local currentSkinIndex = 1   -- какой скин сейчас выбран в магазине
 
 local ownedSkin = "NONE"
 local equippedSkin = "NONE"
-
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
--- ========== МАСШТАБ (теперь тоже 500 для ПК, 450 для мобильных) ==========
+-- ========== МАСШТАБ ==========
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    local base = 1000        -- теперь как везде
-    if isMobile then
-        base = 450
-    end
+    local base = 1000
+    if isMobile then base = 450 end
     return math.min(w, h) / base
 end
 
--- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
+-- ========== ТЕКСТ С ТЕНЬЮ ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -42,22 +46,8 @@ end
 function shop.load(saveData)
     ownedSkin = saveData.ownedSkin or "NONE"
     equippedSkin = saveData.equippedSkin or "NONE"
-    local w, h = love.graphics.getDimensions()
-    local scale = getScale()
-
-    btnBack.w = 140 * scale
-    btnBack.h = 55 * scale
-    btnMain.w = 220 * scale
-    btnMain.h = 75 * scale
-
-    btnBack.x = (w - btnBack.w) / 2
-    btnMain.x = (w - btnMain.w) / 2
-    btnMain.y = h/2 + 80 * scale
-
-    local titleSize = math.max(32, 48 * scale)
-    local btnSize   = math.max(20, 28 * scale)
-    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
-    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
+    currentSkinIndex = 1   -- сбрасываем на первый
+    resize()
 end
 
 function shop.resize()
@@ -68,10 +58,19 @@ function shop.resize()
     btnBack.h = 55 * scale
     btnMain.w = 220 * scale
     btnMain.h = 75 * scale
+    btnLeft.w = 60 * scale
+    btnLeft.h = 60 * scale
+    btnRight.w = 60 * scale
+    btnRight.h = 60 * scale
 
     btnBack.x = (w - btnBack.w) / 2
     btnMain.x = (w - btnMain.w) / 2
-    btnMain.y = h/2 + 80 * scale
+    btnMain.y = h/2 + 120 * scale
+
+    btnLeft.x = w/2 - 180 * scale
+    btnLeft.y = h/2 + 10 * scale
+    btnRight.x = w/2 + 120 * scale
+    btnRight.y = h/2 + 10 * scale
 
     local titleSize = math.max(32, 48 * scale)
     local btnSize   = math.max(20, 28 * scale)
@@ -89,20 +88,22 @@ function shop.draw(coins)
     drawSpacedText("SHOP", 0, 100*scale, w, "center", fontTitle, nil, 1)
     drawSpacedText("COINS: " .. coins, 0, 170*scale, w, "center", fontBtn, nil, 1)
 
-    local infoY = love.graphics.getHeight()/2 - 40*scale
-    drawSpacedText(skinName, 0, infoY, w, "center", fontBtn, nil, 1)
+    local skin = SKINS[currentSkinIndex]
+    local isOwned = (ownedSkin == skin.name)
+    local isEquipped = (equippedSkin == skin.name)
 
-    local isOwned = (ownedSkin == skinName)
-    local isEquipped = (equippedSkin == skinName)
+    -- Информация о скине
+    local infoY = love.graphics.getHeight()/2 - 60*scale
+    drawSpacedText(skin.name, 0, infoY, w, "center", fontBtn, nil, 1)
 
     if isOwned then
         if isEquipped then
-            drawSpacedText("OWNED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+            drawSpacedText("✅ EQUIPPED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
         else
-            drawSpacedText("EQUIPPED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+            drawSpacedText("OWNED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
         end
     else
-        drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+        drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
     end
 
     -- ========== ГЛАВНАЯ КНОПКА ==========
@@ -127,6 +128,21 @@ function shop.draw(coins)
     love.graphics.rectangle("line", btnMain.x, btnMain.y, btnMain.w, btnMain.h, 16*scale, 16*scale)
     drawSpacedText(btnText, btnMain.x, btnMain.y + 20*scale, btnMain.w, "center", fontBtn, nil, 1)
 
+    -- ========== СТРЕЛКИ ==========
+    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.rectangle("fill", btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, 10*scale, 10*scale)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(3)
+    love.graphics.rectangle("line", btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, 10*scale, 10*scale)
+    drawSpacedText("<", btnLeft.x, btnLeft.y + 12*scale, btnLeft.w, "center", fontBtn, nil, 1)
+
+    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.rectangle("fill", btnRight.x, btnRight.y, btnRight.w, btnRight.h, 10*scale, 10*scale)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(3)
+    love.graphics.rectangle("line", btnRight.x, btnRight.y, btnRight.w, btnRight.h, 10*scale, 10*scale)
+    drawSpacedText(">", btnRight.x, btnRight.y + 12*scale, btnRight.w, "center", fontBtn, nil, 1)
+
     -- ========== КНОПКА BACK ==========
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
@@ -148,33 +164,52 @@ function shop.touchpressed(id, x, y, coins, saveData)
         return coins, changed
     end
 
+    -- Стрелка влево
+    if x >= btnLeft.x and x <= btnLeft.x + btnLeft.w and y >= btnLeft.y and y <= btnLeft.y + btnLeft.h then
+        playButtonSound()
+        currentSkinIndex = currentSkinIndex - 1
+        if currentSkinIndex < 1 then currentSkinIndex = #SKINS end
+        return coins, false  -- ничего не меняем, только переключили
+    end
+
+    -- Стрелка вправо
+    if x >= btnRight.x and x <= btnRight.x + btnRight.w and y >= btnRight.y and y <= btnRight.y + btnRight.h then
+        playButtonSound()
+        currentSkinIndex = currentSkinIndex + 1
+        if currentSkinIndex > #SKINS then currentSkinIndex = 1 end
+        return coins, false
+    end
+
     -- Главная кнопка
     if x >= btnMain.x and x <= btnMain.x + btnMain.w and y >= btnMain.y and y <= btnMain.y + btnMain.h then
         playButtonSound()
-        local isOwned = (saveData.ownedSkin == skinName)
-        local isEquipped = (saveData.equippedSkin == skinName)
+        local skin = SKINS[currentSkinIndex]
+        local isOwned = (saveData.ownedSkin == skin.name)
+        local isEquipped = (saveData.equippedSkin == skin.name)
 
         if not isOwned then
             -- BUY
-            if coins >= skinPrice then
-                coins = coins - skinPrice
-                saveData.ownedSkin = skinName
-                ownedSkin = skinName
+            if coins >= skin.price then
+                coins = coins - skin.price
+                saveData.ownedSkin = skin.name
+                ownedSkin = skin.name
                 changed = true
-                print("Куплен скин " .. skinName)
+                print("Куплен скин " .. skin.name)
+            else
+                print("Не хватает монет!")
             end
         elseif not isEquipped then
             -- EQUIP
-            saveData.equippedSkin = skinName
-            equippedSkin = skinName
+            saveData.equippedSkin = skin.name
+            equippedSkin = skin.name
             changed = true
-            print("Надет скин " .. skinName)
+            print("Надет скин " .. skin.name)
         else
             -- UNEQUIP
             saveData.equippedSkin = "NONE"
             equippedSkin = "NONE"
             changed = true
-            print("Снят скин " .. skinName)
+            print("Снят скин " .. skin.name)
         end
     end
 
