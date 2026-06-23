@@ -79,27 +79,26 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
 
-      # ---------- КОРРЕКТНО ВСТАВЛЯЕМ ПОДПИСЬ В build.gradle ----------
-      - name: Inject signing config into build.gradle
+      # ---------- ПОДКЛЮЧАЕМ ПОДПИСЬ (простой способ) ----------
+      - name: Configure signing
         run: |
           cd love-android/app
-          # Вставляем signingConfigs перед последней закрывающей скобкой android
-          sed -i '/^android {/,/^}/ {
-            /^}/ i\
-        signingConfigs {\
-            release {\
-                storeFile file("../../keystore.jks")\
-                storePassword "'${{ secrets.KEYSTORE_PASSWORD }}'"\
-                keyAlias "'${{ secrets.KEY_ALIAS }}'"\
-                keyPassword "'${{ secrets.KEY_PASSWORD }}'"\
-            }\
-        }\
-        buildTypes {\
-            release {\
-                signingConfig signingConfigs.release\
-            }\
-        }
-          }' build.gradle
+          cat > signing.gradle << 'EOF'
+          android.signingConfigs {
+              release {
+                  storeFile file("../../keystore.jks")
+                  storePassword "${{ secrets.KEYSTORE_PASSWORD }}"
+                  keyAlias "${{ secrets.KEY_ALIAS }}"
+                  keyPassword "${{ secrets.KEY_PASSWORD }}"
+              }
+          }
+          android.buildTypes {
+              release {
+                  signingConfig android.signingConfigs.release
+              }
+          }
+          EOF
+          echo "apply from: 'signing.gradle'" >> build.gradle
 
       - uses: actions/cache@v4
         with:
