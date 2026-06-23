@@ -1,9 +1,15 @@
+-- main.lua для Cubic Battle 3
+-- Поддерживает: Lobby, Game, Shop, Credits, Settings
+-- Сохранение: монеты, купленные/надетые скины, настройки звука
+-- Музыка: Sneaky Snitch (Kevin MacLeod)
+-- Звук кнопок: cartoon-button-click-sound.mp3
+
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
 local shop = require("shop")
 local credits = require("credits")
-local settings = require("settings")   -- новый модуль настроек
+local settings = require("settings")
 
 GameState = { current = "lobby" }
 
@@ -48,7 +54,7 @@ local function loadMusic()
 end
 
 function playButtonSound()
-    if not sfxOn then return end   -- если звуки выключены – молчим
+    if not sfxOn then return end
     local sound, err = love.audio.newSource("cartoon-button-click-sound.mp3", "static")
     if sound then
         sound:setVolume(0.5)
@@ -58,7 +64,7 @@ function playButtonSound()
     end
 end
 
--- ========== СОХРАНЕНИЕ (5 строк) ==========
+-- ========== СОХРАНЕНИЕ ==========
 SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE", musicOn = true, sfxOn = true }
 local SAVE_FILE = "data.txt"
 
