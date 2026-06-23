@@ -85,9 +85,9 @@ function shop.draw(coins)
 
     if isOwned then
         if isEquipped then
-            drawSpacedText("EQUIPPED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
-        else
             drawSpacedText("OWNED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+        else
+            drawSpacedText("EQUIPPED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
         end
     else
         drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
