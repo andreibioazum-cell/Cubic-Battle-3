@@ -16,7 +16,7 @@ local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iO
 -- ========== МАСШТАБ (ПК и телефон – примерно одинаково) ==========
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    local base = 500        -- для ПК теперь 500 (как на телефонах)
+    local base = 1000        -- для ПК теперь 500 (как на телефонах)
     if isMobile then
         base = 450          -- мобильные чуть крупнее
     end
