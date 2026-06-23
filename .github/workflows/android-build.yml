@@ -1,11 +1,11 @@
-name: Build_Cubic_Battle_Android_Unsigned
+name: Build_Cubic_Battle_Android_Release
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  build-android:
+  build-android-release:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
@@ -48,30 +48,36 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
+      # Меняем пакет на com.CB3
       - name: Set package name to com.CB3
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
 
-      # Установка иконки (без конвертации, просто копируем если есть)
-      - name: Set Android icon
+      # Декодируем keystore из секрета
+      - name: Decode keystore
         run: |
-          if [ -f "icon.png" ]; then
-            mkdir -p love-android/app/src/main/res/mipmap-mdpi
-            mkdir -p love-android/app/src/main/res/mipmap-hdpi
-            mkdir -p love-android/app/src/main/res/mipmap-xhdpi
-            mkdir -p love-android/app/src/main/res/mipmap-xxhdpi
-            mkdir -p love-android/app/src/main/res/mipmap-xxxhdpi
-            cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
-          fi
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+
+      # Настраиваем подпись релизной сборки
+      - name: Configure signing
+        run: |
+          cd love-android/app
+          cat > signing.gradle << 'EOF'
+          android.signingConfigs {
+              release {
+                  storeFile file("../../keystore.jks")
+                  storePassword "${{ secrets.KEYSTORE_PASSWORD }}"
+                  keyAlias "${{ secrets.KEY_ALIAS }}"
+                  keyPassword "${{ secrets.KEY_PASSWORD }}"
+              }
+          }
+          android.buildTypes {
+              release {
+                  signingConfig android.signingConfigs.release
+              }
+          }
+          EOF
+          echo "apply from: 'signing.gradle'" >> build.gradle
 
       - uses: actions/cache@v4
         with:
@@ -110,8 +116,7 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      # Собираем release без подписи (unsigned)
-      - name: Build Unsigned Release APK
+      - name: Build Release APK
         working-directory: love-android
         run: ./gradlew assembleEmbedNoRecordRelease --no-daemon --parallel --console=plain
 
@@ -119,12 +124,12 @@ jobs:
         id: set-output
         run: |
           APK=$(find love-android -name "*.apk" | head -1)
-          APK_NAME="CubicBattle3_unsigned_$(date +'%Y%m%d_%H%M').apk"
+          APK_NAME="CubicBattle3_$(date +'%Y%m%d_%H%M').apk"
           cp "$APK" "$APK_NAME"
           echo "apk-name=$APK_NAME" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle3_Unsigned_APK
-          path: CubicBattle3_unsigned_*.apk
+          name: CubicBattle3_APK
+          path: CubicBattle3_*.apk
           compression-level: 0
