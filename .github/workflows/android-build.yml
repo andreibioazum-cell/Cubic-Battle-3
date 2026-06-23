@@ -1,18 +1,18 @@
-name: Build_Cubic_Battle_Android
+name: Build_Cubic_Battle_Android_Release
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  build-android:
+  build-android-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     outputs:
       apk-name: ${{ steps.set-output.outputs.apk-name }}
 
     steps:
-      - uses: actions/checkout@v4          # теперь файлы будут в корне, а не в папке game
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
@@ -48,10 +48,15 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
-      # ===== УСТАНОВКА ИКОНКИ (ищем icon.png в корне) =====
+      # ---------- УСТАНАВЛИВАЕМ ПАКЕТ com.CB3 ----------
+      - name: Set package name to com.CB3
+        run: |
+          # Меняем applicationId в build.gradle
+          sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
+
+      # ---------- КОПИРУЕМ ИКОНКУ ----------
       - name: Set Android icon
         run: |
-          # Проверяем наличие icon.png в корне (там, где лежит main.lua)
           if [ -f "icon.png" ]; then
             mkdir -p love-android/app/src/main/res/mipmap-mdpi
             mkdir -p love-android/app/src/main/res/mipmap-hdpi
@@ -65,18 +70,19 @@ jobs:
             cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
             cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
-            # Также копируем для круглой иконки (если используется)
             cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
             cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
             cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
             cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
             cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
-
-            echo "✅ Иконка скопирована из корня репозитория"
-          else
-            echo "⚠️ Файл icon.png не найден в корне, иконка не заменена"
           fi
 
+      # ---------- ВОССТАНАВЛИВАЕМ KEYSTORE ИЗ СЕКРЕТА ----------
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+
+      # ---------- СОБИРАЕМ RELEASE APK ----------
       - uses: actions/cache@v4
         with:
           path: |
@@ -93,7 +99,6 @@ jobs:
 
       - name: Package game.love
         run: |
-          # Упаковываем всё, что есть в корне (main.lua и все файлы)
           zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
 
       - name: Embed game
@@ -115,20 +120,42 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      - name: Build APK
+      # ---------- НАСТРОЙКА ПОДПИСИ В GRADLE ----------
+      - name: Configure signing
+        run: |
+          cat >> love-android/app/build.gradle << 'EOF'
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file("../../keystore.jks")
+                      storePassword "${{ secrets.KEYSTORE_PASSWORD }}"
+                      keyAlias "${{ secrets.KEY_ALIAS }}"
+                      keyPassword "${{ secrets.KEY_PASSWORD }}"
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
+
+      # ---------- СБОРКА RELEASE APK ----------
+      - name: Build Release APK
         working-directory: love-android
-        run: ./gradlew assembleEmbedNoRecordDebug --no-daemon --parallel --console=plain
+        run: ./gradlew assembleEmbedNoRecordRelease --no-daemon --parallel --console=plain
 
       - name: Collect APK
         id: set-output
         run: |
           APK=$(find love-android -name "*.apk" | head -1)
-          APK_NAME="CubicBattle_$(date +'%Y%m%d_%H%M').apk"
+          APK_NAME="CubicBattle3_$(date +'%Y%m%d_%H%M').apk"
           cp "$APK" "$APK_NAME"
           echo "apk-name=$APK_NAME" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle_APK
-          path: CubicBattle_*.apk
+          name: CubicBattle3_APK
+          path: CubicBattle3_*.apk
           compression-level: 0
