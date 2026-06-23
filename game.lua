@@ -3,7 +3,7 @@ local enemy = require("enemy")
 
 local game = {}
 
-SAVE_DATA = SAVE_DATA or { coins = 0, hasAzumSkin = false }
+SAVE_DATA = SAVE_DATA or { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
 SAVE_SAVE = SAVE_SAVE or function() end
 
 local PLAYER_SIZE = 55
@@ -16,7 +16,7 @@ local bg, playerImg, azumImg, font
 local cam = { x = 0, y = 0 }
 local dead = false
 
-local hasAzumSkin = false
+local equippedSkin = "NONE"
 local resurrectionUsed = false
 
 local function spawnBullet(x, y, dx, dy)
@@ -53,9 +53,10 @@ local function onHitPlayer(dmg)
     end
 end
 
-function game.load(hasAzum)
-    hasAzumSkin = hasAzum or false
+function game.load()
+    equippedSkin = SAVE_DATA.equippedSkin or "NONE"
     resurrectionUsed = false
+
     cube.x, cube.y = 0, 0
     cube.angle = 0
     cube.hp = PLAYER_HP_MAX
@@ -72,8 +73,8 @@ function game.load(hasAzum)
     azumImg:setFilter("nearest", "nearest")
     font = font or love.graphics.newFont("Fredoka-Bold.ttf", 18)
 
-    -- Устанавливаем доступность способности
-    controls.setAbilityAvailable(hasAzumSkin and not resurrectionUsed)
+    local abilityAvailable = (equippedSkin == "AZUM CUBE" and not resurrectionUsed)
+    controls.setAbilityAvailable(abilityAvailable)
 
     controls.load()
     enemy.load()
@@ -89,13 +90,11 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Проверяем активацию способности
     if controls.getAbilityTrigger() then
-        if hasAzumSkin and not resurrectionUsed and cube.hp <= 1 then
+        if equippedSkin == "AZUM CUBE" and not resurrectionUsed and cube.hp <= 1 then
             cube.hp = 5
             resurrectionUsed = true
             cube.hit = 0
-            -- Способность использована – скрываем кнопку
             controls.setAbilityAvailable(false)
         end
     end
@@ -175,7 +174,14 @@ function game.draw()
 
     enemy.draw()
 
-    local imgToDraw = hasAzumSkin and azumImg or playerImg
+    -- Выбор текстуры в зависимости от надетого скина
+    local imgToDraw
+    if equippedSkin == "AZUM CUBE" then
+        imgToDraw = azumImg
+    else
+        imgToDraw = playerImg
+    end
+
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
