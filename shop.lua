@@ -2,16 +2,16 @@ local shop = {}
 
 local fontTitle, fontBtn
 local btnBack = { w = 140, h = 55, x = 0, y = 30 }
-local btnMain = { w = 220, h = 75, x = 0, y = 0 }  -- главная кнопка (BUY / EQUIP / UNEQUIP)
-local btnLeft = { w = 60, h = 60, x = 0, y = 0 }   -- стрелка влево
-local btnRight = { w = 60, h = 60, x = 0, y = 0 }  -- стрелка вправо
+local btnMain = { w = 220, h = 75, x = 0, y = 0 }
+local btnLeft = { w = 60, h = 60, x = 0, y = 0 }
+local btnRight = { w = 60, h = 60, x = 0, y = 0 }
 
--- Список доступных скинов (легко расширять)
+-- Список скинов
 local SKINS = {
     { name = "AZUM CUBE", price = 100 },
     { name = "NASTYA CUBE", price = 150 },
 }
-local currentSkinIndex = 1   -- какой скин сейчас выбран в магазине
+local currentSkinIndex = 1
 
 local ownedSkin = "NONE"
 local equippedSkin = "NONE"
@@ -46,8 +46,8 @@ end
 function shop.load(saveData)
     ownedSkin = saveData.ownedSkin or "NONE"
     equippedSkin = saveData.equippedSkin or "NONE"
-    currentSkinIndex = 1   -- сбрасываем на первый
-    resize()
+    currentSkinIndex = 1
+    shop.resize()   -- <-- исправлено
 end
 
 function shop.resize()
@@ -92,7 +92,6 @@ function shop.draw(coins)
     local isOwned = (ownedSkin == skin.name)
     local isEquipped = (equippedSkin == skin.name)
 
-    -- Информация о скине
     local infoY = love.graphics.getHeight()/2 - 60*scale
     drawSpacedText(skin.name, 0, infoY, w, "center", fontBtn, nil, 1)
 
@@ -106,7 +105,7 @@ function shop.draw(coins)
         drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
     end
 
-    -- ========== ГЛАВНАЯ КНОПКА ==========
+    -- Главная кнопка
     local btnText, btnColor
     if not isOwned then
         btnText = "BUY"
@@ -128,7 +127,7 @@ function shop.draw(coins)
     love.graphics.rectangle("line", btnMain.x, btnMain.y, btnMain.w, btnMain.h, 16*scale, 16*scale)
     drawSpacedText(btnText, btnMain.x, btnMain.y + 20*scale, btnMain.w, "center", fontBtn, nil, 1)
 
-    -- ========== СТРЕЛКИ ==========
+    -- Стрелки
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
     love.graphics.rectangle("fill", btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, 10*scale, 10*scale)
     love.graphics.setColor(0, 0, 0, 1)
@@ -143,7 +142,7 @@ function shop.draw(coins)
     love.graphics.rectangle("line", btnRight.x, btnRight.y, btnRight.w, btnRight.h, 10*scale, 10*scale)
     drawSpacedText(">", btnRight.x, btnRight.y + 12*scale, btnRight.w, "center", fontBtn, nil, 1)
 
-    -- ========== КНОПКА BACK ==========
+    -- Back
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -157,7 +156,7 @@ end
 function shop.touchpressed(id, x, y, coins, saveData)
     local changed = false
 
-    -- Кнопка Back
+    -- Back
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
         playButtonSound()
         GameState.current = "lobby"
@@ -169,7 +168,7 @@ function shop.touchpressed(id, x, y, coins, saveData)
         playButtonSound()
         currentSkinIndex = currentSkinIndex - 1
         if currentSkinIndex < 1 then currentSkinIndex = #SKINS end
-        return coins, false  -- ничего не меняем, только переключили
+        return coins, false
     end
 
     -- Стрелка вправо
@@ -188,7 +187,6 @@ function shop.touchpressed(id, x, y, coins, saveData)
         local isEquipped = (saveData.equippedSkin == skin.name)
 
         if not isOwned then
-            -- BUY
             if coins >= skin.price then
                 coins = coins - skin.price
                 saveData.ownedSkin = skin.name
@@ -199,13 +197,11 @@ function shop.touchpressed(id, x, y, coins, saveData)
                 print("Не хватает монет!")
             end
         elseif not isEquipped then
-            -- EQUIP
             saveData.equippedSkin = skin.name
             equippedSkin = skin.name
             changed = true
             print("Надет скин " .. skin.name)
         else
-            -- UNEQUIP
             saveData.equippedSkin = "NONE"
             equippedSkin = "NONE"
             changed = true
@@ -215,5 +211,8 @@ function shop.touchpressed(id, x, y, coins, saveData)
 
     return coins, changed
 end
+
+function shop.touchmoved() end
+function shop.touchreleased() end
 
 return shop
