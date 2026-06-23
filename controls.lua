@@ -15,7 +15,7 @@ local spaceJustPressed = false
 local abilityJustPressed = false
 
 -- ========== ФЛАГ ДОСТУПНОСТИ СПОСОБНОСТИ ==========
-local abilityAvailable = false   -- показывает, рисовать ли кнопку способности
+local abilityAvailable = false
 
 -- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
@@ -116,14 +116,15 @@ end
 function controls.isAiming() return atk.hold or keys.space end
 function controls.getAim() return aimDx, aimDy end
 
--- ========== УСТАНОВКА ДОСТУПНОСТИ СПОСОБНОСТИ ==========
 function controls.setAbilityAvailable(available)
     abilityAvailable = available
 end
 
 -- ========== ОБРАБОТЧИКИ ТАЧ ==========
 function controls.touchpressed(id, x, y)
+    -- Back button (звук при нажатии)
     if x >= back.x and x <= back.x + back.w and y >= back.y and y <= back.y + back.h then
+        playButtonSound()
         GameState.current = "lobby"
         return
     end
@@ -140,7 +141,6 @@ function controls.touchpressed(id, x, y)
         return
     end
 
-    -- Обрабатываем нажатие на кнопку способности, только если она доступна
     if abilityAvailable then
         local abx, aby = x - ability.x, y - ability.y
         if abx * abx + aby * aby <= ability.r * ability.r then
@@ -247,7 +247,7 @@ function controls.draw()
         drawSpacedText("Shot", -atk.r, -14 * scale, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
-        -- ========== КНОПКА СПОСОБНОСТИ (РИСУЕМ ТОЛЬКО ЕСЛИ ДОСТУПНА) ==========
+        -- Кнопка способности
         if abilityAvailable then
             local abPress = ability.press
             local abR = ability.r * (1 - abPress * 0.12)
