@@ -223,4 +223,4 @@ end
 function lobby.touchmoved() end
 function lobby.touchreleased() end
 
-return lobbyг
+return lobby
