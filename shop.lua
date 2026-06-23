@@ -8,8 +8,8 @@ local btnRight = { w = 60, h = 60, x = 0, y = 0 }
 
 -- Список всех доступных скинов
 local SKINS = {
-    { name = "AZUM CUBE", price = 100 },
-    { name = "NASTYA CUBE", price = 150 },
+    { name = "AZUM CUBE", price = 500 },
+    { name = "NASTYA CUBE", price = 350 },
 }
 local currentSkinIndex = 1
 
