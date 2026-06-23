@@ -20,12 +20,8 @@ local abilityAvailable = false
 -- ========== НОРМАЛЬНЫЙ РАСЧЕТ МАСШТАБА ==========
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    -- БЛЯТЬ, ИСПОЛЬЗУЙ МАКСИМАЛЬНЫЙ РАЗМЕР, А НЕ МИНИМАЛЬНЫЙ
-    -- НА ТЕЛЕФОНЕ ЭКРАН ШИРОКИЙ, А ВЫСОТА МАЛЕНЬКАЯ
-    -- ПОЭТОМУ ЮЗАЙ МИН(ШИРИНА/ВЫСОТА) ДЛЯ КВАДРАТНЫХ ЭЛЕМЕНТОВ, НО БАЗУ 600
-    local base = 600
+    local base = 500        -- для ПК теперь 500
     if isMobile then
-        -- НА МОБИЛКЕ БАЗА МЕНЬШЕ, ЧТОБЫ ВСЁ БЫЛО КРУПНЕЕ
         base = 450
     end
     return math.min(w, h) / base
@@ -54,9 +50,9 @@ local function place()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    joy.r = 55 * scale  -- БОЛЬШЕ ЕБАНУТЫЙ ДЖОЙСТИК
+    joy.r = 55 * scale
     joy.sr = 22 * scale
-    atk.r = 60 * scale  -- БОЛЬШЕ КНОПКА
+    atk.r = 60 * scale
     ability.r = 48 * scale
     back.w = 160 * scale
     back.h = 60 * scale
@@ -78,7 +74,7 @@ end
 
 function controls.load()
     local scale = getScale()
-    local fontSize = math.max(18, 28 * scale)  -- БОЛЬШЕ ШРИФТ
+    local fontSize = math.max(18, 28 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
     place()
 end
