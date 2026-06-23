@@ -12,14 +12,11 @@ jobs:
       exe-name: ${{ steps.set-output.outputs.exe-name }}
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: game
+      - uses: actions/checkout@v4      # теперь файлы в корне
 
       - name: Package game.love
         run: |
-          cd game
-          zip -9 -r ../game.love . -x "*.git*" -x ".github/*"
+          zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
 
       - name: Download LÖVE Windows 64-bit
         run: |
@@ -55,15 +52,15 @@ jobs:
 
       - name: Set icon for 64-bit EXE
         run: |
-          if [ -f "game/icon.ico" ]; then
-            wine rcedit-x64.exe dist/CubicBattle/CubicBattle.exe --set-icon game/icon.ico
+          if [ -f "icon.ico" ]; then
+            wine rcedit-x64.exe dist/CubicBattle/CubicBattle.exe --set-icon icon.ico
           fi
         continue-on-error: true
 
       - name: Set icon for 32-bit EXE
         run: |
-          if [ -f "game/icon.ico" ]; then
-            wine rcedit-x64.exe dist/CubicBattle32/CubicBattle32.exe --set-icon game/icon.ico
+          if [ -f "icon.ico" ]; then
+            wine rcedit-x64.exe dist/CubicBattle32/CubicBattle32.exe --set-icon icon.ico
           fi
         continue-on-error: true
 
