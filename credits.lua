@@ -95,6 +95,7 @@ end
 
 function credits.touchpressed(id, x, y)
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
+        playButtonSound()
         GameState.current = "lobby"
     end
 end
