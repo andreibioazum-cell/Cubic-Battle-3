@@ -28,75 +28,64 @@ local function loadMusic()
     end
 end
 
--- ========== СОХРАНЕНИЕ (ПОЛНОСТЬЮ ПЕРЕРАБОТАННОЕ) ==========
-SAVE_DATA = { coins = 0, hasAzumSkin = false }
+-- ========== НОВАЯ СИСТЕМА СОХРАНЕНИЯ (data.txt) ==========
+SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
+local SAVE_FILE = "data.txt"
 
--- Функция сохранения с защитой и отладкой
 function SAVE_SAVE()
-    local str = "return {\n"
-    for k, v in pairs(SAVE_DATA) do
-        local val
-        if type(v) == "string" then
-            val = string.format("%q", v)
-        elseif type(v) == "boolean" then
-            val = v and "true" or "false"
-        else
-            val = tostring(v)
-        end
-        str = str .. "  [" .. tostring(k) .. "] = " .. val .. ",\n"
-    end
-    str = str .. "}"
-
-    print("Попытка сохранить данные: " .. str)
-
+    local content = tostring(SAVE_DATA.coins) .. "\n" ..
+                    SAVE_DATA.ownedSkin .. "\n" ..
+                    SAVE_DATA.equippedSkin
     local success, err = pcall(function()
-        love.filesystem.write("save.lua", str)
+        love.filesystem.write(SAVE_FILE, content)
     end)
     if success then
-        print("Сохранение выполнено успешно. Путь: " .. (love.filesystem.getSaveDirectory() or "неизвестно"))
+        print("Сохранено в data.txt: " .. content)
     else
         print("Ошибка сохранения: " .. tostring(err))
     end
 end
 
--- Функция загрузки с отладкой
 local function loadSave()
-    -- Проверяем, существует ли файл
-    local info = love.filesystem.getInfo("save.lua")
+    local info = love.filesystem.getInfo(SAVE_FILE)
     if not info then
-        print("Файл сохранения не найден, создаём новые данные по умолчанию")
-        SAVE_DATA = { coins = 0, hasAzumSkin = false }
+        print("data.txt не найден, используем значения по умолчанию")
+        SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
         return
     end
 
-    print("Файл сохранения найден, размер: " .. tostring(info.size) .. " байт")
-
-    local chunk, err = love.filesystem.load("save.lua")
-    if not chunk then
-        print("Ошибка загрузки чанка: " .. tostring(err))
-        SAVE_DATA = { coins = 0, hasAzumSkin = false }
+    local data, err = love.filesystem.read(SAVE_FILE)
+    if not data then
+        print("Ошибка чтения data.txt: " .. tostring(err))
+        SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
         return
     end
 
-    local ok, data = pcall(chunk)
-    if not ok then
-        print("Ошибка выполнения чанка: " .. tostring(data))
-        SAVE_DATA = { coins = 0, hasAzumSkin = false }
+    local lines = {}
+    for line in data:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
+    if #lines < 3 then
+        print("data.txt имеет меньше 3 строк, используем значения по умолчанию")
+        SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
         return
     end
 
-    if type(data) ~= "table" then
-        print("Загруженные данные не являются таблицей, используем значения по умолчанию")
-        SAVE_DATA = { coins = 0, hasAzumSkin = false }
-        return
+    local coins = tonumber(lines[1])
+    local ownedSkin = lines[2] or "NONE"
+    local equippedSkin = lines[3] or "NONE"
+
+    if coins == nil then
+        coins = 0
     end
 
-    -- Убедимся, что есть поля coins и hasAzumSkin
-    SAVE_DATA = data
-    if SAVE_DATA.coins == nil then SAVE_DATA.coins = 0 end
-    if SAVE_DATA.hasAzumSkin == nil then SAVE_DATA.hasAzumSkin = false end
-
-    print("Сохранение загружено: coins = " .. tostring(SAVE_DATA.coins) .. ", hasAzumSkin = " .. tostring(SAVE_DATA.hasAzumSkin))
+    SAVE_DATA = {
+        coins = coins,
+        ownedSkin = ownedSkin,
+        equippedSkin = equippedSkin
+    }
+    print("Загружено из data.txt: coins=" .. coins .. ", ownedSkin=" .. ownedSkin .. ", equippedSkin=" .. equippedSkin)
 end
 
 -- ========== LOVE CALLBACKS ==========
@@ -115,7 +104,7 @@ function love.update(dt)
         if GameState.current == "lobby" then
             if lobby.load then lobby.load() end
         elseif GameState.current == "game" then
-            if game.load then game.load(SAVE_DATA.hasAzumSkin) end
+            if game.load then game.load() end   -- без параметров, сама прочитает SAVE_DATA
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -172,11 +161,7 @@ function love.keypressed(key)
     end
 
     if key == "escape" then
-        if GameState.current == "credits" then
-            GameState.current = "lobby"
-        else
-            GameState.current = "lobby"
-        end
+        GameState.current = "lobby"
     end
 
     if key == "m" and bgMusic then
@@ -201,13 +186,13 @@ local function dispatch(fn, id, x, y)
     elseif s == "game" and game[fn] then game[fn](id, x, y)
     elseif s == "shop" and shop[fn] then
         if fn == "touchpressed" then
-            local newCoins, bought = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
-            if newCoins ~= SAVE_DATA.coins then
-                print("Монеты изменились: " .. tostring(SAVE_DATA.coins) .. " -> " .. tostring(newCoins))
-                SAVE_DATA.coins = newCoins
+            local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
+            if changed then
+                -- shop мог изменить SAVE_DATA напрямую, но для надёжности сохраняем
                 SAVE_SAVE()
             end
-            if bought then
+            if newCoins ~= SAVE_DATA.coins then
+                SAVE_DATA.coins = newCoins
                 SAVE_SAVE()
             end
         else
