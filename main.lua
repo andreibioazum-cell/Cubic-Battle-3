@@ -14,9 +14,8 @@ local SHOT_DELAY = 0.15
 
 -- ========== ФОНОВАЯ МУЗЫКА ==========
 local bgMusic = nil
-musicOn = true  -- глобальная переменная
+musicOn = true
 
--- Глобальная функция для переключения музыки (доступна из lobby)
 function toggleMusic()
     if bgMusic then
         if bgMusic:isPlaying() then
@@ -43,6 +42,17 @@ local function loadMusic()
     else
         print("Не удалось загрузить музыку: файл не найден или формат не поддерживается")
         musicOn = false
+    end
+end
+
+-- ========== ЗВУК КНОПОК ==========
+function playButtonSound()
+    local sound, err = love.audio.newSource("cartoon-button-click-sound.mp3", "static")
+    if sound then
+        sound:setVolume(0.5)
+        sound:play()
+    else
+        print("Не удалось загрузить звук кнопки: " .. tostring(err))
     end
 end
 
@@ -180,10 +190,12 @@ function love.keypressed(key)
 
     if key == "escape" then
         GameState.current = "lobby"
+        playButtonSound() -- звук при возврате в лобби
     end
 
     if key == "m" then
-        toggleMusic()  -- используем ту же функцию, что и кнопка
+        toggleMusic()
+        playButtonSound()
     end
 end
 
