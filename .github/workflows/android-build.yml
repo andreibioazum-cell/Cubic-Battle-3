@@ -48,10 +48,9 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
-      # ---------- УСТАНАВЛИВАЕМ ПАКЕТ com.CB3 ----------
+      # ---------- МЕНЯЕМ ПАКЕТ ----------
       - name: Set package name to com.CB3
         run: |
-          # Меняем applicationId в build.gradle
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
 
       # ---------- КОПИРУЕМ ИКОНКУ ----------
@@ -63,13 +62,11 @@ jobs:
             mkdir -p love-android/app/src/main/res/mipmap-xhdpi
             mkdir -p love-android/app/src/main/res/mipmap-xxhdpi
             mkdir -p love-android/app/src/main/res/mipmap-xxxhdpi
-
             cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher.png
             cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher.png
             cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
             cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
             cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-
             cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
             cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
             cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
@@ -77,12 +74,33 @@ jobs:
             cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
           fi
 
-      # ---------- ВОССТАНАВЛИВАЕМ KEYSTORE ИЗ СЕКРЕТА ----------
+      # ---------- ВОССТАНАВЛИВАЕМ KEYSTORE ----------
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
 
-      # ---------- СОБИРАЕМ RELEASE APK ----------
+      # ---------- КОРРЕКТНО ВСТАВЛЯЕМ ПОДПИСЬ В build.gradle ----------
+      - name: Inject signing config into build.gradle
+        run: |
+          cd love-android/app
+          # Вставляем signingConfigs перед последней закрывающей скобкой android
+          sed -i '/^android {/,/^}/ {
+            /^}/ i\
+        signingConfigs {\
+            release {\
+                storeFile file("../../keystore.jks")\
+                storePassword "'${{ secrets.KEYSTORE_PASSWORD }}'"\
+                keyAlias "'${{ secrets.KEY_ALIAS }}'"\
+                keyPassword "'${{ secrets.KEY_PASSWORD }}'"\
+            }\
+        }\
+        buildTypes {\
+            release {\
+                signingConfig signingConfigs.release\
+            }\
+        }
+          }' build.gradle
+
       - uses: actions/cache@v4
         with:
           path: |
@@ -120,28 +138,6 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      # ---------- НАСТРОЙКА ПОДПИСИ В GRADLE ----------
-      - name: Configure signing
-        run: |
-          cat >> love-android/app/build.gradle << 'EOF'
-          android {
-              signingConfigs {
-                  release {
-                      storeFile file("../../keystore.jks")
-                      storePassword "${{ secrets.KEYSTORE_PASSWORD }}"
-                      keyAlias "${{ secrets.KEY_ALIAS }}"
-                      keyPassword "${{ secrets.KEY_PASSWORD }}"
-                  }
-              }
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                  }
-              }
-          }
-          EOF
-
-      # ---------- СБОРКА RELEASE APK ----------
       - name: Build Release APK
         working-directory: love-android
         run: ./gradlew assembleEmbedNoRecordRelease --no-daemon --parallel --console=plain
