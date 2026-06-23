@@ -2,10 +2,11 @@ local shop = {}
 
 local fontTitle, fontBtn
 local btnBack = { w = 140, h = 55, x = 0, y = 30 }
-local btnAction = { w = 220, h = 75, x = 0, y = 0 }  -- общая кнопка для BUY/EQUIP/UNEQUIP
+local btnMain = { w = 220, h = 75, x = 0, y = 0 }  -- главная кнопка (BUY / EQUIP / UNEQUIP)
 local skinPrice = 100
 local skinName = "AZUM CUBE"
 
+-- текущие состояния (копируются из saveData)
 local ownedSkin = "NONE"
 local equippedSkin = "NONE"
 
@@ -35,12 +36,12 @@ function shop.load(saveData)
 
     btnBack.w = 140 * scale
     btnBack.h = 55 * scale
-    btnAction.w = 220 * scale
-    btnAction.h = 75 * scale
+    btnMain.w = 220 * scale
+    btnMain.h = 75 * scale
 
     btnBack.x = (w - btnBack.w) / 2
-    btnAction.x = (w - btnAction.w) / 2
-    btnAction.y = h/2 + 80 * scale
+    btnMain.x = (w - btnMain.w) / 2
+    btnMain.y = h/2 + 80 * scale
 
     local titleSize = math.max(32, 48 * scale)
     local btnSize   = math.max(20, 28 * scale)
@@ -54,12 +55,12 @@ function shop.resize()
 
     btnBack.w = 140 * scale
     btnBack.h = 55 * scale
-    btnAction.w = 220 * scale
-    btnAction.h = 75 * scale
+    btnMain.w = 220 * scale
+    btnMain.h = 75 * scale
 
     btnBack.x = (w - btnBack.w) / 2
-    btnAction.x = (w - btnAction.w) / 2
-    btnAction.y = h/2 + 80 * scale
+    btnMain.x = (w - btnMain.w) / 2
+    btnMain.y = h/2 + 80 * scale
 
     local titleSize = math.max(32, 48 * scale)
     local btnSize   = math.max(20, 28 * scale)
@@ -93,30 +94,31 @@ function shop.draw(coins)
         drawSpacedText("PRICE: " .. skinPrice .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
     end
 
-    -- Определяем текст и цвет кнопки
+    -- ========== ГЛАВНАЯ КНОПКА (по центру) ==========
+    -- Определяем текст и цвет в зависимости от состояния
     local btnText, btnColor
     if not isOwned then
         btnText = "BUY"
         btnColor = {0.35, 0.15, 0.75}  -- фиолетовый
-    elseif isOwned and not isEquipped then
+    elseif not isEquipped then
         btnText = "EQUIP"
-        btnColor = {0.2, 0.7, 0.3}  -- зелёный
-    else -- owned and equipped
+        btnColor = {0.35, 0.15, 0.75}  -- фиолетовый
+    else
         btnText = "UNEQUIP"
-        btnColor = {0.8, 0.2, 0.2}  -- красный
+        btnColor = {0.8, 0.2, 0.2}     -- красный
     end
 
     -- Рисуем кнопку
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btnAction.x + 5*scale, btnAction.y + 6*scale, btnAction.w, btnAction.h, 16*scale, 16*scale)
+    love.graphics.rectangle("fill", btnMain.x + 5*scale, btnMain.y + 6*scale, btnMain.w, btnMain.h, 16*scale, 16*scale)
     love.graphics.setColor(btnColor[1], btnColor[2], btnColor[3], 1)
-    love.graphics.rectangle("fill", btnAction.x, btnAction.y, btnAction.w, btnAction.h, 16*scale, 16*scale)
+    love.graphics.rectangle("fill", btnMain.x, btnMain.y, btnMain.w, btnMain.h, 16*scale, 16*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnAction.x, btnAction.y, btnAction.w, btnAction.h, 16*scale, 16*scale)
-    drawSpacedText(btnText, btnAction.x, btnAction.y + 20*scale, btnAction.w, "center", fontBtn, nil, 1)
+    love.graphics.rectangle("line", btnMain.x, btnMain.y, btnMain.w, btnMain.h, 16*scale, 16*scale)
+    drawSpacedText(btnText, btnMain.x, btnMain.y + 20*scale, btnMain.w, "center", fontBtn, nil, 1)
 
-    -- Кнопка Back
+    -- ========== КНОПКА BACK (всегда) ==========
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -136,28 +138,33 @@ function shop.touchpressed(id, x, y, coins, saveData)
         return coins, changed
     end
 
-    local isOwned = (saveData.ownedSkin == skinName)
-    local isEquipped = (saveData.equippedSkin == skinName)
-
     -- Проверяем нажатие на главную кнопку
-    if x >= btnAction.x and x <= btnAction.x + btnAction.w and y >= btnAction.y and y <= btnAction.y + btnAction.h then
+    if x >= btnMain.x and x <= btnMain.x + btnMain.w and y >= btnMain.y and y <= btnMain.y + btnMain.h then
+        local isOwned = (saveData.ownedSkin == skinName)
+        local isEquipped = (saveData.equippedSkin == skinName)
+
         if not isOwned then
-            -- Попытка купить
+            -- Кнопка BUY
             if coins >= skinPrice then
                 coins = coins - skinPrice
                 saveData.ownedSkin = skinName
-                -- автоматически не надеваем
+                ownedSkin = skinName
+                -- Автоматически надеваем после покупки (опционально)
+                -- saveData.equippedSkin = skinName
+                -- equippedSkin = skinName
                 changed = true
                 print("Куплен скин " .. skinName)
             end
-        elseif isOwned and not isEquipped then
-            -- Экипировать
+        elseif not isEquipped then
+            -- Кнопка EQUIP
             saveData.equippedSkin = skinName
+            equippedSkin = skinName
             changed = true
             print("Надет скин " .. skinName)
-        else -- owned and equipped
-            -- Снять
+        else
+            -- Кнопка UNEQUIP
             saveData.equippedSkin = "NONE"
+            equippedSkin = "NONE"
             changed = true
             print("Снят скин " .. skinName)
         end
