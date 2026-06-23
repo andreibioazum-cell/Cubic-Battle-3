@@ -13,12 +13,12 @@ local btnMusic = { x = 0, y = 0, w = 0, h = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
--- ========== НОРМАЛЬНЫЙ МАСШТАБ ==========
+-- ========== МАСШТАБ (ПК и телефон – примерно одинаково) ==========
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    local base = 600
+    local base = 500        -- для ПК теперь 500 (как на телефонах)
     if isMobile then
-        base = 450
+        base = 450          -- мобильные чуть крупнее
     end
     return math.min(w, h) / base
 end
