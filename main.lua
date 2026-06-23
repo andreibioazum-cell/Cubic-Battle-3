@@ -14,6 +14,22 @@ local SHOT_DELAY = 0.15
 
 -- ========== ФОНОВАЯ МУЗЫКА ==========
 local bgMusic = nil
+musicOn = true  -- глобальная переменная
+
+-- Глобальная функция для переключения музыки (доступна из lobby)
+function toggleMusic()
+    if bgMusic then
+        if bgMusic:isPlaying() then
+            bgMusic:pause()
+            musicOn = false
+            print("Музыка выключена")
+        else
+            bgMusic:play()
+            musicOn = true
+            print("Музыка включена")
+        end
+    end
+end
 
 local function loadMusic()
     local ok, source = pcall(love.audio.newSource, "Kevin_MacLeod_-_Sneaky_Snitch_74768437.mp3", "stream")
@@ -22,9 +38,11 @@ local function loadMusic()
         bgMusic:setLooping(true)
         bgMusic:setVolume(0.5)
         bgMusic:play()
+        musicOn = true
         print("Фоновая музыка запущена")
     else
         print("Не удалось загрузить музыку: файл не найден или формат не поддерживается")
+        musicOn = false
     end
 end
 
@@ -104,7 +122,7 @@ function love.update(dt)
         if GameState.current == "lobby" then
             if lobby.load then lobby.load() end
         elseif GameState.current == "game" then
-            if game.load then game.load() end   -- без параметров, сама прочитает SAVE_DATA
+            if game.load then game.load() end
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -164,12 +182,8 @@ function love.keypressed(key)
         GameState.current = "lobby"
     end
 
-    if key == "m" and bgMusic then
-        if bgMusic:isPlaying() then
-            bgMusic:pause()
-        else
-            bgMusic:play()
-        end
+    if key == "m" then
+        toggleMusic()  -- используем ту же функцию, что и кнопка
     end
 end
 
@@ -188,7 +202,6 @@ local function dispatch(fn, id, x, y)
         if fn == "touchpressed" then
             local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
             if changed then
-                -- shop мог изменить SAVE_DATA напрямую, но для надёжности сохраняем
                 SAVE_SAVE()
             end
             if newCoins ~= SAVE_DATA.coins then
