@@ -53,25 +53,47 @@ jobs:
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
 
-      # ---------- КОПИРУЕМ ИКОНКУ ----------
+      # ---------- УСТАНАВЛИВАЕМ И КОНВЕРТИРУЕМ ИКОНКУ ----------
+      - name: Install ImageMagick
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
       - name: Set Android icon
         run: |
+          # Ищем файл иконки (сначала icon.png, потом ic_launcher.png)
+          ICON_FILE=""
           if [ -f "icon.png" ]; then
+            ICON_FILE="icon.png"
+          elif [ -f "ic_launcher.png" ]; then
+            ICON_FILE="ic_launcher.png"
+          fi
+
+          if [ -n "$ICON_FILE" ]; then
+            # Конвертируем в безопасный PNG (RGB, без метаданных)
+            convert "$ICON_FILE" -strip -define png:color-type=6 -background none -flatten icon_clean.png
+
+            # Создаём папки для всех плотностей
             mkdir -p love-android/app/src/main/res/mipmap-mdpi
             mkdir -p love-android/app/src/main/res/mipmap-hdpi
             mkdir -p love-android/app/src/main/res/mipmap-xhdpi
             mkdir -p love-android/app/src/main/res/mipmap-xxhdpi
             mkdir -p love-android/app/src/main/res/mipmap-xxxhdpi
-            cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-            cp icon.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
-            cp icon.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+
+            # Копируем во все папки (и обычную, и round)
+            cp icon_clean.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+            cp icon_clean.png love-android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+            cp icon_clean.png love-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+
+            echo "✅ Иконка обработана и скопирована"
+          else
+            echo "⚠️ Иконка не найдена (ищем icon.png или ic_launcher.png), пропускаем"
           fi
 
       # ---------- ВОССТАНАВЛИВАЕМ KEYSTORE ----------
@@ -79,7 +101,7 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
 
-      # ---------- ПОДКЛЮЧАЕМ ПОДПИСЬ (простой способ) ----------
+      # ---------- ПОДКЛЮЧАЕМ ПОДПИСЬ ----------
       - name: Configure signing
         run: |
           cd love-android/app
