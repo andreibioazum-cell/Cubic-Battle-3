@@ -3,27 +3,22 @@ local lobby = {}
 local btns = {
     play = { w = 220, h = 75, x = 0, y = 0 },
     shop = { w = 220, h = 75, x = 0, y = 0 },
-    credits = { w = 160, h = 55, x = 0, y = 0 }
+    settings = { w = 220, h = 75, x = 0, y = 0 },
+    credits = { w = 220, h = 75, x = 0, y = 0 }
 }
 local fontTitle, fontSub, fontBtn
 local spaceCanvas
 local stars = {}
 
-local btnMusic = { x = 0, y = 0, w = 0, h = 0 }
-
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
--- ========== МАСШТАБ (ПК и телефон – примерно одинаково) ==========
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    local base = 1000        -- для ПК теперь 500 (как на телефонах)
-    if isMobile then
-        base = 450          -- мобильные чуть крупнее
-    end
+    local base = 1000
+    if isMobile then base = 450 end
     return math.min(w, h) / base
 end
 
--- ========== ГРАДИЕНТНЫЙ МЕШ ==========
 local function mkGrad(w, h)
     return love.graphics.newMesh({
         {0, 0, 0, 0, 0.02, 0.00, 0.10, 1},
@@ -53,32 +48,29 @@ local function generateSpace(w, h)
     love.graphics.setCanvas()
 end
 
--- ========== РАЗМЕЩЕНИЕ КНОПОК ==========
 local function place()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
+    local gap = 20 * scale
+    local btnW = 220 * scale
+    local btnH = 75 * scale
 
-    btns.play.w = 240 * scale
-    btns.play.h = 80 * scale
-    btns.shop.w = 240 * scale
-    btns.shop.h = 80 * scale
-    btns.credits.w = 180 * scale
-    btns.credits.h = 60 * scale
+    for _, b in pairs(btns) do
+        b.w = btnW
+        b.h = btnH
+    end
 
-    btns.play.x = w/2 - btns.play.w - 25 * scale
+    btns.play.x = w/2 - btnW - gap/2
     btns.play.y = h/2 + 80 * scale
-    btns.shop.x = w/2 + 25 * scale
+    btns.shop.x = w/2 + gap/2
     btns.shop.y = h/2 + 80 * scale
-    btns.credits.x = w/2 - btns.credits.w/2
-    btns.credits.y = h/2 + 180 * scale
 
-    btnMusic.w = 160 * scale
-    btnMusic.h = 55 * scale
-    btnMusic.x = 20 * scale
-    btnMusic.y = 20 * scale
+    btns.settings.x = w/2 - btnW - gap/2
+    btns.settings.y = h/2 + 80 * scale + btnH + gap
+    btns.credits.x = w/2 + gap/2
+    btns.credits.y = h/2 + 80 * scale + btnH + gap
 end
 
--- ========== ОТРИСОВКА ТЕКСТА ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -117,7 +109,6 @@ function lobby.resize(w, h)
     generateSpace(w, h)
     generateStars(w, h)
     place()
-
     local scale = getScale()
     local titleSize = math.max(36, 72 * scale)
     local subSize   = math.max(18, 26 * scale)
@@ -159,61 +150,30 @@ function lobby.draw()
     drawSpacedText("Cubic Battle", 0, love.graphics.getHeight()/2 - 180*scale, w, "center", fontTitle)
     drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 80*scale, w, "center", fontSub)
 
-    -- Кнопка Play
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btns.play.x + 5*scale, btns.play.y + 6*scale, btns.play.w, btns.play.h, 16*scale, 16*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.8 * scale)
-    love.graphics.rectangle("line", btns.play.x, btns.play.y, btns.play.w, btns.play.h, 16*scale, 16*scale)
-    drawSpacedText("Play", btns.play.x, btns.play.y + 22*scale, btns.play.w, "center", fontBtn)
-
-    -- Кнопка Shop
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btns.shop.x + 5*scale, btns.shop.y + 6*scale, btns.shop.w, btns.shop.h, 16*scale, 16*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.8 * scale)
-    love.graphics.rectangle("line", btns.shop.x, btns.shop.y, btns.shop.w, btns.shop.h, 16*scale, 16*scale)
-    drawSpacedText("Shop", btns.shop.x, btns.shop.y + 22*scale, btns.shop.w, "center", fontBtn)
-
-    -- Кнопка Credits
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btns.credits.x + 5*scale, btns.credits.y + 6*scale, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.8 * scale)
-    love.graphics.rectangle("line", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
-    drawSpacedText("Credits", btns.credits.x, btns.credits.y + 16*scale, btns.credits.w, "center", fontBtn)
-
-    -- Кнопка музыки
-    local musicText = musicOn and "Music: ON" or "Music: OFF"
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btnMusic.x + 4*scale, btnMusic.y + 5*scale, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(2.8 * scale)
-    love.graphics.rectangle("line", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
-    drawSpacedText(musicText, btnMusic.x, btnMusic.y + 14*scale, btnMusic.w, "center", fontBtn)
+    -- Отрисовка всех кнопок
+    for name, btn in pairs(btns) do
+        local label = name:gsub("^%l", string.upper)  -- Первая заглавная
+        love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+        love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
+        love.graphics.setColor(0.35, 0.15, 0.75, 1)
+        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(3.8 * scale)
+        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        drawSpacedText(label, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn)
+    end
 end
 
 function lobby.touchpressed(id, x, y)
-    if x >= btnMusic.x and x <= btnMusic.x + btnMusic.w and y >= btnMusic.y and y <= btnMusic.y + btnMusic.h then
-        if toggleMusic then toggleMusic() end
-        playButtonSound()
-        return
-    end
-
     if x >= btns.play.x and x <= btns.play.x + btns.play.w and y >= btns.play.y and y <= btns.play.y + btns.play.h then
         playButtonSound()
         GameState.current = "game"
     elseif x >= btns.shop.x and x <= btns.shop.x + btns.shop.w and y >= btns.shop.y and y <= btns.shop.y + btns.shop.h then
         playButtonSound()
         GameState.current = "shop"
+    elseif x >= btns.settings.x and x <= btns.settings.x + btns.settings.w and y >= btns.settings.y and y <= btns.settings.y + btns.settings.h then
+        playButtonSound()
+        GameState.current = "settings"
     elseif x >= btns.credits.x and x <= btns.credits.x + btns.credits.w and y >= btns.credits.y and y <= btns.credits.y + btns.credits.h then
         playButtonSound()
         GameState.current = "credits"
