@@ -9,7 +9,7 @@ local fontTitle, fontSub, fontBtn
 local spaceCanvas
 local stars = {}
 
--- Кнопка музыки (будет в левом верхнем углу)
+-- Кнопка музыки
 local btnMusic = { x = 0, y = 0, w = 0, h = 0 }
 
 -- ========== ГРАДИЕНТНЫЙ МЕШ ==========
@@ -42,7 +42,7 @@ local function generateSpace(w, h)
     love.graphics.setCanvas()
 end
 
--- ========== РАЗМЕЩЕНИЕ КНОПОК (АДАПТИВНО) ==========
+-- ========== РАЗМЕЩЕНИЕ КНОПОК ==========
 local function place()
     local w, h = love.graphics.getDimensions()
     local scale = math.min(w, h) / 800
@@ -61,16 +61,14 @@ local function place()
     btns.credits.x = w/2 - btns.credits.w/2
     btns.credits.y = h/2 + 190 * scale
 
-    -- Кнопка музыки в левом верхнем углу
-    local musicW = 150 * scale
-    local musicH = 50 * scale
-    btnMusic.w = musicW
-    btnMusic.h = musicH
+    -- Кнопка музыки
+    btnMusic.w = 150 * scale
+    btnMusic.h = 50 * scale
     btnMusic.x = 20 * scale
     btnMusic.y = 20 * scale
 end
 
--- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
+-- ========== ОТРИСОВКА ТЕКСТА ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -181,7 +179,7 @@ function lobby.draw()
     love.graphics.rectangle("line", btns.credits.x, btns.credits.y, btns.credits.w, btns.credits.h, 14*scale, 14*scale)
     drawSpacedText("Credits", btns.credits.x, btns.credits.y + 14*scale, btns.credits.w, "center", fontBtn)
 
-    -- ========== КНОПКА МУЗЫКИ (левый верхний угол) ==========
+    -- Кнопка музыки
     local musicText = musicOn and "Music: ON" or "Music: OFF"
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnMusic.x + 4*scale, btnMusic.y + 5*scale, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
@@ -190,23 +188,25 @@ function lobby.draw()
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(2.5 * scale)
     love.graphics.rectangle("line", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 10*scale, 10*scale)
-    drawSpacedText(musicText, btnMusic.x, btnMusic.y + 12*scale, btnMusic.w, "center", fontBtn, nil, 1)
+    drawSpacedText(musicText, btnMusic.x, btnMusic.y + 12*scale, btnMusic.w, "center", fontBtn)
 end
 
 function lobby.touchpressed(id, x, y)
-    -- Проверяем кнопку музыки (она выше всех, поэтому проверяем первой)
+    -- Кнопка музыки
     if x >= btnMusic.x and x <= btnMusic.x + btnMusic.w and y >= btnMusic.y and y <= btnMusic.y + btnMusic.h then
-        if toggleMusic then
-            toggleMusic()
-        end
+        if toggleMusic then toggleMusic() end
+        playButtonSound()
         return
     end
 
     if x >= btns.play.x and x <= btns.play.x + btns.play.w and y >= btns.play.y and y <= btns.play.y + btns.play.h then
+        playButtonSound()
         GameState.current = "game"
     elseif x >= btns.shop.x and x <= btns.shop.x + btns.shop.w and y >= btns.shop.y and y <= btns.shop.y + btns.shop.h then
+        playButtonSound()
         GameState.current = "shop"
     elseif x >= btns.credits.x and x <= btns.credits.x + btns.credits.w and y >= btns.credits.y and y <= btns.credits.y + btns.credits.h then
+        playButtonSound()
         GameState.current = "credits"
     end
 end
