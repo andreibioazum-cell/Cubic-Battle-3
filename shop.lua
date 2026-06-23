@@ -9,6 +9,18 @@ local skinName = "AZUM CUBE"
 local ownedSkin = "NONE"
 local equippedSkin = "NONE"
 
+local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+
+-- ========== МАСШТАБ (теперь тоже 500 для ПК, 450 для мобильных) ==========
+local function getScale()
+    local w, h = love.graphics.getDimensions()
+    local base = 500        -- теперь как везде
+    if isMobile then
+        base = 450
+    end
+    return math.min(w, h) / base
+end
+
 -- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
@@ -31,7 +43,7 @@ function shop.load(saveData)
     ownedSkin = saveData.ownedSkin or "NONE"
     equippedSkin = saveData.equippedSkin or "NONE"
     local w, h = love.graphics.getDimensions()
-    local scale = math.min(w, h) / 800
+    local scale = getScale()
 
     btnBack.w = 140 * scale
     btnBack.h = 55 * scale
@@ -50,7 +62,7 @@ end
 
 function shop.resize()
     local w, h = love.graphics.getDimensions()
-    local scale = math.min(w, h) / 800
+    local scale = getScale()
 
     btnBack.w = 140 * scale
     btnBack.h = 55 * scale
@@ -72,7 +84,7 @@ function shop.draw(coins)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
     local w = love.graphics.getWidth()
-    local scale = math.min(w, love.graphics.getHeight()) / 800
+    local scale = getScale()
 
     drawSpacedText("SHOP", 0, 100*scale, w, "center", fontTitle, nil, 1)
     drawSpacedText("COINS: " .. coins, 0, 170*scale, w, "center", fontBtn, nil, 1)
