@@ -6,15 +6,17 @@ local btnMain = { w = 220, h = 75, x = 0, y = 0 }
 local btnLeft = { w = 60, h = 60, x = 0, y = 0 }
 local btnRight = { w = 60, h = 60, x = 0, y = 0 }
 
--- Список скинов
+-- Список всех доступных скинов
 local SKINS = {
     { name = "AZUM CUBE", price = 100 },
     { name = "NASTYA CUBE", price = 150 },
 }
 local currentSkinIndex = 1
 
-local ownedSkin = "NONE"
+-- Вместо ownedSkin теперь используем ownedSkins (таблица)
+local ownedSkins = {}     -- список названий купленных скинов
 local equippedSkin = "NONE"
+
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
 -- ========== МАСШТАБ ==========
@@ -44,10 +46,21 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
 end
 
 function shop.load(saveData)
-    ownedSkin = saveData.ownedSkin or "NONE"
+    -- Загружаем список купленных скинов (если есть)
+    ownedSkins = {}
+    if saveData.ownedSkins then
+        for _, name in ipairs(saveData.ownedSkins) do
+            table.insert(ownedSkins, name)
+        end
+    else
+        -- Совместимость со старым сохранением: если была строка ownedSkin, конвертируем в список
+        if saveData.ownedSkin and saveData.ownedSkin ~= "NONE" then
+            table.insert(ownedSkins, saveData.ownedSkin)
+        end
+    end
     equippedSkin = saveData.equippedSkin or "NONE"
     currentSkinIndex = 1
-    shop.resize()   -- <-- исправлено
+    shop.resize()
 end
 
 function shop.resize()
@@ -89,7 +102,13 @@ function shop.draw(coins)
     drawSpacedText("COINS: " .. coins, 0, 170*scale, w, "center", fontBtn, nil, 1)
 
     local skin = SKINS[currentSkinIndex]
-    local isOwned = (ownedSkin == skin.name)
+    local isOwned = false
+    for _, name in ipairs(ownedSkins) do
+        if name == skin.name then
+            isOwned = true
+            break
+        end
+    end
     local isEquipped = (equippedSkin == skin.name)
 
     local infoY = love.graphics.getHeight()/2 - 60*scale
@@ -97,9 +116,9 @@ function shop.draw(coins)
 
     if isOwned then
         if isEquipped then
-            drawSpacedText("OWNED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+            drawSpacedText("✅ EQUIPPED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
         else
-            drawSpacedText("EQUIPPED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+            drawSpacedText("OWNED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
         end
     else
         drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
@@ -183,31 +202,44 @@ function shop.touchpressed(id, x, y, coins, saveData)
     if x >= btnMain.x and x <= btnMain.x + btnMain.w and y >= btnMain.y and y <= btnMain.y + btnMain.h then
         playButtonSound()
         local skin = SKINS[currentSkinIndex]
-        local isOwned = (saveData.ownedSkin == skin.name)
-        local isEquipped = (saveData.equippedSkin == skin.name)
+        local isOwned = false
+        for _, name in ipairs(ownedSkins) do
+            if name == skin.name then
+                isOwned = true
+                break
+            end
+        end
+        local isEquipped = (equippedSkin == skin.name)
 
         if not isOwned then
+            -- Покупка
             if coins >= skin.price then
                 coins = coins - skin.price
-                saveData.ownedSkin = skin.name
-                ownedSkin = skin.name
+                table.insert(ownedSkins, skin.name)
                 changed = true
                 print("Куплен скин " .. skin.name)
             else
                 print("Не хватает монет!")
             end
         elseif not isEquipped then
-            saveData.equippedSkin = skin.name
+            -- Экипировка
             equippedSkin = skin.name
             changed = true
             print("Надет скин " .. skin.name)
         else
-            saveData.equippedSkin = "NONE"
+            -- Снятие
             equippedSkin = "NONE"
             changed = true
             print("Снят скин " .. skin.name)
         end
     end
+
+    -- Обновляем saveData для сохранения
+    saveData.ownedSkins = {}
+    for _, name in ipairs(ownedSkins) do
+        table.insert(saveData.ownedSkins, name)
+    end
+    saveData.equippedSkin = equippedSkin
 
     return coins, changed
 end
