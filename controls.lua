@@ -22,7 +22,7 @@ local function getScale()
     local w, h = love.graphics.getDimensions()
     local base = 1000        -- для ПК теперь 500
     if isMobile then
-        base = 450
+        base = 600
     end
     return math.min(w, h) / base
 end
