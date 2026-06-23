@@ -1,4 +1,4 @@
-name: Build_Cubic_Battle_Android_Release
+name: Build_Cubic_Battle_Android_Release_Unsigned
 
 on:
   push:
@@ -53,31 +53,8 @@ jobs:
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
 
-      # Декодируем keystore из секрета
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-
-      # Настраиваем подпись релизной сборки
-      - name: Configure signing
-        run: |
-          cd love-android/app
-          cat > signing.gradle << 'EOF'
-          android.signingConfigs {
-              release {
-                  storeFile file("../../keystore.jks")
-                  storePassword "${{ secrets.KEYSTORE_PASSWORD }}"
-                  keyAlias "${{ secrets.KEY_ALIAS }}"
-                  keyPassword "${{ secrets.KEY_PASSWORD }}"
-              }
-          }
-          android.buildTypes {
-              release {
-                  signingConfig android.signingConfigs.release
-              }
-          }
-          EOF
-          echo "apply from: 'signing.gradle'" >> build.gradle
+      # Убираем иконку (оставляем стандартную)
+      # Никаких шагов с иконкой нет
 
       - uses: actions/cache@v4
         with:
@@ -116,7 +93,8 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      - name: Build Release APK
+      # Собираем Release (без подписи, но это релизный билд)
+      - name: Build Release APK (unsigned)
         working-directory: love-android
         run: ./gradlew assembleEmbedNoRecordRelease --no-daemon --parallel --console=plain
 
