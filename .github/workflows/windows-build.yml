@@ -16,11 +16,11 @@ jobs:
         with:
           path: game
 
-      - name: Package game.love (PowerShell)
+      - name: Package game.love
         run: |
-          $source = Join-Path $env:GITHUB_WORKSPACE "game"
-          $dest = Join-Path $env:GITHUB_WORKSPACE "game.love"
-          Compress-Archive -Path "$source\*" -DestinationPath $dest -CompressionLevel Optimal -Force
+          $gameDir = Join-Path $env:GITHUB_WORKSPACE "game"
+          $loveFile = Join-Path $env:GITHUB_WORKSPACE "game.love"
+          Compress-Archive -Path "$gameDir\*" -DestinationPath $loveFile -CompressionLevel Optimal -Force
         shell: pwsh
 
       - name: Download LÖVE 64-bit
@@ -37,16 +37,15 @@ jobs:
 
       - name: Create Portable EXE (64-bit)
         run: |
-          New-Item -ItemType Directory -Force -Path dist/CubicBattle
-          Copy-Item -Path love-windows/love-11.5-win64/* -Destination dist/CubicBattle/ -Recurse
-          # Конкатенация: copy love.exe /b + game.love /b CubicBattle.exe
+          New-Item -ItemType Directory -Force -Path dist\CubicBattle
+          Copy-Item -Path love-windows\love-11.5-win64\* -Destination dist\CubicBattle\ -Recurse
           cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
         shell: pwsh
 
       - name: Create Portable EXE (32-bit)
         run: |
-          New-Item -ItemType Directory -Force -Path dist/CubicBattle32
-          Copy-Item -Path love-windows32/love-11.5-win32/* -Destination dist/CubicBattle32/ -Recurse
+          New-Item -ItemType Directory -Force -Path dist\CubicBattle32
+          Copy-Item -Path love-windows32\love-11.5-win32\* -Destination dist\CubicBattle32\ -Recurse
           cmd /c copy /b dist\CubicBattle32\love.exe + game.love dist\CubicBattle32\CubicBattle32.exe
         shell: pwsh
 
@@ -55,24 +54,39 @@ jobs:
           curl -L -o rcedit-x64.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
         shell: pwsh
 
+      # ----- Установка иконки с проверкой -----
       - name: Set icon for 64-bit EXE
         run: |
-          if (Test-Path "game/icon.ico") {
-            .\rcedit-x64.exe dist/CubicBattle/CubicBattle.exe --set-icon game/icon.ico
+          $iconPath = "game\icon.ico"
+          if (Test-Path $iconPath) {
+            $bytes = [System.IO.File]::ReadAllBytes($iconPath)
+            if ($bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 1 -and $bytes[3] -eq 0) {
+              .\rcedit-x64.exe dist\CubicBattle\CubicBattle.exe --set-icon $iconPath
+            } else {
+              Write-Warning "Файл $iconPath не является корректным ICO, пропускаем установку иконки."
+            }
           }
         shell: pwsh
+        continue-on-error: true   # на всякий случай, чтобы сборка не упала
 
       - name: Set icon for 32-bit EXE
         run: |
-          if (Test-Path "game/icon.ico") {
-            .\rcedit-x64.exe dist/CubicBattle32/CubicBattle32.exe --set-icon game/icon.ico
+          $iconPath = "game\icon.ico"
+          if (Test-Path $iconPath) {
+            $bytes = [System.IO.File]::ReadAllBytes($iconPath)
+            if ($bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 1 -and $bytes[3] -eq 0) {
+              .\rcedit-x64.exe dist\CubicBattle32\CubicBattle32.exe --set-icon $iconPath
+            } else {
+              Write-Warning "Файл $iconPath не является корректным ICO, пропускаем установку иконки."
+            }
           }
         shell: pwsh
+        continue-on-error: true
 
       - name: Create ZIP archive
         run: |
           $zipPath = Join-Path $env:GITHUB_WORKSPACE "CubicBattle_Windows_Portable.zip"
-          Compress-Archive -Path dist/CubicBattle, dist/CubicBattle32 -DestinationPath $zipPath -CompressionLevel Optimal -Force
+          Compress-Archive -Path dist\CubicBattle, dist\CubicBattle32 -DestinationPath $zipPath -CompressionLevel Optimal -Force
         shell: pwsh
 
       - name: Set EXE name
