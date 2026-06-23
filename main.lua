@@ -1,6 +1,6 @@
 -- main.lua для Cubic Battle 3
 -- Поддерживает: Lobby, Game, Shop, Credits, Settings
--- Сохранение: монеты, купленные/надетые скины, настройки звука
+-- Сохранение: монеты, список купленных скинов (ownedSkins), надетый скин, настройки звука
 -- Музыка: Sneaky Snitch (Kevin MacLeod)
 -- Звук кнопок: cartoon-button-click-sound.mp3
 
@@ -64,13 +64,15 @@ function playButtonSound()
     end
 end
 
--- ========== СОХРАНЕНИЕ ==========
-SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE", musicOn = true, sfxOn = true }
+-- ========== СОХРАНЕНИЕ (новый формат) ==========
+SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true, sfxOn = true }
 local SAVE_FILE = "data.txt"
 
 function SAVE_SAVE()
+    -- Сохраняем список ownedSkins через запятую
+    local ownedStr = table.concat(SAVE_DATA.ownedSkins, ",")
     local content = tostring(SAVE_DATA.coins) .. "\n" ..
-                    SAVE_DATA.ownedSkin .. "\n" ..
+                    ownedStr .. "\n" ..
                     SAVE_DATA.equippedSkin .. "\n" ..
                     tostring(musicOn and 1 or 0) .. "\n" ..
                     tostring(sfxOn and 1 or 0)
@@ -78,7 +80,7 @@ function SAVE_SAVE()
         love.filesystem.write(SAVE_FILE, content)
     end)
     if success then
-        print("Сохранено: coins=" .. SAVE_DATA.coins .. ", music=" .. tostring(musicOn) .. ", sfx=" .. tostring(sfxOn))
+        print("Сохранено: coins=" .. SAVE_DATA.coins .. ", owned=" .. ownedStr .. ", equipped=" .. SAVE_DATA.equippedSkin)
     else
         print("Ошибка сохранения: " .. tostring(err))
     end
@@ -88,7 +90,7 @@ local function loadSave()
     local info = love.filesystem.getInfo(SAVE_FILE)
     if not info then
         print("Нет файла сохранения, используем значения по умолчанию")
-        SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE" }
         musicOn = true
         sfxOn = true
         return
@@ -97,7 +99,7 @@ local function loadSave()
     local data, err = love.filesystem.read(SAVE_FILE)
     if not data then
         print("Ошибка чтения сохранения: " .. tostring(err))
-        SAVE_DATA = { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE" }
         musicOn = true
         sfxOn = true
         return
@@ -109,21 +111,28 @@ local function loadSave()
     end
 
     local coins = tonumber(lines[1]) or 0
-    local ownedSkin = lines[2] or "NONE"
+    local ownedStr = lines[2] or ""
     local equippedSkin = lines[3] or "NONE"
     local musicVal = tonumber(lines[4]) or 1
     local sfxVal = tonumber(lines[5]) or 1
 
+    -- Преобразуем строку в список
+    local ownedSkins = {}
+    if ownedStr ~= "" then
+        for name in ownedStr:gmatch("[^,]+") do
+            table.insert(ownedSkins, name)
+        end
+    end
+
     SAVE_DATA = {
         coins = coins,
-        ownedSkin = ownedSkin,
+        ownedSkins = ownedSkins,
         equippedSkin = equippedSkin
     }
     musicOn = musicVal == 1
     sfxOn = sfxVal == 1
 
-    print("Загружено: coins=" .. coins .. ", owned=" .. ownedSkin .. ", equipped=" .. equippedSkin ..
-          ", music=" .. tostring(musicOn) .. ", sfx=" .. tostring(sfxOn))
+    print("Загружено: coins=" .. coins .. ", owned=" .. ownedStr .. ", equipped=" .. equippedSkin)
 end
 
 -- ========== LOVE CALLBACKS ==========
