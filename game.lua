@@ -175,6 +175,8 @@ function game.update(dt)
             reward = 5
         elseif currentDifficulty == "hard" then
             reward = 50
+        elseif currentDifficulty == "impossible" then
+            reward = 100
         end
         SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
         SAVE_SAVE()
@@ -272,6 +274,7 @@ function game.draw()
     local diffText = "NORMAL"
     if currentDifficulty == "easy" then diffText = "EASY" end
     if currentDifficulty == "hard" then diffText = "HARD" end
+    if currentDifficulty == "impossible" then diffText = "IMPOSSIBLE" end
     love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
 
     if equippedSkin == "NASTYA CUBE" then
@@ -288,7 +291,7 @@ function game.draw()
         end
     end
 
-    -- ===== ИСПРАВЛЕНИЕ: отображение HP врага с правильным максимумом =====
+    -- Отображение HP врага с правильным максимумом
     local e, _, enemyMaxHP = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
