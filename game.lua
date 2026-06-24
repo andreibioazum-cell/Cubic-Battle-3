@@ -12,12 +12,13 @@ local BULLET_SPEED = 340 * 1.15
 
 local cube = { x = 0, y = 0, speed = 260, angle = 0, hp = PLAYER_HP_MAX, hit = 0 }
 local bullets = {}
-local bg, playerImg, azumImg, nastyaImg, font   -- добавим текстуру для Насти
+local bg, playerImg, azumImg, nastyaImg, font
 local cam = { x = 0, y = 0 }
 local dead = false
 
 local equippedSkin = "NONE"
 local resurrectionUsed = false
+local currentDifficulty = "normal"
 
 -- Переменные для способности "Щит"
 local shieldActive = false
@@ -52,7 +53,6 @@ end
 local function onHitPlayer(dmg)
     if dead then return end
     if shieldActive then
-        -- Щит поглощает урон
         return
     end
     cube.hp = cube.hp - dmg
@@ -65,6 +65,9 @@ local function onHitPlayer(dmg)
 end
 
 function game.load()
+    currentDifficulty = _G.difficulty or "normal"
+    enemy.setDifficulty(currentDifficulty)
+
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
     resurrectionUsed = false
     shieldActive = false
@@ -85,11 +88,10 @@ function game.load()
     playerImg:setFilter("nearest", "nearest")
     azumImg = azumImg or love.graphics.newImage("azum.png")
     azumImg:setFilter("nearest", "nearest")
-    nastyaImg = nastyaImg or love.graphics.newImage("nastya.png")   -- добавьте файл nastya.png
+    nastyaImg = nastyaImg or love.graphics.newImage("nastya.png")
     nastyaImg:setFilter("nearest", "nearest")
     font = font or love.graphics.newFont("Fredoka-Bold.ttf", 18)
 
-    -- Определяем доступность способности
     if equippedSkin == "AZUM CUBE" then
         controls.setAbilityAvailable(not resurrectionUsed)
     elseif equippedSkin == "NASTYA CUBE" then
@@ -112,7 +114,6 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Обновляем таймеры щита
     if shieldActive then
         shieldTimer = shieldTimer - dt
         if shieldTimer <= 0 then
@@ -125,29 +126,24 @@ function game.update(dt)
         if shieldCooldown < 0 then shieldCooldown = 0 end
     end
 
-    -- Обновляем доступность способности для Насти
     if equippedSkin == "NASTYA CUBE" then
         controls.setAbilityAvailable(shieldCooldown <= 0 and not shieldActive)
     end
 
-    -- Обработка активации способности
     if controls.getAbilityTrigger() then
         if equippedSkin == "AZUM CUBE" and not resurrectionUsed and cube.hp <= 1 then
-            -- Воскрешение (старая механика)
             cube.hp = 5
             resurrectionUsed = true
             cube.hit = 0
             controls.setAbilityAvailable(false)
         elseif equippedSkin == "NASTYA CUBE" and not shieldActive and shieldCooldown <= 0 then
-            -- Активация щита
             shieldActive = true
             shieldTimer = SHIELD_DURATION
             shieldCooldown = SHIELD_COOLDOWN
-            controls.setAbilityAvailable(false) -- сразу скрываем кнопку до конца кулдауна
+            controls.setAbilityAvailable(false)
         end
     end
 
-    -- Движение игрока
     local dx, dy = controls.getMove()
     cube.x = cube.x + dx * cube.speed * dt
     cube.y = cube.y + dy * cube.speed * dt
@@ -156,14 +152,12 @@ function game.update(dt)
     end
     cube.hit = math.max(0, cube.hit - dt * 3)
 
-    -- Камера
     local targetX = cube.x - love.graphics.getWidth() / 2
     local targetY = cube.y - love.graphics.getHeight() / 2
     local k = 1 - math.exp(-dt * 7.3)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Пули игрока
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -174,16 +168,20 @@ function game.update(dt)
         end
     end
 
-    -- Обновление врага
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
-        SAVE_DATA.coins = (SAVE_DATA.coins or 0) + 10
+        local reward = 10
+        if currentDifficulty == "easy" then
+            reward = 5
+        elseif currentDifficulty == "hard" then
+            reward = 50
+        end
+        SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
         SAVE_SAVE()
         GameState.current = "lobby"
         return
     end
 
-    -- Столкновение с вражескими пулями
     local eBullets = enemy.getBullets()
     for i = #eBullets, 1, -1 do
         local b = eBullets[i]
@@ -202,7 +200,6 @@ function game.draw()
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
-    -- Фон
     local w, h = love.graphics.getDimensions()
     local tw, th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x / tw) * tw
@@ -213,14 +210,12 @@ function game.draw()
         end
     end
 
-    -- Пули игрока
     love.graphics.setColor(0, 0, 0, 1)
     for _, b in ipairs(bullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
     enemy.drawBullets()
 
-    -- Прицел
     if controls.isAiming() then
         local ax, ay = controls.getAim()
         love.graphics.setColor(0, 0, 0, 0.55)
@@ -228,10 +223,8 @@ function game.draw()
         love.graphics.line(cube.x, cube.y, cube.x + ax * 180, cube.y + ay * 180)
     end
 
-    -- Рисуем врага
     enemy.draw()
 
-    -- Выбор текстуры игрока
     local imgToDraw
     if equippedSkin == "AZUM CUBE" then
         imgToDraw = azumImg
@@ -241,7 +234,6 @@ function game.draw()
         imgToDraw = playerImg
     end
 
-    -- Тень
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
@@ -249,7 +241,6 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Игрок
     love.graphics.push()
     love.graphics.translate(cube.x, cube.y)
     love.graphics.rotate(cube.angle)
@@ -258,9 +249,8 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Щит (если активен)
     if shieldActive then
-        love.graphics.setColor(0.2, 0.8, 1, 0.3)  -- полупрозрачный голубой
+        love.graphics.setColor(0.2, 0.8, 1, 0.3)
         love.graphics.circle("fill", cube.x, cube.y, PLAYER_SIZE * 0.8)
         love.graphics.setColor(0.2, 0.8, 1, 0.6)
         love.graphics.setLineWidth(4)
@@ -270,7 +260,6 @@ function game.draw()
 
     love.graphics.pop()
 
-    -- HUD
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)
     local barW, barH = 200, 18
@@ -279,22 +268,26 @@ function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.printf("HP " .. math.max(0, cube.hp) .. " / " .. PLAYER_HP_MAX, px, py + 22, barW, "left")
 
-    -- Индикатор перезарядки щита (для Насти)
+    -- Отображение сложности
+    local diffText = "NORMAL"
+    if currentDifficulty == "easy" then diffText = "EASY" end
+    if currentDifficulty == "hard" then diffText = "HARD" end
+    love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
+
     if equippedSkin == "NASTYA CUBE" then
         local cd = math.max(0, shieldCooldown)
         if shieldActive then
             love.graphics.setColor(0.2, 0.8, 1, 0.8)
-            love.graphics.printf("SHIELD: " .. math.ceil(shieldTimer) .. "s", px, py + 44, 200, "left")
+            love.graphics.printf("SHIELD: " .. math.ceil(shieldTimer) .. "s", px, py + 66, 200, "left")
         elseif cd > 0 then
             love.graphics.setColor(0.8, 0.8, 0.8, 0.8)
-            love.graphics.printf("SHIELD CD: " .. math.ceil(cd) .. "s", px, py + 44, 200, "left")
+            love.graphics.printf("SHIELD CD: " .. math.ceil(cd) .. "s", px, py + 66, 200, "left")
         else
             love.graphics.setColor(0.2, 0.8, 1, 0.8)
-            love.graphics.printf("SHIELD READY", px, py + 44, 200, "left")
+            love.graphics.printf("SHIELD READY", px, py + 66, 200, "left")
         end
     end
 
-    -- HP врага
     local e = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
