@@ -4,6 +4,7 @@ local fontTitle, fontBtn
 local btnEasy = { w = 200, h = 70, x = 0, y = 0 }
 local btnNormal = { w = 200, h = 70, x = 0, y = 0 }
 local btnHard = { w = 200, h = 70, x = 0, y = 0 }
+local btnImpossible = { w = 200, h = 70, x = 0, y = 0 }
 local btnBack = { w = 140, h = 55, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
@@ -38,13 +39,14 @@ function difficulty.load()
 
     local btnW = 200 * scale
     local btnH = 70 * scale
-    local gap = 20 * scale
+    local gap = 15 * scale
 
     btnEasy.w = btnW; btnEasy.h = btnH
     btnNormal.w = btnW; btnNormal.h = btnH
     btnHard.w = btnW; btnHard.h = btnH
+    btnImpossible.w = btnW; btnImpossible.h = btnH
 
-    local totalH = btnH * 3 + gap * 2
+    local totalH = btnH * 4 + gap * 3
     local startY = (h - totalH) / 2
 
     btnEasy.x = (w - btnW) / 2
@@ -55,6 +57,9 @@ function difficulty.load()
 
     btnHard.x = (w - btnW) / 2
     btnHard.y = startY + (btnH + gap) * 2
+
+    btnImpossible.x = (w - btnW) / 2
+    btnImpossible.y = startY + (btnH + gap) * 3
 
     btnBack.w = 140 * scale
     btnBack.h = 55 * scale
@@ -78,7 +83,7 @@ function difficulty.draw()
     local w = love.graphics.getWidth()
     local scale = getScale()
 
-    drawSpacedText("SELECT DIFFICULTY", 0, 80 * scale, w, "center", fontTitle, nil, 1)
+    drawSpacedText("SELECT DIFFICULTY", 0, 60 * scale, w, "center", fontTitle, nil, 1)
 
     local function drawBtn(btn, label, color)
         love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
@@ -94,6 +99,7 @@ function difficulty.draw()
     drawBtn(btnEasy, "EASY", {0.2, 0.6, 0.2})
     drawBtn(btnNormal, "NORMAL", {0.35, 0.15, 0.75})
     drawBtn(btnHard, "HARD", {0.8, 0.2, 0.2})
+    drawBtn(btnImpossible, "IMPOSSIBLE", {0.9, 0.0, 0.0})
 
     -- Back
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
@@ -130,6 +136,13 @@ function difficulty.touchpressed(id, x, y)
     if x >= btnHard.x and x <= btnHard.x + btnHard.w and y >= btnHard.y and y <= btnHard.y + btnHard.h then
         playButtonSound()
         _G.difficulty = "hard"
+        GameState.current = "game"
+        return
+    end
+
+    if x >= btnImpossible.x and x <= btnImpossible.x + btnImpossible.w and y >= btnImpossible.y and y <= btnImpossible.y + btnImpossible.h then
+        playButtonSound()
+        _G.difficulty = "impossible"
         GameState.current = "game"
         return
     end
