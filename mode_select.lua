@@ -6,7 +6,6 @@ local btnBack   = { w = 140, h = 55, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
--- ===== ФУНКЦИЯ ОЧИСТКИ UTF-8 =====
 local function sanitize(str)
     if not str then return "" end
     local result = ""
@@ -55,7 +54,6 @@ local function sanitize(str)
     return result
 end
 
--- ===== МАСШТАБ =====
 local function getScale()
     local w, h = love.graphics.getDimensions()
     local base = 1000
@@ -63,7 +61,6 @@ local function getScale()
     return math.min(w, h) / base
 end
 
--- ===== ТЕКСТ С ТЕНЬЮ =====
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     text = sanitize(text)
@@ -82,7 +79,6 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX, y)
 end
 
--- ===== ЗАГРУЗКА =====
 function mode_select.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
@@ -108,7 +104,6 @@ function mode_select.resize()
     mode_select.load()
 end
 
--- ===== ОТРИСОВКА =====
 function mode_select.draw()
     love.graphics.setColor(0.05, 0.02, 0.15, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
@@ -139,7 +134,6 @@ function mode_select.draw()
     drawSpacedText("BACK", btnBack.x, btnBack.y + 14*scale, btnBack.w, "center", fontBtn, nil, 1)
 end
 
--- ===== ОБРАБОТЧИКИ КАСАНИЙ =====
 function mode_select.touchpressed(id, x, y)
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
         playButtonSound()
@@ -149,7 +143,7 @@ function mode_select.touchpressed(id, x, y)
 
     if x >= btnSingle.x and x <= btnSingle.x + btnSingle.w and y >= btnSingle.y and y <= btnSingle.y + btnSingle.h then
         playButtonSound()
-        GameState.current = "game"
+        GameState.current = "difficulty"   -- теперь выбор сложности
         return
     end
 end
