@@ -6,6 +6,7 @@ local shop = require("shop")
 local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
+local difficulty = require("difficulty")   -- новый модуль
 
 GameState = { current = "lobby" }
 
@@ -147,6 +148,8 @@ function love.update(dt)
             if lobby.load then lobby.load() end
         elseif GameState.current == "mode_select" then
             if mode_select.load then mode_select.load() end
+        elseif GameState.current == "difficulty" then
+            if difficulty.load then difficulty.load() end
         elseif GameState.current == "game" then
             if game.load then game.load() end
         elseif GameState.current == "shop" then
@@ -163,8 +166,10 @@ function love.update(dt)
         lobby.update(dt)
     elseif GameState.current == "mode_select" then
         -- ничего
+    elseif GameState.current == "difficulty" then
+        -- ничего
     elseif GameState.current == "game" then
-        game.update(dt)   -- <-- добавлен вызов обновления игры
+        game.update(dt)
         controls.update(dt)
         if shotCooldown > 0 then
             shotCooldown = shotCooldown - dt
@@ -174,14 +179,16 @@ function love.update(dt)
             game.spawnPlayerBullet(dx, dy)
             shotCooldown = SHOT_DELAY
         end
-    end   -- закрываем if-elseif
-end   -- закрываем love.update
+    end
+end
 
 function love.draw()
     if GameState.current == "lobby" then
         lobby.draw()
     elseif GameState.current == "mode_select" then
         mode_select.draw()
+    elseif GameState.current == "difficulty" then
+        difficulty.draw()
     elseif GameState.current == "game" then
         game.draw()
         controls.draw()
@@ -197,6 +204,7 @@ end
 function love.resize(w, h)
     if lobby.resize then lobby.resize(w, h) end
     if mode_select.resize then mode_select.resize(w, h) end
+    if difficulty.resize then difficulty.resize(w, h) end
     if game.resize then game.resize(w, h) end
     if shop.resize then shop.resize() end
     if credits.resize then credits.resize() end
@@ -217,6 +225,9 @@ function love.keypressed(key)
             playButtonSound()
         elseif GameState.current == "mode_select" then
             GameState.current = "lobby"
+            playButtonSound()
+        elseif GameState.current == "difficulty" then
+            GameState.current = "mode_select"
             playButtonSound()
         end
     end
@@ -245,6 +256,8 @@ local function dispatch(fn, id, x, y)
         lobby[fn](id, x, y)
     elseif s == "mode_select" and mode_select[fn] then
         mode_select[fn](id, x, y)
+    elseif s == "difficulty" and difficulty[fn] then
+        difficulty[fn](id, x, y)
     elseif s == "game" and game[fn] then
         game[fn](id, x, y)
     elseif s == "shop" and shop[fn] then
@@ -291,8 +304,8 @@ function love.touchreleased(id, x, y)
         local shot, dx, dy = controls.touchreleased(id)
         if shot and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
-        end   -- закрываем внутренний if
-    end   -- закрываем внешний if
+        end
+    end
     dispatch("touchreleased", id, x, y)
 end
 
