@@ -1,11 +1,60 @@
 local mode_select = {}
 
 local fontTitle, fontBtn
-local btnCreate = { w = 220, h = 75, x = 0, y = 0 }
-local btnJoin   = { w = 220, h = 75, x = 0, y = 0 }
+local btnSingle = { w = 220, h = 75, x = 0, y = 0 }
+local btnMulti  = { w = 220, h = 75, x = 0, y = 0 }
 local btnBack   = { w = 140, h = 55, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+
+-- ===== ФУНКЦИЯ ОЧИСТКИ UTF-8 (удаляет невалидные байты) =====
+local function sanitize(str)
+    if not str then return "" end
+    local result = ""
+    local i = 1
+    while i <= #str do
+        local b = str:byte(i)
+        if b < 0x80 then
+            if b >= 32 and b <= 126 then
+                result = result .. string.char(b)
+            else
+                result = result .. " "
+            end
+            i = i + 1
+        elseif b >= 0xC2 and b <= 0xDF then
+            local b2 = str:byte(i+1)
+            if b2 and b2 >= 0x80 and b2 <= 0xBF then
+                result = result .. string.char(b, b2)
+            else
+                result = result .. "?"
+            end
+            i = i + 2
+        elseif b >= 0xE0 and b <= 0xEF then
+            local b2 = str:byte(i+1)
+            local b3 = str:byte(i+2)
+            if b2 and b3 and b2 >= 0x80 and b2 <= 0xBF and b3 >= 0x80 and b3 <= 0xBF then
+                result = result .. string.char(b, b2, b3)
+            else
+                result = result .. "?"
+            end
+            i = i + 3
+        elseif b >= 0xF0 and b <= 0xF4 then
+            local b2 = str:byte(i+1)
+            local b3 = str:byte(i+2)
+            local b4 = str:byte(i+3)
+            if b2 and b3 and b4 and b2 >= 0x80 and b2 <= 0xBF and b3 >= 0x80 and b3 <= 0xBF and b4 >= 0x80 and b4 <= 0xBF then
+                result = result .. string.char(b, b2, b3, b4)
+            else
+                result = result .. "?"
+            end
+            i = i + 4
+        else
+            result = result .. "?"
+            i = i + 1
+        end
+    end
+    return result
+end
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -16,6 +65,7 @@ end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
+    text = sanitize(text)  -- Очищаем текст перед выводом!
     love.graphics.setFont(font)
     local tw = font:getWidth(text)
     local startX = x
@@ -35,18 +85,18 @@ function mode_select.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    btnCreate.w = 220 * scale
-    btnCreate.h = 75 * scale
-    btnJoin.w   = 220 * scale
-    btnJoin.h   = 75 * scale
+    btnSingle.w = 220 * scale
+    btnSingle.h = 75 * scale
+    btnMulti.w  = 220 * scale
+    btnMulti.h  = 75 * scale
     btnBack.w   = 140 * scale
     btnBack.h   = 55 * scale
 
-    btnCreate.x = (w - btnCreate.w) / 2
-    btnCreate.y = h/2 - 40 * scale
+    btnSingle.x = (w - btnSingle.w) / 2
+    btnSingle.y = h/2 - 40 * scale
 
-    btnJoin.x = (w - btnJoin.w) / 2
-    btnJoin.y = h/2 + 80 * scale
+    btnMulti.x = (w - btnMulti.w) / 2
+    btnMulti.y = h/2 + 80 * scale
 
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - 100 * scale
@@ -68,27 +118,27 @@ function mode_select.draw()
     local w = love.graphics.getWidth()
     local scale = getScale()
 
-    drawSpacedText("MULTIPLAYER", 0, 120 * scale, w, "center", fontTitle, nil, 1)
+    drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
-    -- Кнопка Create Game
+    -- Кнопка Singleplayer
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btnCreate.x + 5*scale, btnCreate.y + 6*scale, btnCreate.w, btnCreate.h, 16*scale, 16*scale)
+    love.graphics.rectangle("fill", btnSingle.x + 5*scale, btnSingle.y + 6*scale, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btnCreate.x, btnCreate.y, btnCreate.w, btnCreate.h, 16*scale, 16*scale)
+    love.graphics.rectangle("fill", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnCreate.x, btnCreate.y, btnCreate.w, btnCreate.h, 16*scale, 16*scale)
-    drawSpacedText("CREATE GAME", btnCreate.x, btnCreate.y + 22*scale, btnCreate.w, "center", fontBtn, nil, 1)
+    love.graphics.rectangle("line", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
+    drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
 
-    -- Кнопка Join Game
+    -- Кнопка Multiplayer
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btnJoin.x + 5*scale, btnJoin.y + 6*scale, btnJoin.w, btnJoin.h, 16*scale, 16*scale)
+    love.graphics.rectangle("fill", btnMulti.x + 5*scale, btnMulti.y + 6*scale, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btnJoin.x, btnJoin.y, btnJoin.w, btnJoin.h, 16*scale, 16*scale)
+    love.graphics.rectangle("fill", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnJoin.x, btnJoin.y, btnJoin.w, btnJoin.h, 16*scale, 16*scale)
-    drawSpacedText("JOIN GAME", btnJoin.x, btnJoin.y + 22*scale, btnJoin.w, "center", fontBtn, nil, 1)
+    love.graphics.rectangle("line", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
+    drawSpacedText("MULTIPLAYER", btnMulti.x, btnMulti.y + 22*scale, btnMulti.w, "center", fontBtn, nil, 1)
 
     -- Back
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
@@ -107,16 +157,18 @@ function mode_select.touchpressed(id, x, y)
         GameState.current = "lobby"
         return
     end
-    if x >= btnCreate.x and x <= btnCreate.x + btnCreate.w and y >= btnCreate.y and y <= btnCreate.y + btnCreate.h then
+
+    if x >= btnSingle.x and x <= btnSingle.x + btnSingle.w and y >= btnSingle.y and y <= btnSingle.y + btnSingle.h then
         playButtonSound()
-        GameState.current = "multiplayer"
-        GameState.multiplayerMode = "host"
+        GameState.current = "game"
         return
     end
-    if x >= btnJoin.x and x <= btnJoin.x + btnJoin.w and y >= btnJoin.y and y <= btnJoin.y + btnJoin.h then
+
+    if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
         playButtonSound()
         GameState.current = "multiplayer"
-        GameState.multiplayerMode = "client"
+        GameState.multiplayerMode = "client"   -- Подключаемся к серверу (или создаём, если кнопка Create)
+        -- Если хотите, чтобы Multiplayer автоматически создавал сервер, измените на "host"
         return
     end
 end
