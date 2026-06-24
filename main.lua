@@ -1,15 +1,12 @@
 -- main.lua для Cubic Battle 3
--- Поддерживает: Lobby, Game, Shop, Credits, Settings
--- Сохранение: монеты, список купленных скинов (ownedSkins), надетый скин, настройки звука
--- Музыка: Sneaky Snitch (Kevin MacLeod)
--- Звук кнопок: cartoon-button-click-sound.mp3
-
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
 local shop = require("shop")
 local credits = require("credits")
 local settings = require("settings")
+local mode_select = require("mode_select")
+local multiplayer = require("multiplayer")
 
 GameState = { current = "lobby" }
 
@@ -21,8 +18,8 @@ local SHOT_DELAY = 0.15
 
 -- ========== ЗВУКИ И МУЗЫКА ==========
 local bgMusic = nil
-musicOn = true      -- глобальная переменная (используется в других модулях)
-sfxOn = true        -- глобальная переменная для звуковых эффектов
+musicOn = true
+sfxOn = true
 
 function toggleMusic()
     if bgMusic then
@@ -62,7 +59,7 @@ function playButtonSound()
     end
 end
 
--- ========== СОХРАНЕНИЕ (новый формат) ==========
+-- ========== СОХРАНЕНИЕ ==========
 SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true, sfxOn = true }
 local SAVE_FILE = "data.txt"
 
@@ -86,27 +83,22 @@ end
 local function loadSave()
     local info = love.filesystem.getInfo(SAVE_FILE)
     if not info then
-        print("Нет файла сохранения, используем значения по умолчанию")
         SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE" }
         musicOn = true
         sfxOn = true
         return
     end
-
     local data, err = love.filesystem.read(SAVE_FILE)
     if not data then
-        print("Ошибка чтения сохранения: " .. tostring(err))
         SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE" }
         musicOn = true
         sfxOn = true
         return
     end
-
     local lines = {}
     for line in data:gmatch("[^\r\n]+") do
         table.insert(lines, line)
     end
-
     local coins = tonumber(lines[1]) or 0
     local ownedStr = lines[2] or ""
     local equippedSkin = lines[3] or "NONE"
@@ -119,15 +111,9 @@ local function loadSave()
             table.insert(ownedSkins, name)
         end
     end
-
-    SAVE_DATA = {
-        coins = coins,
-        ownedSkins = ownedSkins,
-        equippedSkin = equippedSkin
-    }
+    SAVE_DATA = { coins = coins, ownedSkins = ownedSkins, equippedSkin = equippedSkin }
     musicOn = musicVal == 1
     sfxOn = sfxVal == 1
-
     print("Загружено: coins=" .. coins .. ", owned=" .. ownedStr .. ", equipped=" .. equippedSkin)
 end
 
@@ -146,8 +132,12 @@ function love.update(dt)
         print("Переход в состояние: " .. tostring(GameState.current))
         if GameState.current == "lobby" then
             if lobby.load then lobby.load() end
+        elseif GameState.current == "mode_select" then
+            if mode_select.load then mode_select.load() end
         elseif GameState.current == "game" then
             if game.load then game.load() end
+        elseif GameState.current == "multiplayer" then
+            if multiplayer.load then multiplayer.load() end
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -160,6 +150,8 @@ function love.update(dt)
 
     if GameState.current == "lobby" then
         lobby.update(dt)
+    elseif GameState.current == "mode_select" then
+        -- ничего
     elseif GameState.current == "game" then
         controls.update(dt)
         if shotCooldown > 0 then
@@ -171,15 +163,22 @@ function love.update(dt)
             shotCooldown = SHOT_DELAY
         end
         game.update(dt)
+    elseif GameState.current == "multiplayer" then
+        controls.update(dt)
+        multiplayer.update(dt)
     end
 end
 
 function love.draw()
     if GameState.current == "lobby" then
         lobby.draw()
+    elseif GameState.current == "mode_select" then
+        mode_select.draw()
     elseif GameState.current == "game" then
         game.draw()
         controls.draw()
+    elseif GameState.current == "multiplayer" then
+        multiplayer.draw()
     elseif GameState.current == "shop" then
         shop.draw(SAVE_DATA.coins)
     elseif GameState.current == "credits" then
@@ -191,24 +190,29 @@ end
 
 function love.resize(w, h)
     if lobby.resize then lobby.resize(w, h) end
-    if game.resize  then game.resize(w, h)  end
-    if shop.resize  then shop.resize()      end
+    if mode_select.resize then mode_select.resize(w, h) end
+    if game.resize then game.resize(w, h) end
+    if shop.resize then shop.resize() end
     if credits.resize then credits.resize() end
     if settings.resize then settings.resize() end
     controls.resize()
 end
 
--- ========== КЛАВИАТУРА ==========
 function love.keypressed(key)
     if GameState.current == "game" then
         controls.keypressed(key)
+    elseif GameState.current == "multiplayer" then
+        multiplayer.keypressed(key)
     end
-
     if key == "escape" then
-        GameState.current = "lobby"
-        playButtonSound()
+        if GameState.current == "game" or GameState.current == "multiplayer" then
+            GameState.current = "lobby"
+            playButtonSound()
+        elseif GameState.current == "mode_select" then
+            GameState.current = "lobby"
+            playButtonSound()
+        end
     end
-
     if key == "m" then
         toggleMusic()
         SAVE_SAVE()
@@ -219,16 +223,21 @@ end
 function love.keyreleased(key)
     if GameState.current == "game" then
         controls.keyreleased(key)
+    elseif GameState.current == "multiplayer" then
+        multiplayer.keyreleased(key)
     end
 end
 
--- ========== ТАЧ / МЫШЬ ==========
 local function dispatch(fn, id, x, y)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then
         lobby[fn](id, x, y)
+    elseif s == "mode_select" and mode_select[fn] then
+        mode_select[fn](id, x, y)
     elseif s == "game" and game[fn] then
         game[fn](id, x, y)
+    elseif s == "multiplayer" and multiplayer[fn] then
+        multiplayer[fn](id, x, y)
     elseif s == "shop" and shop[fn] then
         if fn == "touchpressed" then
             local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
@@ -254,7 +263,7 @@ function love.touchpressed(id, x, y)
     if now - lastTap < 0.05 then return end
     lastTap = now
 
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "multiplayer" then
         controls.touchpressed(id, x, y)
     end
 
@@ -262,7 +271,7 @@ function love.touchpressed(id, x, y)
 end
 
 function love.touchmoved(id, x, y)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "multiplayer" then
         controls.touchmoved(id, x, y)
     end
     dispatch("touchmoved", id, x, y)
@@ -274,11 +283,12 @@ function love.touchreleased(id, x, y)
         if shot and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
         end
+    elseif GameState.current == "multiplayer" then
+        controls.touchreleased(id)
     end
     dispatch("touchreleased", id, x, y)
 end
 
--- МЫШЬ для ПК (эмуляция тача)
 function love.mousepressed(x, y, button, istouch)
     if isMobile or istouch then return end
     if button == 1 then
