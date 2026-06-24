@@ -59,8 +59,6 @@ function playButtonSound()
     if sound then
         sound:setVolume(0.5)
         sound:play()
-    else
-        -- print("Звук кнопки не загружен")
     end
 end
 
@@ -69,7 +67,6 @@ SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true,
 local SAVE_FILE = "data.txt"
 
 function SAVE_SAVE()
-    -- Сохраняем список ownedSkins через запятую
     local ownedStr = table.concat(SAVE_DATA.ownedSkins, ",")
     local content = tostring(SAVE_DATA.coins) .. "\n" ..
                     ownedStr .. "\n" ..
@@ -116,7 +113,6 @@ local function loadSave()
     local musicVal = tonumber(lines[4]) or 1
     local sfxVal = tonumber(lines[5]) or 1
 
-    -- Преобразуем строку в список
     local ownedSkins = {}
     if ownedStr ~= "" then
         for name in ownedStr:gmatch("[^,]+") do
@@ -138,15 +134,14 @@ end
 -- ========== LOVE CALLBACKS ==========
 function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
-    loadSave()          -- загружаем настройки и монеты
-    controls.load()     -- загружаем управление
-    loadMusic()         -- загружаем музыку (учитывая musicOn)
+    loadSave()
+    controls.load()
+    loadMusic()
 end
 
 function love.update(dt)
     if dt > 0.05 then dt = 0.05 end
 
-    -- Обработка смены состояния
     if GameState.current ~= lastState then
         print("Переход в состояние: " .. tostring(GameState.current))
         if GameState.current == "lobby" then
@@ -163,7 +158,6 @@ function love.update(dt)
         lastState = GameState.current
     end
 
-    -- Обновление логики в зависимости от состояния
     if GameState.current == "lobby" then
         lobby.update(dt)
     elseif GameState.current == "game" then
@@ -177,7 +171,6 @@ function love.update(dt)
             shotCooldown = SHOT_DELAY
         end
         game.update(dt)
-    -- остальные состояния не требуют обновления
     end
 end
 
@@ -186,7 +179,7 @@ function love.draw()
         lobby.draw()
     elseif GameState.current == "game" then
         game.draw()
-        controls.draw()   -- рисуем элементы управления поверх игры
+        controls.draw()
     elseif GameState.current == "shop" then
         shop.draw(SAVE_DATA.coins)
     elseif GameState.current == "credits" then
@@ -218,7 +211,7 @@ function love.keypressed(key)
 
     if key == "m" then
         toggleMusic()
-        SAVE_SAVE()   -- сохраняем состояние музыки
+        SAVE_SAVE()
         playButtonSound()
     end
 end
