@@ -2,7 +2,6 @@ local mode_select = {}
 
 local fontTitle, fontBtn
 local btnSingle = { w = 220, h = 75, x = 0, y = 0 }
-local btnMulti  = { w = 220, h = 75, x = 0, y = 0 }
 local btnBack   = { w = 140, h = 55, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
@@ -130,16 +129,6 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
 
-    -- Кнопка Multiplayer
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-    love.graphics.rectangle("fill", btnMulti.x + 5*scale, btnMulti.y + 6*scale, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
-    love.graphics.rectangle("fill", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
-    drawSpacedText("MULTIPLAYER", btnMulti.x, btnMulti.y + 22*scale, btnMulti.w, "center", fontBtn, nil, 1)
-
     -- Back
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
@@ -163,16 +152,6 @@ function mode_select.touchpressed(id, x, y)
         GameState.current = "game"
         return
     end
-
-    if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
-        playButtonSound()
-        GameState.current = "multiplayer"
-        GameState.multiplayerMode = "client"   -- Подключаемся к серверу (или создаём, если кнопка Create)
-        -- Если хотите, чтобы Multiplayer автоматически создавал сервер, измените на "host"
-        return
-    end
-end
-
 function mode_select.touchmoved() end
 function mode_select.touchreleased() end
 
