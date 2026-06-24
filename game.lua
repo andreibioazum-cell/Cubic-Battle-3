@@ -288,13 +288,14 @@ function game.draw()
         end
     end
 
-    local e = enemy.get()
+    -- ===== ИСПРАВЛЕНИЕ: отображение HP врага с правильным максимумом =====
+    local e, _, enemyMaxHP = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
         local epy = 20
-        drawHPBar(epx, epy, barW, barH, e.hp, 10, {0.9, 0.2, 0.2})
+        drawHPBar(epx, epy, barW, barH, e.hp, enemyMaxHP, {0.9, 0.2, 0.2})
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("ENEMY " .. math.max(0, e.hp) .. " / 10", epx, epy + 22, barW, "right")
+        love.graphics.printf("ENEMY " .. math.max(0, e.hp) .. " / " .. enemyMaxHP, epx, epy + 22, barW, "right")
     end
 
     controls.draw()
