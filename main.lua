@@ -6,7 +6,6 @@ local shop = require("shop")
 local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
-local multiplayer = require("multiplayer")
 
 GameState = { current = "lobby" }
 
@@ -179,12 +178,6 @@ function love.update(dt)
             game.spawnPlayerBullet(dx, dy)
             shotCooldown = SHOT_DELAY
         end
-        game.update(dt)
-    elseif GameState.current == "multiplayer" then
-        controls.update(dt)
-        multiplayer.update(dt)
-    end
-end
 
 function love.draw()
     if GameState.current == "lobby" then
@@ -194,8 +187,6 @@ function love.draw()
     elseif GameState.current == "game" then
         game.draw()
         controls.draw()
-    elseif GameState.current == "multiplayer" then
-        multiplayer.draw()
     elseif GameState.current == "shop" then
         shop.draw(SAVE_DATA.coins)
     elseif GameState.current == "credits" then
@@ -308,9 +299,6 @@ function love.touchreleased(id, x, y)
         local shot, dx, dy = controls.touchreleased(id)
         if shot and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
-        end
-    elseif GameState.current == "multiplayer" then
-        controls.touchreleased(id)
     end
     dispatch("touchreleased", id, x, y)
 end
