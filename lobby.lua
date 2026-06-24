@@ -166,7 +166,7 @@ end
 function lobby.touchpressed(id, x, y)
     if x >= btns.play.x and x <= btns.play.x + btns.play.w and y >= btns.play.y and y <= btns.play.y + btns.play.h then
         playButtonSound()
-        GameState.current = "mode_select"   -- <-- теперь ведёт на выбор режима
+        GameState.current = "mode_select"
     elseif x >= btns.shop.x and x <= btns.shop.x + btns.shop.w and y >= btns.shop.y and y <= btns.shop.y + btns.shop.h then
         playButtonSound()
         GameState.current = "shop"
