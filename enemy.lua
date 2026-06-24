@@ -42,6 +42,11 @@ function enemy.setDifficulty(diff)
         SHOOT_CD = 0.8
         BULLET_SPEED = 280
         MAX_HP = 14
+    elseif diff == "impossible" then
+        SPEED = 280
+        SHOOT_CD = 0.4
+        BULLET_SPEED = 350
+        MAX_HP = 20
     else -- normal
         SPEED = 140
         SHOOT_CD = 1.2
