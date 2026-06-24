@@ -35,6 +35,23 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX, y)
 end
 
+-- Функция для проверки, является ли строка валидным UTF-8
+local function isValidUTF8(str)
+    -- Простая проверка: попытка сконвертировать в UTF-8 и обратно
+    -- В Lua 5.3+ можно использовать utf8.len, но в LÖVE 11.5 используется Lua 5.3, так что есть utf8
+    local ok, _ = pcall(utf8.len, str)
+    return ok
+end
+
+-- Функция для очистки ника (оставляем только буквы, цифры, пробел, подчёркивание, дефис)
+local function sanitizeNick(str)
+    if not str then return "Player" end
+    -- Заменяем все недопустимые символы на пустую строку
+    local cleaned = str:gsub("[^%w%s_%-]", "")
+    if cleaned == "" then cleaned = "Player" end
+    return cleaned
+end
+
 function settings.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
@@ -59,8 +76,26 @@ function settings.load()
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 
-    tempNick = SAVE_DATA.nickname or "Player"
-    tempIP = SAVE_DATA.serverIP or "127.0.0.1"
+    -- Проверяем ник на валидность UTF-8 и очищаем
+    local nick = SAVE_DATA.nickname or "Player"
+    if not isValidUTF8(nick) then
+        nick = "Player"
+        SAVE_DATA.nickname = nick
+        SAVE_SAVE()
+    end
+    -- Очищаем от недопустимых символов
+    nick = sanitizeNick(nick)
+    SAVE_DATA.nickname = nick
+    tempNick = nick
+
+    -- IP обычно только цифры и точки, но на всякий случай тоже проверим
+    local ip = SAVE_DATA.serverIP or "127.0.0.1"
+    if not isValidUTF8(ip) then
+        ip = "127.0.0.1"
+        SAVE_DATA.serverIP = ip
+        SAVE_SAVE()
+    end
+    tempIP = ip
 end
 
 function settings.resize()
@@ -77,10 +112,13 @@ function settings.draw()
 
     drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, nil, 1)
 
-    -- Ник
+    -- Ник (с очисткой перед отображением)
     local currentNick = SAVE_DATA.nickname or "Player"
+    currentNick = sanitizeNick(currentNick)  -- дополнительная защита
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(fontBtn)
+    -- Используем love.graphics.print с координатами вместо printf, чтобы избежать проблем с UTF-8
+    -- Но printf тоже должен работать, если строка валидна
     love.graphics.printf("Nickname: " .. currentNick, 0, btnNick.y - 60*scale, w, "center")
 
     local label = enteringNick and "Press ENTER to save" or "Change Nickname"
@@ -95,11 +133,12 @@ function settings.draw()
 
     if enteringNick then
         love.graphics.setColor(1, 1, 0, 1)
-        love.graphics.printf("New nick: " .. tempNick .. "|", 0, btnNick.y + 80*scale, w, "center")
+        love.graphics.printf("New nick: " .. sanitizeNick(tempNick) .. "|", 0, btnNick.y + 80*scale, w, "center")
     end
 
     -- IP сервера
     local currentIP = SAVE_DATA.serverIP or "127.0.0.1"
+    if not isValidUTF8(currentIP) then currentIP = "127.0.0.1" end
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.printf("Server IP: " .. currentIP, 0, btnIP.y - 60*scale, w, "center")
 
@@ -159,10 +198,14 @@ end
 
 function settings.textinput(t)
     if enteringNick then
-        tempNick = tempNick .. t
+        -- Разрешаем только буквы, цифры, пробел, подчёркивание, дефис
+        local filtered = t:gsub("[^%w%s_%-]", "")
+        tempNick = tempNick .. filtered
         if #tempNick > 20 then tempNick = tempNick:sub(1, 20) end
     elseif enteringIP then
-        tempIP = tempIP .. t
+        -- Для IP разрешаем цифры, точки, двоеточие (для IPv6)
+        local filtered = t:gsub("[^%d%.%:]", "")
+        tempIP = tempIP .. filtered
         if #tempIP > 15 then tempIP = tempIP:sub(1, 15) end
     end
 end
@@ -171,7 +214,8 @@ function settings.keypressed(key)
     if enteringNick then
         if key == "return" or key == "kpenter" then
             if #tempNick > 0 then
-                SAVE_DATA.nickname = tempNick
+                local cleaned = sanitizeNick(tempNick)
+                SAVE_DATA.nickname = cleaned
                 SAVE_SAVE()
             end
             enteringNick = false
