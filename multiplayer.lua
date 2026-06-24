@@ -2,6 +2,8 @@ local multiplayer = {}
 
 local json = require("json")
 local installer = require("installer")
+local controls = require("controls")   -- <-- ДОБАВЛЯЕМ ЭТУ СТРОКУ
+
 local socket_ok, socket = pcall(require, "socket")
 
 local SERVER_HOST = "127.0.0.1"
