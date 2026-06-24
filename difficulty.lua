@@ -80,7 +80,6 @@ function difficulty.draw()
 
     drawSpacedText("SELECT DIFFICULTY", 0, 80 * scale, w, "center", fontTitle, nil, 1)
 
-    -- Кнопки Easy, Normal, Hard
     local function drawBtn(btn, label, color)
         love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
         love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
@@ -96,7 +95,7 @@ function difficulty.draw()
     drawBtn(btnNormal, "NORMAL", {0.35, 0.15, 0.75})
     drawBtn(btnHard, "HARD", {0.8, 0.2, 0.2})
 
-    -- Кнопка Back
+    -- Back
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -108,14 +107,12 @@ function difficulty.draw()
 end
 
 function difficulty.touchpressed(id, x, y)
-    -- Проверка кнопки Back
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
         playButtonSound()
         GameState.current = "mode_select"
         return
     end
 
-    -- Проверка Easy
     if x >= btnEasy.x and x <= btnEasy.x + btnEasy.w and y >= btnEasy.y and y <= btnEasy.y + btnEasy.h then
         playButtonSound()
         _G.difficulty = "easy"
@@ -123,7 +120,6 @@ function difficulty.touchpressed(id, x, y)
         return
     end
 
-    -- Normal
     if x >= btnNormal.x and x <= btnNormal.x + btnNormal.w and y >= btnNormal.y and y <= btnNormal.y + btnNormal.h then
         playButtonSound()
         _G.difficulty = "normal"
@@ -131,7 +127,6 @@ function difficulty.touchpressed(id, x, y)
         return
     end
 
-    -- Hard
     if x >= btnHard.x and x <= btnHard.x + btnHard.w and y >= btnHard.y and y <= btnHard.y + btnHard.h then
         playButtonSound()
         _G.difficulty = "hard"
