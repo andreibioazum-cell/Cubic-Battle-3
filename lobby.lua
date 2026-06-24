@@ -150,9 +150,8 @@ function lobby.draw()
     drawSpacedText("Cubic Battle", 0, love.graphics.getHeight()/2 - 180*scale, w, "center", fontTitle)
     drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 80*scale, w, "center", fontSub)
 
-    -- Отрисовка всех кнопок
     for name, btn in pairs(btns) do
-        local label = name:gsub("^%l", string.upper)  -- Первая заглавная
+        local label = name:gsub("^%l", string.upper)
         love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
         love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
         love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -167,7 +166,7 @@ end
 function lobby.touchpressed(id, x, y)
     if x >= btns.play.x and x <= btns.play.x + btns.play.w and y >= btns.play.y and y <= btns.play.y + btns.play.h then
         playButtonSound()
-        GameState.current = "game"
+        GameState.current = "mode_select"   -- <-- теперь ведёт на выбор режима
     elseif x >= btns.shop.x and x <= btns.shop.x + btns.shop.w and y >= btns.shop.y and y <= btns.shop.y + btns.shop.h then
         playButtonSound()
         GameState.current = "shop"
