@@ -24,7 +24,7 @@ function installer.getInstructions()
     elseif os == "Linux" then
         msg = msg .. "Install luarocks and run:\nluarocks install luasocket\n"
         msg = msg .. "Or copy 'socket' and 'mime' folders into the game directory."
-    else -- macOS
+    else
         msg = msg .. "Luasocket is not available on this platform.\n"
         msg = msg .. "Multiplayer is only supported on Windows/Linux."
     end
