@@ -149,11 +149,6 @@ function love.update(dt)
             if mode_select.load then mode_select.load() end
         elseif GameState.current == "game" then
             if game.load then game.load() end
-        elseif GameState.current == "multiplayer" then
-            if multiplayer.load then 
-                local mode = GameState.multiplayerMode or "client"
-                multiplayer.load(mode)
-            end
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -169,6 +164,7 @@ function love.update(dt)
     elseif GameState.current == "mode_select" then
         -- ничего
     elseif GameState.current == "game" then
+        game.update(dt)   -- <-- добавлен вызов обновления игры
         controls.update(dt)
         if shotCooldown > 0 then
             shotCooldown = shotCooldown - dt
@@ -178,6 +174,8 @@ function love.update(dt)
             game.spawnPlayerBullet(dx, dy)
             shotCooldown = SHOT_DELAY
         end
+    end   -- закрываем if-elseif
+end   -- закрываем love.update
 
 function love.draw()
     if GameState.current == "lobby" then
@@ -209,14 +207,12 @@ end
 function love.keypressed(key)
     if GameState.current == "game" then
         controls.keypressed(key)
-    elseif GameState.current == "multiplayer" then
-        multiplayer.keypressed(key)
     elseif GameState.current == "settings" then
         settings.keypressed(key)
     end
 
     if key == "escape" then
-        if GameState.current == "game" or GameState.current == "multiplayer" then
+        if GameState.current == "game" then
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "mode_select" then
@@ -234,8 +230,6 @@ end
 function love.keyreleased(key)
     if GameState.current == "game" then
         controls.keyreleased(key)
-    elseif GameState.current == "multiplayer" then
-        multiplayer.keyreleased(key)
     end
 end
 
@@ -253,8 +247,6 @@ local function dispatch(fn, id, x, y)
         mode_select[fn](id, x, y)
     elseif s == "game" and game[fn] then
         game[fn](id, x, y)
-    elseif s == "multiplayer" and multiplayer[fn] then
-        multiplayer[fn](id, x, y)
     elseif s == "shop" and shop[fn] then
         if fn == "touchpressed" then
             local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
@@ -280,7 +272,7 @@ function love.touchpressed(id, x, y)
     if now - lastTap < 0.05 then return end
     lastTap = now
 
-    if GameState.current == "game" or GameState.current == "multiplayer" then
+    if GameState.current == "game" then
         controls.touchpressed(id, x, y)
     end
 
@@ -288,7 +280,7 @@ function love.touchpressed(id, x, y)
 end
 
 function love.touchmoved(id, x, y)
-    if GameState.current == "game" or GameState.current == "multiplayer" then
+    if GameState.current == "game" then
         controls.touchmoved(id, x, y)
     end
     dispatch("touchmoved", id, x, y)
@@ -299,7 +291,8 @@ function love.touchreleased(id, x, y)
         local shot, dx, dy = controls.touchreleased(id)
         if shot and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
-    end
+        end   -- закрываем внутренний if
+    end   -- закрываем внешний if
     dispatch("touchreleased", id, x, y)
 end
 
