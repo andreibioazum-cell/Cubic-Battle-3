@@ -1,5 +1,6 @@
 local enemy = {}
 
+-- Параметры по умолчанию (NORMAL)
 local SIZE = 55
 local SPEED = 140
 local SIGHT = 650
@@ -28,6 +29,29 @@ local dodgeTimer = 0
 local lastDodgeTime = 0
 local reactionTimer = 0
 local currentDodgeDir = 1
+
+-- Функция установки сложности
+function enemy.setDifficulty(diff)
+    if diff == "easy" then
+        SPEED = 80
+        SHOOT_CD = 1.8
+        BULLET_SPEED = 160
+        MAX_HP = 6
+    elseif diff == "hard" then
+        SPEED = 200
+        SHOOT_CD = 0.8
+        BULLET_SPEED = 280
+        MAX_HP = 14
+    else -- normal
+        SPEED = 140
+        SHOOT_CD = 1.2
+        BULLET_SPEED = 220
+        MAX_HP = 10
+    end
+    -- сбрасываем врага, чтобы он пересоздался с новыми параметрами
+    e = nil
+    timer = 0
+end
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(eBullets, {
