@@ -1,6 +1,6 @@
- function love.conf(t)
+function love.conf(t)
     t.identity = "cubicbattle"
-    t.version = "11.5"
+    t.version = "12.0"
     t.window.title = "Cubic Battle"
     t.window.fullscreen = true
     t.window.borderless = true
