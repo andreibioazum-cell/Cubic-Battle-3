@@ -60,7 +60,14 @@ function playButtonSound()
 end
 
 -- ========== СОХРАНЕНИЕ ==========
-SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true, sfxOn = true }
+SAVE_DATA = { 
+    coins = 0, 
+    ownedSkins = {}, 
+    equippedSkin = "NONE", 
+    musicOn = true, 
+    sfxOn = true,
+    nickname = "Player"
+}
 local SAVE_FILE = "data.txt"
 
 function SAVE_SAVE()
@@ -69,7 +76,8 @@ function SAVE_SAVE()
                     ownedStr .. "\n" ..
                     SAVE_DATA.equippedSkin .. "\n" ..
                     tostring(musicOn and 1 or 0) .. "\n" ..
-                    tostring(sfxOn and 1 or 0)
+                    tostring(sfxOn and 1 or 0) .. "\n" ..
+                    (SAVE_DATA.nickname or "Player")
     local success, err = pcall(function()
         love.filesystem.write(SAVE_FILE, content)
     end)
@@ -83,14 +91,14 @@ end
 local function loadSave()
     local info = love.filesystem.getInfo(SAVE_FILE)
     if not info then
-        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE" }
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
         musicOn = true
         sfxOn = true
         return
     end
     local data, err = love.filesystem.read(SAVE_FILE)
     if not data then
-        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE" }
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
         musicOn = true
         sfxOn = true
         return
@@ -104,6 +112,7 @@ local function loadSave()
     local equippedSkin = lines[3] or "NONE"
     local musicVal = tonumber(lines[4]) or 1
     local sfxVal = tonumber(lines[5]) or 1
+    local nickname = lines[6] or "Player"
 
     local ownedSkins = {}
     if ownedStr ~= "" then
@@ -111,10 +120,15 @@ local function loadSave()
             table.insert(ownedSkins, name)
         end
     end
-    SAVE_DATA = { coins = coins, ownedSkins = ownedSkins, equippedSkin = equippedSkin }
+    SAVE_DATA = { 
+        coins = coins, 
+        ownedSkins = ownedSkins, 
+        equippedSkin = equippedSkin,
+        nickname = nickname
+    }
     musicOn = musicVal == 1
     sfxOn = sfxVal == 1
-    print("Загружено: coins=" .. coins .. ", owned=" .. ownedStr .. ", equipped=" .. equippedSkin)
+    print("Загружено: coins=" .. coins .. ", owned=" .. ownedStr .. ", equipped=" .. equippedSkin .. ", nick=" .. nickname)
 end
 
 -- ========== LOVE CALLBACKS ==========
@@ -137,7 +151,10 @@ function love.update(dt)
         elseif GameState.current == "game" then
             if game.load then game.load() end
         elseif GameState.current == "multiplayer" then
-            if multiplayer.load then multiplayer.load() end
+            if multiplayer.load then 
+                local mode = GameState.multiplayerMode or "client"
+                multiplayer.load(mode)
+            end
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -203,7 +220,10 @@ function love.keypressed(key)
         controls.keypressed(key)
     elseif GameState.current == "multiplayer" then
         multiplayer.keypressed(key)
+    elseif GameState.current == "settings" then
+        settings.keypressed(key)
     end
+
     if key == "escape" then
         if GameState.current == "game" or GameState.current == "multiplayer" then
             GameState.current = "lobby"
@@ -225,6 +245,12 @@ function love.keyreleased(key)
         controls.keyreleased(key)
     elseif GameState.current == "multiplayer" then
         multiplayer.keyreleased(key)
+    end
+end
+
+function love.textinput(t)
+    if GameState.current == "settings" and settings.textinput then
+        settings.textinput(t)
     end
 end
 
