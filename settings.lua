@@ -11,6 +11,55 @@ local tempIP = ""
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
+-- ===== ФУНКЦИЯ ОЧИСТКИ UTF-8 (без внешних зависимостей) =====
+local function sanitize(str)
+    if not str then return "" end
+    local result = ""
+    local i = 1
+    while i <= #str do
+        local b = str:byte(i)
+        if b < 0x80 then
+            if b >= 32 and b <= 126 then
+                result = result .. string.char(b)
+            else
+                result = result .. " "
+            end
+            i = i + 1
+        elseif b >= 0xC2 and b <= 0xDF then
+            local b2 = str:byte(i+1)
+            if b2 and b2 >= 0x80 and b2 <= 0xBF then
+                result = result .. string.char(b, b2)
+            else
+                result = result .. "?"
+            end
+            i = i + 2
+        elseif b >= 0xE0 and b <= 0xEF then
+            local b2 = str:byte(i+1)
+            local b3 = str:byte(i+2)
+            if b2 and b3 and b2 >= 0x80 and b2 <= 0xBF and b3 >= 0x80 and b3 <= 0xBF then
+                result = result .. string.char(b, b2, b3)
+            else
+                result = result .. "?"
+            end
+            i = i + 3
+        elseif b >= 0xF0 and b <= 0xF4 then
+            local b2 = str:byte(i+1)
+            local b3 = str:byte(i+2)
+            local b4 = str:byte(i+3)
+            if b2 and b3 and b4 and b2 >= 0x80 and b2 <= 0xBF and b3 >= 0x80 and b3 <= 0xBF and b4 >= 0x80 and b4 <= 0xBF then
+                result = result .. string.char(b, b2, b3, b4)
+            else
+                result = result .. "?"
+            end
+            i = i + 4
+        else
+            result = result .. "?"
+            i = i + 1
+        end
+    end
+    return result
+end
+
 local function getScale()
     local w, h = love.graphics.getDimensions()
     local base = 1000
@@ -20,6 +69,7 @@ end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
+    text = sanitize(text)
     love.graphics.setFont(font)
     local tw = font:getWidth(text)
     local startX = x
@@ -33,23 +83,6 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX + shadow, y + shadow)
     love.graphics.setColor(1, 1, 1, alpha)
     love.graphics.print(text, startX, y)
-end
-
--- Функция для проверки, является ли строка валидным UTF-8
-local function isValidUTF8(str)
-    -- Простая проверка: попытка сконвертировать в UTF-8 и обратно
-    -- В Lua 5.3+ можно использовать utf8.len, но в LÖVE 11.5 используется Lua 5.3, так что есть utf8
-    local ok, _ = pcall(utf8.len, str)
-    return ok
-end
-
--- Функция для очистки ника (оставляем только буквы, цифры, пробел, подчёркивание, дефис)
-local function sanitizeNick(str)
-    if not str then return "Player" end
-    -- Заменяем все недопустимые символы на пустую строку
-    local cleaned = str:gsub("[^%w%s_%-]", "")
-    if cleaned == "" then cleaned = "Player" end
-    return cleaned
 end
 
 function settings.load()
@@ -76,26 +109,11 @@ function settings.load()
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 
-    -- Проверяем ник на валидность UTF-8 и очищаем
-    local nick = SAVE_DATA.nickname or "Player"
-    if not isValidUTF8(nick) then
-        nick = "Player"
-        SAVE_DATA.nickname = nick
-        SAVE_SAVE()
+    if SAVE_DATA.nickname then
+        SAVE_DATA.nickname = sanitize(SAVE_DATA.nickname)
     end
-    -- Очищаем от недопустимых символов
-    nick = sanitizeNick(nick)
-    SAVE_DATA.nickname = nick
-    tempNick = nick
-
-    -- IP обычно только цифры и точки, но на всякий случай тоже проверим
-    local ip = SAVE_DATA.serverIP or "127.0.0.1"
-    if not isValidUTF8(ip) then
-        ip = "127.0.0.1"
-        SAVE_DATA.serverIP = ip
-        SAVE_SAVE()
-    end
-    tempIP = ip
+    tempNick = SAVE_DATA.nickname or "Player"
+    tempIP = SAVE_DATA.serverIP or "127.0.0.1"
 end
 
 function settings.resize()
@@ -112,14 +130,10 @@ function settings.draw()
 
     drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, nil, 1)
 
-    -- Ник (с очисткой перед отображением)
     local currentNick = SAVE_DATA.nickname or "Player"
-    currentNick = sanitizeNick(currentNick)  -- дополнительная защита
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(fontBtn)
-    -- Используем love.graphics.print с координатами вместо printf, чтобы избежать проблем с UTF-8
-    -- Но printf тоже должен работать, если строка валидна
-    love.graphics.printf("Nickname: " .. currentNick, 0, btnNick.y - 60*scale, w, "center")
+    love.graphics.printf("Nickname: " .. sanitize(currentNick), 0, btnNick.y - 60*scale, w, "center")
 
     local label = enteringNick and "Press ENTER to save" or "Change Nickname"
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
@@ -133,14 +147,12 @@ function settings.draw()
 
     if enteringNick then
         love.graphics.setColor(1, 1, 0, 1)
-        love.graphics.printf("New nick: " .. sanitizeNick(tempNick) .. "|", 0, btnNick.y + 80*scale, w, "center")
+        love.graphics.printf("New nick: " .. sanitize(tempNick) .. "|", 0, btnNick.y + 80*scale, w, "center")
     end
 
-    -- IP сервера
     local currentIP = SAVE_DATA.serverIP or "127.0.0.1"
-    if not isValidUTF8(currentIP) then currentIP = "127.0.0.1" end
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("Server IP: " .. currentIP, 0, btnIP.y - 60*scale, w, "center")
+    love.graphics.printf("Server IP: " .. sanitize(currentIP), 0, btnIP.y - 60*scale, w, "center")
 
     local labelIP = enteringIP and "Press ENTER to save" or "Change Server IP"
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
@@ -154,10 +166,9 @@ function settings.draw()
 
     if enteringIP then
         love.graphics.setColor(1, 1, 0, 1)
-        love.graphics.printf("New IP: " .. tempIP .. "|", 0, btnIP.y + 80*scale, w, "center")
+        love.graphics.printf("New IP: " .. sanitize(tempIP) .. "|", 0, btnIP.y + 80*scale, w, "center")
     end
 
-    -- Back
     love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.35, 0.15, 0.75, 1)
@@ -197,15 +208,13 @@ function settings.touchpressed(id, x, y)
 end
 
 function settings.textinput(t)
+    t = sanitize(t)
     if enteringNick then
-        -- Разрешаем только буквы, цифры, пробел, подчёркивание, дефис
-        local filtered = t:gsub("[^%w%s_%-]", "")
-        tempNick = tempNick .. filtered
+        tempNick = tempNick .. t
         if #tempNick > 20 then tempNick = tempNick:sub(1, 20) end
     elseif enteringIP then
-        -- Для IP разрешаем цифры, точки, двоеточие (для IPv6)
-        local filtered = t:gsub("[^%d%.%:]", "")
-        tempIP = tempIP .. filtered
+        t = t:gsub("[^%d%.]", "")
+        tempIP = tempIP .. t
         if #tempIP > 15 then tempIP = tempIP:sub(1, 15) end
     end
 end
@@ -214,8 +223,7 @@ function settings.keypressed(key)
     if enteringNick then
         if key == "return" or key == "kpenter" then
             if #tempNick > 0 then
-                local cleaned = sanitizeNick(tempNick)
-                SAVE_DATA.nickname = cleaned
+                SAVE_DATA.nickname = sanitize(tempNick)
                 SAVE_SAVE()
             end
             enteringNick = false
