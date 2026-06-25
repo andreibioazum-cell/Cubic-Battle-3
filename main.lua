@@ -6,7 +6,7 @@ local shop = require("shop")
 local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
-local difficulty = require("difficulty")   -- новый модуль
+local difficulty = require("difficulty")
 
 GameState = { current = "lobby" }
 
@@ -216,7 +216,10 @@ function love.keypressed(key)
     if GameState.current == "game" then
         controls.keypressed(key)
     elseif GameState.current == "settings" then
-        settings.keypressed(key)
+        -- проверяем, существует ли функция keypressed в модуле settings
+        if settings.keypressed then
+            settings.keypressed(key)
+        end
     end
 
     if key == "escape" then
