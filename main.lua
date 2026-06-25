@@ -59,63 +59,68 @@ function playButtonSound()
     end
 end
 
--- ===== НОВОЕ: звуки выстрела и попадания =====
+-- ===== ЗВУКИ ВЫСТРЕЛА И ПОПАДАНИЯ (ИЗ ФАЙЛОВ) =====
 local shootSound = nil
 local hitSound = nil
 
 function playShootSound()
     if not sfxOn then return end
+    
+    -- Если звук ещё не загружен – загружаем
     if not shootSound then
-        local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
-        if ok and source then
-            shootSound = source
-            shootSound:setVolume(0.4)
+        -- Проверяем, существует ли файл
+        local info = love.filesystem.getInfo("The_Sound_Of_A_Gunshot.mp3")
+        if info then
+            local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
+            if ok and source then
+                shootSound = source
+                shootSound:setVolume(0.4)
+            else
+                print("Ошибка загрузки The_Sound_Of_A_Gunshot.mp3")
+                return
+            end
         else
-            print("Звук выстрела не загружен")
+            print("Файл The_Sound_Of_A_Gunshot.mp3 не найден!")
             return
         end
     end
+    
+    -- Воспроизводим
     shootSound:stop()
     shootSound:play()
 end
 
 function playHitSound()
     if not sfxOn then return end
-    -- Если у вас есть отдельный файл для попадания, замените "hit.mp3" на его имя
-    -- Если нет, можно использовать тот же выстрел с меньшей громкостью
+    
+    -- Если звук попадания ещё не загружен – пробуем загрузить hit.mp3
     if not hitSound then
-        local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")  -- или "The_Sound_Of_A_Gunshot.mp3"
-        if ok and source then
-            hitSound = source
-            hitSound:setVolume(0.3)
-        else
-            print("Звук попадания не загружен, используем выстрел")
-            -- fallback на выстрел
-            if not shootSound then
-                local ok2, src2 = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
-                if ok2 and src2 then
-                    hitSound = src2
-                    hitSound:setVolume(0.3)
-                end
+        local info = love.filesystem.getInfo("hit.mp3")
+        if info then
+            local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")
+            if ok and source then
+                hitSound = source
+                hitSound:setVolume(0.3)
             else
-                hitSound = shootSound  -- используем один источник
+                print("Ошибка загрузки hit.mp3")
+                return
             end
+        else
+            -- Если нет hit.mp3, то используем тот же звук выстрела (или ничего не делаем)
+            print("hit.mp3 не найден, звук попадания отключён")
+            return
         end
     end
-    if hitSound then
-        hitSound:stop()
-        hitSound:play()
-    end
+    
+    hitSound:stop()
+    hitSound:play()
 end
 
--- Делаем функции доступными глобально (для вызова из game и enemy)
+-- Делаем функции доступными глобально
 _G.playShootSound = playShootSound
 _G.playHitSound = playHitSound
-
--- Также передаём их в модуль game, чтобы он мог вызывать их локально (опционально)
 game.playShootSound = playShootSound
 game.playHitSound = playHitSound
--- ===========================================
 
 -- ========== СОХРАНЕНИЕ ==========
 SAVE_DATA = { 
