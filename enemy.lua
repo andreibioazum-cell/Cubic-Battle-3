@@ -53,7 +53,6 @@ function enemy.setDifficulty(diff)
         BULLET_SPEED = 220
         MAX_HP = 10
     end
-    -- сбрасываем врага, чтобы он пересоздался с новыми параметрами
     e = nil
     timer = 0
 end
@@ -66,6 +65,10 @@ local function spawnBullet(x, y, dx, dy)
         dirX = dx, dirY = dy,
         life = 3
     })
+    -- ===== НОВОЕ: звук выстрела врага =====
+    if _G.playShootSound then
+        _G.playShootSound()
+    end
 end
 
 local function spawn(px, py)
@@ -133,22 +136,20 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
     local dist = math.sqrt(dx * dx + dy * dy) + 0.0001
     local nx, ny = dx / dist, dy / dist
 
-    -- ===== НОВАЯ ЛОГИКА: если враг слишком далеко, возвращаем его ближе =====
-    local MAX_DIST_FROM_PLAYER = SIGHT * 2.5   -- можно подобрать по вкусу
+    -- Ограничение, чтобы враг не убегал слишком далеко
+    local MAX_DIST_FROM_PLAYER = SIGHT * 2.5
     if dist > MAX_DIST_FROM_PLAYER then
-        -- телепортируем на расстояние SIGHT от игрока в случайном направлении
         local angle = math.random() * math.pi * 2
         local newDist = SIGHT * 0.8
         e.x = px + math.cos(angle) * newDist
         e.y = py + math.sin(angle) * newDist
-        -- пересчитываем дистанцию и векторы после телепортации
         dx = px - e.x
         dy = py - e.y
         dist = math.sqrt(dx * dx + dy * dy) + 0.0001
         nx, ny = dx / dist, dy / dist
     end
 
-    -- Логика уклонения (без изменений)
+    -- Логика уклонения
     if e.dodgeCooldown > 0 then
         e.dodgeCooldown = e.dodgeCooldown - dt
     end
@@ -257,17 +258,12 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         end
     end
 
-    -- ===== СТАРОЕ ОГРАНИЧЕНИЕ ПО ЭКРАНУ УБРАНО =====
-    -- раньше здесь было:
-    -- local w, h = love.graphics.getDimensions()
-    -- local margin = 50
-    -- e.x = math.max(margin, math.min(w - margin, e.x))
-    -- e.y = math.max(margin, math.min(h - margin, e.y))
-    -- Теперь враг может уходить за края экрана.
+    -- Враг может выходить за экран, ограничений нет.
 
     e.angle = math.atan2(dy, dx) + math.pi / 2
     e.hit = math.max(0, e.hit - dt * 3)
 
+    -- Обработка попаданий по врагу
     local eHP = e.hp
     for i = #playerBullets, 1, -1 do
         local b = playerBullets[i]
@@ -276,10 +272,14 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         if bx * bx + by * by <= (SIZE * 0.55) ^ 2 then
             eHP = eHP - 1
             e.hit = 1
+            -- ===== НОВОЕ: звук попадания по врагу =====
+            if _G.playHitSound then
+                _G.playHitSound()
+            end
             table.remove(playerBullets, i)
             if eHP <= 0 then
                 e = nil
-                return true
+                return true  -- враг убит
             end
         end
     end
