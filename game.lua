@@ -35,6 +35,10 @@ local function spawnBullet(x, y, dx, dy)
         dirX = dx, dirY = dy,
         life = 3
     })
+    -- ===== НОВОЕ: воспроизводим звук выстрела =====
+    if _G.playShootSound then
+        _G.playShootSound()
+    end
 end
 
 local function drawHPBar(x, y, w, h, hp, max, color)
@@ -57,6 +61,10 @@ local function onHitPlayer(dmg)
     end
     cube.hp = cube.hp - dmg
     cube.hit = 1
+    -- ===== НОВОЕ: звук попадания по игроку =====
+    if _G.playHitSound then
+        _G.playHitSound()
+    end
     if cube.hp <= 0 then
         cube.hp = 0
         dead = true
@@ -168,6 +176,7 @@ function game.update(dt)
         end
     end
 
+    -- Враг обновляется и внутри себя обрабатывает попадания пуль игрока (там же вызывается звук попадания)
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
         local reward = 10
@@ -184,6 +193,7 @@ function game.update(dt)
         return
     end
 
+    -- Проверка попадания вражеских пуль в игрока (звук попадания уже вызывается внутри onHitPlayer)
     local eBullets = enemy.getBullets()
     for i = #eBullets, 1, -1 do
         local b = eBullets[i]
@@ -270,7 +280,6 @@ function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.printf("HP " .. math.max(0, cube.hp) .. " / " .. PLAYER_HP_MAX, px, py + 22, barW, "left")
 
-    -- Отображение сложности
     local diffText = "NORMAL"
     if currentDifficulty == "easy" then diffText = "EASY" end
     if currentDifficulty == "hard" then diffText = "HARD" end
@@ -291,7 +300,6 @@ function game.draw()
         end
     end
 
-    -- Отображение HP врага с правильным максимумом
     local e, _, enemyMaxHP = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
