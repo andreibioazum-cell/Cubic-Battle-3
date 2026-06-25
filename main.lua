@@ -59,6 +59,64 @@ function playButtonSound()
     end
 end
 
+-- ===== НОВОЕ: звуки выстрела и попадания =====
+local shootSound = nil
+local hitSound = nil
+
+function playShootSound()
+    if not sfxOn then return end
+    if not shootSound then
+        local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
+        if ok and source then
+            shootSound = source
+            shootSound:setVolume(0.4)
+        else
+            print("Звук выстрела не загружен")
+            return
+        end
+    end
+    shootSound:stop()
+    shootSound:play()
+end
+
+function playHitSound()
+    if not sfxOn then return end
+    -- Если у вас есть отдельный файл для попадания, замените "hit.mp3" на его имя
+    -- Если нет, можно использовать тот же выстрел с меньшей громкостью
+    if not hitSound then
+        local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")  -- или "The_Sound_Of_A_Gunshot.mp3"
+        if ok and source then
+            hitSound = source
+            hitSound:setVolume(0.3)
+        else
+            print("Звук попадания не загружен, используем выстрел")
+            -- fallback на выстрел
+            if not shootSound then
+                local ok2, src2 = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
+                if ok2 and src2 then
+                    hitSound = src2
+                    hitSound:setVolume(0.3)
+                end
+            else
+                hitSound = shootSound  -- используем один источник
+            end
+        end
+    end
+    if hitSound then
+        hitSound:stop()
+        hitSound:play()
+    end
+end
+
+-- Делаем функции доступными глобально (для вызова из game и enemy)
+_G.playShootSound = playShootSound
+_G.playHitSound = playHitSound
+
+-- Также передаём их в модуль game, чтобы он мог вызывать их локально (опционально)
+game.playShootSound = playShootSound
+game.playHitSound = playHitSound
+-- ===========================================
+
 -- ========== СОХРАНЕНИЕ ==========
 SAVE_DATA = { 
     coins = 0, 
@@ -216,7 +274,6 @@ function love.keypressed(key)
     if GameState.current == "game" then
         controls.keypressed(key)
     elseif GameState.current == "settings" then
-        -- проверяем, существует ли функция keypressed в модуле settings
         if settings.keypressed then
             settings.keypressed(key)
         end
