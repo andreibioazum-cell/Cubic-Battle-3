@@ -251,7 +251,7 @@ function controls.draw()
         love.graphics.push()
         love.graphics.translate(atk.x, atk.y)
         love.graphics.scale(textScale, textScale)
-        drawSpacedText("Shot", -atk.r, -16 * scale, atk.r * 2, "center", font, nil, textAlpha)
+        drawSpacedText("A", -atk.r, -16 * scale, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
         -- Кнопка способности
@@ -266,7 +266,7 @@ function controls.draw()
 
             love.graphics.setFont(font)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.printf("Super", ability.x - abR/2, ability.y - 16 * scale, abR * 2, "center")
+            love.graphics.printf("C", ability.x - abR/2, ability.y - 16 * scale, abR * 2, "center")
         end
     end
 
