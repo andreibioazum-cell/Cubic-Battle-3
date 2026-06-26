@@ -66,29 +66,28 @@ local hitSound = nil
 function playShootSound()
     if not sfxOn then return end
 
-    -- Загружаем шаблон один раз
+    -- Загружаем шаблон один раз (теперь .wav)
     if not shootSound then
-        local info = love.filesystem.getInfo("The_Sound_Of_A_Gunshot.mp3")
+        local info = love.filesystem.getInfo("The_Sound_Of_A_Gunshot.wav")   -- ★ WAV
         if info then
-            local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
+            local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.wav", "static")   -- ★ WAV
             if ok and source then
                 shootSound = source
-                shootSound:setVolume(1.0)   -- ★ громкость увеличена до 1.0
+                shootSound:setVolume(1.0)
             else
-                print("Ошибка загрузки The_Sound_Of_A_Gunshot.mp3")
+                print("Ошибка загрузки The_Sound_Of_A_Gunshot.wav")
                 return
             end
         else
-            print("Файл The_Sound_Of_A_Gunshot.mp3 не найден!")
+            print("Файл The_Sound_Of_A_Gunshot.wav не найден!")
             return
         end
     end
 
-    -- ★ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: создаём клон и воспроизводим его
+    -- Создаём клон и воспроизводим (наложение)
     local clone = shootSound:clone()
-    clone:setVolume(1.0)  -- можно также установить громкость, если нужно
+    clone:setVolume(1.0)
     clone:play()
-    -- Клон будет автоматически удалён после завершения
 end
 
 function playHitSound()
@@ -100,7 +99,7 @@ function playHitSound()
             local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")
             if ok and source then
                 hitSound = source
-                hitSound:setVolume(0.3)   -- можно тоже увеличить, если нужно
+                hitSound:setVolume(0.3)
             else
                 print("Ошибка загрузки hit.mp3")
                 return
@@ -111,12 +110,7 @@ function playHitSound()
         end
     end
 
-    -- Для попадания тоже можно сделать клонирование, но пока оставляем как было
-    -- (если хотите наложение, раскомментируйте строки ниже и закомментируйте старые)
-    -- local clone = hitSound:clone()
-    -- clone:setVolume(0.3)
-    -- clone:play()
-
+    -- Можно тоже сделать клон, если нужно наложение, но пока оставляем как есть
     hitSound:stop()
     hitSound:play()
 end
