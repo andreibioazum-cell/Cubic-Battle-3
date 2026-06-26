@@ -254,19 +254,32 @@ function controls.draw()
         drawSpacedText("A", -atk.r, -16 * scale, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
-        -- Кнопка способности
+        -- Кнопка способности (с тенью)
         if abilityAvailable then
             local abPress = ability.press
             local abR = ability.r * (1 - abPress * 0.12)
+
+            -- ★ ТЕНЬ КНОПКИ
+            love.graphics.setColor(0, 0, 0, 0.3)
+            love.graphics.circle("fill", ability.x + 4 * scale, ability.y + 6 * scale, abR)
+
+            -- Основная кнопка
             love.graphics.setColor(0.8, 0.2, 0.9, 1)
             love.graphics.circle("fill", ability.x, ability.y, abR)
             love.graphics.setColor(0, 0, 0, 1)
             love.graphics.setLineWidth(3.8 * scale)
             love.graphics.circle("line", ability.x, ability.y, abR)
 
+            -- Текст "C" с тенью
             love.graphics.setFont(font)
+            local tw = font:getWidth("C")
+            local th = font:getHeight()
+            local tx = ability.x - tw/2
+            local ty = ability.y - th/2
+            love.graphics.setColor(0, 0, 0, 0.5)
+            love.graphics.print("C", tx + 2, ty + 2)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.printf("C", ability.x - abR/2, ability.y - 16 * scale, abR * 2, "center")
+            love.graphics.print("C", tx, ty)
         end
     end
 
