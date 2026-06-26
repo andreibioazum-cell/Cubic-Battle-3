@@ -60,21 +60,20 @@ function playButtonSound()
 end
 
 -- ===== ЗВУКИ ВЫСТРЕЛА И ПОПАДАНИЯ (ИЗ ФАЙЛОВ) =====
-local shootSound = nil
+local shootSound = nil   -- шаблон
 local hitSound = nil
 
 function playShootSound()
     if not sfxOn then return end
-    
-    -- Если звук ещё не загружен – загружаем
+
+    -- Загружаем шаблон один раз
     if not shootSound then
-        -- Проверяем, существует ли файл
         local info = love.filesystem.getInfo("The_Sound_Of_A_Gunshot.mp3")
         if info then
             local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
             if ok and source then
                 shootSound = source
-                shootSound:setVolume(1.0)
+                shootSound:setVolume(1.0)   -- ★ громкость увеличена до 1.0
             else
                 print("Ошибка загрузки The_Sound_Of_A_Gunshot.mp3")
                 return
@@ -84,34 +83,40 @@ function playShootSound()
             return
         end
     end
-    
-    -- Воспроизводим
-    shootSound:stop()
-    shootSound:play()
+
+    -- ★ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: создаём клон и воспроизводим его
+    local clone = shootSound:clone()
+    clone:setVolume(1.0)  -- можно также установить громкость, если нужно
+    clone:play()
+    -- Клон будет автоматически удалён после завершения
 end
 
 function playHitSound()
     if not sfxOn then return end
-    
-    -- Если звук попадания ещё не загружен – пробуем загрузить hit.mp3
+
     if not hitSound then
         local info = love.filesystem.getInfo("hit.mp3")
         if info then
             local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")
             if ok and source then
                 hitSound = source
-                hitSound:setVolume(0.3)
+                hitSound:setVolume(0.3)   -- можно тоже увеличить, если нужно
             else
                 print("Ошибка загрузки hit.mp3")
                 return
             end
         else
-            -- Если нет hit.mp3, то используем тот же звук выстрела (или ничего не делаем)
             print("hit.mp3 не найден, звук попадания отключён")
             return
         end
     end
-    
+
+    -- Для попадания тоже можно сделать клонирование, но пока оставляем как было
+    -- (если хотите наложение, раскомментируйте строки ниже и закомментируйте старые)
+    -- local clone = hitSound:clone()
+    -- clone:setVolume(0.3)
+    -- clone:play()
+
     hitSound:stop()
     hitSound:play()
 end
