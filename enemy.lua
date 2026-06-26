@@ -65,7 +65,6 @@ local function spawnBullet(x, y, dx, dy)
         dirX = dx, dirY = dy,
         life = 3
     })
-    -- ===== НОВОЕ: звук выстрела врага =====
     if _G.playShootSound then
         _G.playShootSound()
     end
@@ -136,7 +135,6 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
     local dist = math.sqrt(dx * dx + dy * dy) + 0.0001
     local nx, ny = dx / dist, dy / dist
 
-    -- Ограничение, чтобы враг не убегал слишком далеко
     local MAX_DIST_FROM_PLAYER = SIGHT * 2.5
     if dist > MAX_DIST_FROM_PLAYER then
         local angle = math.random() * math.pi * 2
@@ -149,7 +147,6 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         nx, ny = dx / dist, dy / dist
     end
 
-    -- Логика уклонения
     if e.dodgeCooldown > 0 then
         e.dodgeCooldown = e.dodgeCooldown - dt
     end
@@ -258,12 +255,9 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         end
     end
 
-    -- Враг может выходить за экран, ограничений нет.
-
     e.angle = math.atan2(dy, dx) + math.pi / 2
     e.hit = math.max(0, e.hit - dt * 3)
 
-    -- Обработка попаданий по врагу
     local eHP = e.hp
     for i = #playerBullets, 1, -1 do
         local b = playerBullets[i]
@@ -272,14 +266,13 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         if bx * bx + by * by <= (SIZE * 0.55) ^ 2 then
             eHP = eHP - 1
             e.hit = 1
-            -- ===== НОВОЕ: звук попадания по врагу =====
             if _G.playHitSound then
                 _G.playHitSound()
             end
             table.remove(playerBullets, i)
             if eHP <= 0 then
                 e = nil
-                return true  -- враг убит
+                return true
             end
         end
     end
@@ -306,8 +299,9 @@ function enemy.draw()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+-- ★ ИЗМЕНЕНИЕ: пули врага теперь чёрные
 function enemy.drawBullets()
-    love.graphics.setColor(1, 0.2, 0.2, 1)
+    love.graphics.setColor(0, 0, 0, 1)   -- чёрный цвет
     for _, b in ipairs(eBullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
