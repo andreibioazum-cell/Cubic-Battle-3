@@ -74,7 +74,7 @@ function playShootSound()
             local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.mp3", "static")
             if ok and source then
                 shootSound = source
-                shootSound:setVolume(0.4)
+                shootSound:setVolume(1.0)
             else
                 print("Ошибка загрузки The_Sound_Of_A_Gunshot.mp3")
                 return
