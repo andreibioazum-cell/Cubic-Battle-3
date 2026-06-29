@@ -1,4 +1,4 @@
--- main.lua – Cubic Battle 3 с Firebase
+-- main.lua для Cubic Battle 3
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -7,7 +7,6 @@ local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
 local difficulty = require("difficulty")
-local firebase = require("firebase")   -- <-- добавлено
 
 GameState = { current = "lobby" }
 
@@ -60,15 +59,18 @@ function playButtonSound()
     end
 end
 
-local shootSound = nil
+-- ===== ЗВУКИ ВЫСТРЕЛА И ПОПАДАНИЯ (ИЗ ФАЙЛОВ) =====
+local shootSound = nil   -- шаблон
 local hitSound = nil
 
 function playShootSound()
     if not sfxOn then return end
+
+    -- Загружаем шаблон один раз (теперь .wav)
     if not shootSound then
-        local info = love.filesystem.getInfo("The_Sound_Of_A_Gunshot.wav")
+        local info = love.filesystem.getInfo("The_Sound_Of_A_Gunshot.wav")   -- ★ WAV
         if info then
-            local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.wav", "static")
+            local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.wav", "static")   -- ★ WAV
             if ok and source then
                 shootSound = source
                 shootSound:setVolume(1.0)
@@ -81,6 +83,8 @@ function playShootSound()
             return
         end
     end
+
+    -- Создаём клон и воспроизводим (наложение)
     local clone = shootSound:clone()
     clone:setVolume(1.0)
     clone:play()
@@ -88,6 +92,7 @@ end
 
 function playHitSound()
     if not sfxOn then return end
+
     if not hitSound then
         local info = love.filesystem.getInfo("hit.mp3")
         if info then
@@ -104,29 +109,30 @@ function playHitSound()
             return
         end
     end
+
+    -- Можно тоже сделать клон, если нужно наложение, но пока оставляем как есть
     hitSound:stop()
     hitSound:play()
 end
 
+-- Делаем функции доступными глобально
 _G.playShootSound = playShootSound
 _G.playHitSound = playHitSound
 game.playShootSound = playShootSound
 game.playHitSound = playHitSound
 
--- ========== СОХРАНЕНИЕ (ЛОКАЛЬНОЕ + ОБЛАКО) ==========
-SAVE_DATA = {
-    coins = 0,
-    ownedSkins = {},
-    equippedSkin = "NONE",
-    musicOn = true,
+-- ========== СОХРАНЕНИЕ ==========
+SAVE_DATA = { 
+    coins = 0, 
+    ownedSkins = {}, 
+    equippedSkin = "NONE", 
+    musicOn = true, 
     sfxOn = true,
     nickname = "Player"
 }
 local SAVE_FILE = "data.txt"
 
--- Функция сохранения (локально + синхронизация с Firebase)
 function SAVE_SAVE()
-    -- Сохраняем локально
     local ownedStr = table.concat(SAVE_DATA.ownedSkins, ",")
     local content = tostring(SAVE_DATA.coins) .. "\n" ..
                     ownedStr .. "\n" ..
@@ -138,104 +144,61 @@ function SAVE_SAVE()
         love.filesystem.write(SAVE_FILE, content)
     end)
     if success then
-        print("Сохранено локально")
+        print("Сохранено: coins=" .. SAVE_DATA.coins .. ", owned=" .. ownedStr .. ", equipped=" .. SAVE_DATA.equippedSkin)
     else
-        print("Ошибка локального сохранения: " .. tostring(err))
-    end
-
-    -- Синхронизация с Firebase (если авторизованы)
-    if firebase.localId and firebase.idToken then
-        local dataToSave = {
-            coins = SAVE_DATA.coins,
-            ownedSkins = SAVE_DATA.ownedSkins,
-            equippedSkin = SAVE_DATA.equippedSkin,
-            nickname = SAVE_DATA.nickname
-        }
-        firebase.saveUserData(dataToSave, function(success)
-            if success then
-                print("Синхронизировано с Firebase")
-            else
-                print("Не удалось синхронизировать с Firebase")
-            end
-        end)
+        print("Ошибка сохранения: " .. tostring(err))
     end
 end
 
--- Загрузка сохранений (локально + облако)
 local function loadSave()
-    -- Локальная загрузка
     local info = love.filesystem.getInfo(SAVE_FILE)
-    if info then
-        local data, err = love.filesystem.read(SAVE_FILE)
-        if data then
-            local lines = {}
-            for line in data:gmatch("[^\r\n]+") do
-                table.insert(lines, line)
-            end
-            local coins = tonumber(lines[1]) or 0
-            local ownedStr = lines[2] or ""
-            local equippedSkin = lines[3] or "NONE"
-            local musicVal = tonumber(lines[4]) or 1
-            local sfxVal = tonumber(lines[5]) or 1
-            local nickname = lines[6] or "Player"
+    if not info then
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
+        musicOn = true
+        sfxOn = true
+        return
+    end
+    local data, err = love.filesystem.read(SAVE_FILE)
+    if not data then
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
+        musicOn = true
+        sfxOn = true
+        return
+    end
+    local lines = {}
+    for line in data:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+    local coins = tonumber(lines[1]) or 0
+    local ownedStr = lines[2] or ""
+    local equippedSkin = lines[3] or "NONE"
+    local musicVal = tonumber(lines[4]) or 1
+    local sfxVal = tonumber(lines[5]) or 1
+    local nickname = lines[6] or "Player"
 
-            local ownedSkins = {}
-            if ownedStr ~= "" then
-                for name in ownedStr:gmatch("[^,]+") do
-                    table.insert(ownedSkins, name)
-                end
-            end
-            SAVE_DATA.coins = coins
-            SAVE_DATA.ownedSkins = ownedSkins
-            SAVE_DATA.equippedSkin = equippedSkin
-            SAVE_DATA.nickname = nickname
-            musicOn = musicVal == 1
-            sfxOn = sfxVal == 1
-            print("Локальные данные загружены")
+    local ownedSkins = {}
+    if ownedStr ~= "" then
+        for name in ownedStr:gmatch("[^,]+") do
+            table.insert(ownedSkins, name)
         end
     end
-
-    -- Загрузка из Firebase (асинхронно)
-    if firebase.localId and firebase.idToken then
-        firebase.loadUserData(function(success, data)
-            if success and data and next(data) then
-                -- Обновляем локальные данные из облака (если они есть)
-                SAVE_DATA.coins = data.coins or SAVE_DATA.coins
-                SAVE_DATA.ownedSkins = data.ownedSkins or SAVE_DATA.ownedSkins
-                SAVE_DATA.equippedSkin = data.equippedSkin or SAVE_DATA.equippedSkin
-                SAVE_DATA.nickname = data.nickname or SAVE_DATA.nickname
-                print("Данные обновлены из Firebase")
-                SAVE_SAVE() -- перезаписываем локальный файл для синхронизации
-            else
-                -- Если в облаке нет данных, загружаем локальные в облако
-                firebase.saveUserData({
-                    coins = SAVE_DATA.coins,
-                    ownedSkins = SAVE_DATA.ownedSkins,
-                    equippedSkin = SAVE_DATA.equippedSkin,
-                    nickname = SAVE_DATA.nickname
-                }, function(ok) end)
-            end
-        end)
-    end
+    SAVE_DATA = { 
+        coins = coins, 
+        ownedSkins = ownedSkins, 
+        equippedSkin = equippedSkin,
+        nickname = nickname
+    }
+    musicOn = musicVal == 1
+    sfxOn = sfxVal == 1
+    print("Загружено: coins=" .. coins .. ", owned=" .. ownedStr .. ", equipped=" .. equippedSkin .. ", nick=" .. nickname)
 end
 
 -- ========== LOVE CALLBACKS ==========
 function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
+    loadSave()
     controls.load()
-
-    -- Анонимный вход в Firebase
-    firebase.signInAnonymously(function(success)
-        if success then
-            print("Анонимный вход выполнен. LocalId:", firebase.localId)
-            loadSave()  -- теперь загрузка из облака сработает
-            loadMusic()
-        else
-            print("Не удалось войти в Firebase, работаем офлайн")
-            loadSave() -- только локальная загрузка
-            loadMusic()
-        end
-    end)
+    loadMusic()
 end
 
 function love.update(dt)
@@ -263,6 +226,10 @@ function love.update(dt)
 
     if GameState.current == "lobby" then
         lobby.update(dt)
+    elseif GameState.current == "mode_select" then
+        -- ничего
+    elseif GameState.current == "difficulty" then
+        -- ничего
     elseif GameState.current == "game" then
         game.update(dt)
         controls.update(dt)
@@ -311,7 +278,9 @@ function love.keypressed(key)
     if GameState.current == "game" then
         controls.keypressed(key)
     elseif GameState.current == "settings" then
-        if settings.keypressed then settings.keypressed(key) end
+        if settings.keypressed then
+            settings.keypressed(key)
+        end
     end
 
     if key == "escape" then
@@ -383,6 +352,7 @@ function love.touchpressed(id, x, y)
     if GameState.current == "game" then
         controls.touchpressed(id, x, y)
     end
+
     dispatch("touchpressed", id, x, y)
 end
 
