@@ -30,7 +30,6 @@ local lastDodgeTime = 0
 local reactionTimer = 0
 local currentDodgeDir = 1
 
--- Функция установки сложности
 function enemy.setDifficulty(diff)
     if diff == "easy" then
         SPEED = 80
@@ -65,9 +64,7 @@ local function spawnBullet(x, y, dx, dy)
         dirX = dx, dirY = dy,
         life = 3
     })
-    if _G.playShootSound then
-        _G.playShootSound()
-    end
+    if _G.playShootSound then _G.playShootSound() end
 end
 
 local function spawn(px, py)
@@ -264,11 +261,10 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         local bx = b.x - e.x
         local by = b.y - e.y
         if bx * bx + by * by <= (SIZE * 0.55) ^ 2 then
-            eHP = eHP - 1
+            local dmg = b.damage or 1   -- ★ Учитываем урон
+            eHP = eHP - dmg
             e.hit = 1
-            if _G.playHitSound then
-                _G.playHitSound()
-            end
+            if _G.playHitSound then _G.playHitSound() end
             table.remove(playerBullets, i)
             if eHP <= 0 then
                 e = nil
@@ -299,9 +295,8 @@ function enemy.draw()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
--- ★ ИЗМЕНЕНИЕ: пули врага теперь чёрные
 function enemy.drawBullets()
-    love.graphics.setColor(0, 0, 0, 1)   -- чёрный цвет
+    love.graphics.setColor(0, 0, 0, 1)
     for _, b in ipairs(eBullets) do
         love.graphics.circle("fill", b.x, b.y, 8)
     end
