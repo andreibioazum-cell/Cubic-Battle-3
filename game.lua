@@ -12,7 +12,7 @@ local BULLET_SPEED = 340 * 1.15
 
 local cube = { x = 0, y = 0, speed = 260, angle = 0, hp = PLAYER_HP_MAX, hit = 0 }
 local bullets = {}
-local bg, playerImg, azumImg, nastyaImg, font
+local bg, playerImg, azumImg, nastyaImg, bukImg, font
 local cam = { x = 0, y = 0 }
 local dead = false
 
@@ -20,12 +20,23 @@ local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
 
--- Переменные для способности "Щит"
+-- Щит (Nastya)
 local shieldActive = false
 local shieldTimer = 0
 local shieldCooldown = 0
 local SHIELD_DURATION = 3.0
 local SHIELD_COOLDOWN = 15.0
+
+-- Рывок (BUK CUBE)
+local dashCooldown = 0
+local dashTimer = 0
+local isDashing = false
+local DASH_DURATION = 0.2
+local DASH_SPEED_MULT = 4
+local DASH_COOLDOWN = 10
+local dashDirX, dashDirY = 0, 0
+
+-- --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
@@ -33,12 +44,24 @@ local function spawnBullet(x, y, dx, dy)
         vx = dx * BULLET_SPEED,
         vy = dy * BULLET_SPEED,
         dirX = dx, dirY = dy,
-        life = 3
+        life = 3,
+        isDash = false,
+        damage = 1
     })
-    -- ===== НОВОЕ: воспроизводим звук выстрела =====
-    if _G.playShootSound then
-        _G.playShootSound()
-    end
+    if _G.playShootSound then _G.playShootSound() end
+end
+
+local function spawnDashBullet(x, y, dx, dy)
+    table.insert(bullets, {
+        x = x, y = y,
+        vx = dx * BULLET_SPEED,
+        vy = dy * BULLET_SPEED,
+        dirX = dx, dirY = dy,
+        life = 3,
+        isDash = true,
+        damage = 3
+    })
+    if _G.playShootSound then _G.playShootSound() end
 end
 
 local function drawHPBar(x, y, w, h, hp, max, color)
@@ -56,21 +79,18 @@ end
 
 local function onHitPlayer(dmg)
     if dead then return end
-    if shieldActive then
-        return
-    end
+    if shieldActive then return end
     cube.hp = cube.hp - dmg
     cube.hit = 1
-    -- ===== НОВОЕ: звук попадания по игроку =====
-    if _G.playHitSound then
-        _G.playHitSound()
-    end
+    if _G.playHitSound then _G.playHitSound() end
     if cube.hp <= 0 then
         cube.hp = 0
         dead = true
         GameState.current = "lobby"
     end
 end
+
+-- --- ЗАГРУЗКА И ОБНОВЛЕНИЕ ---
 
 function game.load()
     currentDifficulty = _G.difficulty or "normal"
@@ -81,6 +101,10 @@ function game.load()
     shieldActive = false
     shieldTimer = 0
     shieldCooldown = 0
+
+    dashCooldown = 0
+    dashTimer = 0
+    isDashing = false
 
     cube.x, cube.y = 0, 0
     cube.angle = 0
@@ -98,15 +122,9 @@ function game.load()
     azumImg:setFilter("nearest", "nearest")
     nastyaImg = nastyaImg or love.graphics.newImage("nastya.png")
     nastyaImg:setFilter("nearest", "nearest")
+    bukImg = bukImg or love.graphics.newImage("buk.png")
+    bukImg:setFilter("nearest", "nearest")
     font = font or love.graphics.newFont("Fredoka-Bold.ttf", 18)
-
-    if equippedSkin == "AZUM CUBE" then
-        controls.setAbilityAvailable(not resurrectionUsed)
-    elseif equippedSkin == "NASTYA CUBE" then
-        controls.setAbilityAvailable(shieldCooldown <= 0 and not shieldActive)
-    else
-        controls.setAbilityAvailable(false)
-    end
 
     controls.load()
     enemy.load()
@@ -122,6 +140,7 @@ function game.update(dt)
 
     controls.update(dt)
 
+    -- Обновление щита (Nastya)
     if shieldActive then
         shieldTimer = shieldTimer - dt
         if shieldTimer <= 0 then
@@ -134,10 +153,13 @@ function game.update(dt)
         if shieldCooldown < 0 then shieldCooldown = 0 end
     end
 
-    if equippedSkin == "NASTYA CUBE" then
-        controls.setAbilityAvailable(shieldCooldown <= 0 and not shieldActive)
+    -- Обновление рывка (BUK)
+    if dashCooldown > 0 then
+        dashCooldown = dashCooldown - dt
+        if dashCooldown < 0 then dashCooldown = 0 end
     end
 
+    -- Обработка активации способности
     if controls.getAbilityTrigger() then
         if equippedSkin == "AZUM CUBE" and not resurrectionUsed and cube.hp <= 1 then
             cube.hp = 5
@@ -149,9 +171,43 @@ function game.update(dt)
             shieldTimer = SHIELD_DURATION
             shieldCooldown = SHIELD_COOLDOWN
             controls.setAbilityAvailable(false)
+        elseif equippedSkin == "BUK CUBE" and not isDashing and dashCooldown <= 0 then
+            -- Получаем направление движения
+            local dx, dy = controls.getMove()
+            if dx == 0 and dy == 0 then
+                dx, dy = controls.getAim()
+            end
+            if dx ~= 0 or dy ~= 0 then
+                local len = math.sqrt(dx*dx + dy*dy)
+                if len > 0 then
+                    dashDirX, dashDirY = dx/len, dy/len
+                else
+                    dashDirX, dashDirY = 0, -1
+                end
+            else
+                dashDirX, dashDirY = 0, -1
+            end
+            isDashing = true
+            dashTimer = DASH_DURATION
+            dashCooldown = DASH_COOLDOWN
+            controls.setAbilityAvailable(false)
+            -- выпускаем белую пулю
+            spawnDashBullet(cube.x, cube.y, dashDirX, dashDirY)
         end
     end
 
+    -- Обновление состояния доступности способностей
+    if equippedSkin == "AZUM CUBE" then
+        controls.setAbilityAvailable(not resurrectionUsed and cube.hp <= 1)
+    elseif equippedSkin == "NASTYA CUBE" then
+        controls.setAbilityAvailable(not shieldActive and shieldCooldown <= 0)
+    elseif equippedSkin == "BUK CUBE" then
+        controls.setAbilityAvailable(not isDashing and dashCooldown <= 0)
+    else
+        controls.setAbilityAvailable(false)
+    end
+
+    -- Движение игрока
     local dx, dy = controls.getMove()
     cube.x = cube.x + dx * cube.speed * dt
     cube.y = cube.y + dy * cube.speed * dt
@@ -160,40 +216,46 @@ function game.update(dt)
     end
     cube.hit = math.max(0, cube.hit - dt * 3)
 
+    -- Рывок (дополнительное перемещение)
+    if isDashing then
+        dashTimer = dashTimer - dt
+        cube.x = cube.x + dashDirX * cube.speed * DASH_SPEED_MULT * dt
+        cube.y = cube.y + dashDirY * cube.speed * DASH_SPEED_MULT * dt
+        if dashTimer <= 0 then
+            isDashing = false
+        end
+    end
+
+    -- Камера
     local targetX = cube.x - love.graphics.getWidth() / 2
     local targetY = cube.y - love.graphics.getHeight() / 2
     local k = 1 - math.exp(-dt * 7.3)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
+    -- Обновление пуль игрока
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
         b.y = b.y + b.vy * dt
         b.life = b.life - dt
-        if b.life <= 0 then
-            table.remove(bullets, i)
-        end
+        if b.life <= 0 then table.remove(bullets, i) end
     end
 
-    -- Враг обновляется и внутри себя обрабатывает попадания пуль игрока (там же вызывается звук попадания)
+    -- Обновление врага (передаём пули игрока)
     local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
     if enemyKilled then
         local reward = 10
-        if currentDifficulty == "easy" then
-            reward = 5
-        elseif currentDifficulty == "hard" then
-            reward = 50
-        elseif currentDifficulty == "impossible" then
-            reward = 100
-        end
+        if currentDifficulty == "easy" then reward = 5
+        elseif currentDifficulty == "hard" then reward = 50
+        elseif currentDifficulty == "impossible" then reward = 100 end
         SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
         SAVE_SAVE()
         GameState.current = "lobby"
         return
     end
 
-    -- Проверка попадания вражеских пуль в игрока (звук попадания уже вызывается внутри onHitPlayer)
+    -- Проверка попадания вражеских пуль в игрока
     local eBullets = enemy.getBullets()
     for i = #eBullets, 1, -1 do
         local b = eBullets[i]
@@ -207,11 +269,14 @@ function game.update(dt)
     end
 end
 
+-- --- ОТРИСОВКА ---
+
 function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
+    -- Фон
     local w, h = love.graphics.getDimensions()
     local tw, th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x / tw) * tw
@@ -222,12 +287,21 @@ function game.draw()
         end
     end
 
-    love.graphics.setColor(0, 0, 0, 1)
+    -- Пули игрока (обычные – чёрные, рывка – белые большие)
     for _, b in ipairs(bullets) do
-        love.graphics.circle("fill", b.x, b.y, 8)
+        if b.isDash then
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.circle("fill", b.x, b.y, 12)
+            love.graphics.setColor(0, 0, 0, 0.3)
+            love.graphics.circle("line", b.x, b.y, 12)
+        else
+            love.graphics.setColor(0, 0, 0, 1)
+            love.graphics.circle("fill", b.x, b.y, 8)
+        end
     end
     enemy.drawBullets()
 
+    -- Линия прицела
     if controls.isAiming() then
         local ax, ay = controls.getAim()
         love.graphics.setColor(0, 0, 0, 0.55)
@@ -237,15 +311,19 @@ function game.draw()
 
     enemy.draw()
 
+    -- Выбор спрайта игрока
     local imgToDraw
     if equippedSkin == "AZUM CUBE" then
         imgToDraw = azumImg
     elseif equippedSkin == "NASTYA CUBE" then
         imgToDraw = nastyaImg
+    elseif equippedSkin == "BUK CUBE" then
+        imgToDraw = bukImg
     else
         imgToDraw = playerImg
     end
 
+    -- Тень
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
@@ -253,6 +331,7 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
+    -- Игрок
     love.graphics.push()
     love.graphics.translate(cube.x, cube.y)
     love.graphics.rotate(cube.angle)
@@ -261,6 +340,7 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
+    -- Щит (Nastya)
     if shieldActive then
         love.graphics.setColor(0.2, 0.8, 1, 0.3)
         love.graphics.circle("fill", cube.x, cube.y, PLAYER_SIZE * 0.8)
@@ -270,8 +350,18 @@ function game.draw()
         love.graphics.setColor(1, 1, 1, 1)
     end
 
+    -- Эффект рывка (опционально)
+    if isDashing then
+        love.graphics.setColor(1, 1, 1, 0.3)
+        love.graphics.circle("fill", cube.x, cube.y, PLAYER_SIZE * 1.2)
+        love.graphics.setColor(1, 1, 1, 0.6)
+        love.graphics.setLineWidth(3)
+        love.graphics.circle("line", cube.x, cube.y, PLAYER_SIZE * 1.2)
+    end
+
     love.graphics.pop()
 
+    -- HUD
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)
     local barW, barH = 200, 18
@@ -286,7 +376,20 @@ function game.draw()
     if currentDifficulty == "impossible" then diffText = "IMPOSSIBLE" end
     love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
 
-    if equippedSkin == "NASTYA CUBE" then
+    -- Отображение статуса способности BUK CUBE
+    if equippedSkin == "BUK CUBE" then
+        local cd = math.max(0, dashCooldown)
+        if isDashing then
+            love.graphics.setColor(1, 1, 1, 0.8)
+            love.graphics.printf("DASH!", px, py + 66, 200, "left")
+        elseif cd > 0 then
+            love.graphics.setColor(0.8, 0.8, 0.8, 0.8)
+            love.graphics.printf("DASH CD: " .. math.ceil(cd) .. "s", px, py + 66, 200, "left")
+        else
+            love.graphics.setColor(1, 1, 1, 0.8)
+            love.graphics.printf("DASH READY", px, py + 66, 200, "left")
+        end
+    elseif equippedSkin == "NASTYA CUBE" then
         local cd = math.max(0, shieldCooldown)
         if shieldActive then
             love.graphics.setColor(0.2, 0.8, 1, 0.8)
@@ -300,6 +403,7 @@ function game.draw()
         end
     end
 
+    -- ХП врага
     local e, _, enemyMaxHP = enemy.get()
     if e then
         local epx = love.graphics.getWidth() - barW - 20
@@ -311,6 +415,8 @@ function game.draw()
 
     controls.draw()
 end
+
+-- --- ОБРАБОТКА ВВОДА ---
 
 function game.touchpressed(id, x, y)
     controls.touchpressed(id, x, y)
