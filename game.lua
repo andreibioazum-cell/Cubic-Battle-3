@@ -20,9 +20,14 @@ local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
 
--- ЛАЗЕР (вместо щита)
+-- ЛАЗЕР (hitscan-луч)
 local laserCooldown = 0
-local LASER_COOLDOWN = 5   -- секунд
+local LASER_COOLDOWN = 5          -- секунд
+local laserActive = false
+local laserTimer = 0
+local LASER_DURATION = 0.15
+local laserEndX, laserEndY = 0, 0
+local LASER_RANGE = 800           -- дальность луча
 
 -- Рывок (BUK CUBE)
 local dashCooldown = 0
@@ -61,28 +66,6 @@ local function spawnDashBullet(x, y, dx, dy)
     if _G.playShootSound then _G.playShootSound() end
 end
 
--- Новая функция для лазерного выстрела
-local function spawnLaserBullet(x, y, dx, dy)
-    if dx == 0 and dy == 0 then
-        dx, dy = 0, -1
-    end
-    local len = math.sqrt(dx*dx + dy*dy)
-    if len > 0 then
-        dx, dy = dx/len, dy/len
-    end
-    table.insert(bullets, {
-        x = x, y = y,
-        vx = dx * BULLET_SPEED * 1.5,   -- быстрее обычной
-        vy = dy * BULLET_SPEED * 1.5,
-        dirX = dx, dirY = dy,
-        life = 4,
-        isDash = false,
-        isLaser = true,                 -- метка для отрисовки
-        damage = 5                      -- высокий урон
-    })
-    if _G.playShootSound then _G.playShootSound() end
-end
-
 local function drawHPBar(x, y, w, h, hp, max, color)
     if hp < 0 then hp = 0 end
     love.graphics.setColor(0, 0, 0, 0.5)
@@ -98,7 +81,6 @@ end
 
 local function onHitPlayer(dmg)
     if dead then return end
-    -- Щита больше нет, урон всегда проходит
     cube.hp = cube.hp - dmg
     cube.hit = 1
     if _G.playHitSound then _G.playHitSound() end
@@ -107,6 +89,50 @@ local function onHitPlayer(dmg)
         dead = true
         GameState.current = "lobby"
     end
+end
+
+-- Функция активации лазера (hitscan)
+local function fireLaser(px, py, aimX, aimY)
+    if aimX == 0 and aimY == 0 then
+        aimX, aimY = 0, -1
+    end
+    local len = math.sqrt(aimX*aimX + aimY*aimY)
+    if len > 0 then
+        aimX, aimY = aimX/len, aimY/len
+    end
+
+    -- Проверка попадания в врага
+    local e, _, _ = enemy.get()
+    if e then
+        local ex, ey = e.x, e.y
+        local dx = ex - px
+        local dy = ey - py
+        local distToEnemy = math.sqrt(dx*dx + dy*dy)
+        if distToEnemy <= LASER_RANGE then
+            local dot = aimX * dx + aimY * dy
+            if dot > 0 then
+                local cross = aimX * dy - aimY * dx
+                if math.abs(cross) < 20 then -- ширина луча ~20 пикселей
+                    laserEndX, laserEndY = ex, ey
+                    local killed = enemy.takeDamage(5)
+                    if killed then
+                        local reward = 10
+                        if currentDifficulty == "easy" then reward = 5
+                        elseif currentDifficulty == "hard" then reward = 50
+                        elseif currentDifficulty == "impossible" then reward = 100 end
+                        SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
+                        SAVE_SAVE()
+                        GameState.current = "lobby"
+                    end
+                    return
+                end
+            end
+        end
+    end
+
+    -- Если попадания нет – луч до максимальной дальности
+    laserEndX = px + aimX * LASER_RANGE
+    laserEndY = py + aimY * LASER_RANGE
 end
 
 -- --- ЗАГРУЗКА И ОБНОВЛЕНИЕ ---
@@ -118,8 +144,9 @@ function game.load()
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
     resurrectionUsed = false
 
-    -- Инициализация лазера
     laserCooldown = 0
+    laserActive = false
+    laserTimer = 0
 
     dashCooldown = 0
     dashTimer = 0
@@ -161,8 +188,14 @@ function game.update(dt)
 
     -- Обновление лазера
     laserCooldown = math.max(0, laserCooldown - dt)
+    if laserActive then
+        laserTimer = laserTimer - dt
+        if laserTimer <= 0 then
+            laserActive = false
+        end
+    end
 
-    -- Обновление рывка (BUK)
+    -- Обновление рывка
     if dashCooldown > 0 then
         dashCooldown = dashCooldown - dt
         if dashCooldown < 0 then dashCooldown = 0 end
@@ -176,13 +209,15 @@ function game.update(dt)
             cube.hit = 0
             controls.setAbilityAvailable(false)
         elseif equippedSkin == "NASTYA CUBE" and laserCooldown <= 0 then
-            -- ЛАЗЕР
+            -- ЛАЗЕР (HITSCAN)
             local aimX, aimY = controls.getAim()
-            spawnLaserBullet(cube.x, cube.y, aimX, aimY)
+            fireLaser(cube.x, cube.y, aimX, aimY)
+            laserActive = true
+            laserTimer = LASER_DURATION
             laserCooldown = LASER_COOLDOWN
             controls.setAbilityAvailable(false)
+            if _G.playShootSound then _G.playShootSound() end
         elseif equippedSkin == "BUK CUBE" and not isDashing and dashCooldown <= 0 then
-            -- Рывок
             local dx, dy = controls.getMove()
             if dx == 0 and dy == 0 then
                 dx, dy = controls.getAim()
@@ -205,7 +240,7 @@ function game.update(dt)
         end
     end
 
-    -- Обновление состояния доступности способностей
+    -- Доступность способностей
     if equippedSkin == "AZUM CUBE" then
         controls.setAbilityAvailable(not resurrectionUsed and cube.hp <= 1)
     elseif equippedSkin == "NASTYA CUBE" then
@@ -225,7 +260,7 @@ function game.update(dt)
     end
     cube.hit = math.max(0, cube.hit - dt * 3)
 
-    -- Рывок (дополнительное перемещение)
+    -- Рывок
     if isDashing then
         dashTimer = dashTimer - dt
         cube.x = cube.x + dashDirX * cube.speed * DASH_SPEED_MULT * dt
@@ -242,7 +277,7 @@ function game.update(dt)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Обновление пуль игрока
+    -- Обновление обычных пуль
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -296,16 +331,9 @@ function game.draw()
         end
     end
 
-    -- Пули игрока (обычные – чёрные, рывка – белые большие, лазер – красные)
+    -- Обычные и рывковые пули (лазерных пуль нет)
     for _, b in ipairs(bullets) do
-        if b.isLaser then
-            love.graphics.setColor(1, 0.1, 0.1, 1)
-            love.graphics.circle("fill", b.x, b.y, 16)
-            love.graphics.setColor(1, 1, 1, 0.5)
-            love.graphics.circle("fill", b.x, b.y, 10)
-            love.graphics.setColor(0, 0, 0, 0.5)
-            love.graphics.circle("line", b.x, b.y, 16)
-        elseif b.isDash then
+        if b.isDash then
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.circle("fill", b.x, b.y, 12)
             love.graphics.setColor(0, 0, 0, 0.3)
@@ -326,6 +354,23 @@ function game.draw()
     end
 
     enemy.draw()
+
+    -- Отрисовка ЛАЗЕРА (луч)
+    if laserActive then
+        love.graphics.setLineWidth(8)
+        -- Внешняя красная обводка
+        love.graphics.setColor(1, 0, 0, 0.8)
+        love.graphics.line(cube.x, cube.y, laserEndX, laserEndY)
+        -- Внутренняя белая сердцевина
+        love.graphics.setLineWidth(3)
+        love.graphics.setColor(1, 1, 1, 0.9)
+        love.graphics.line(cube.x, cube.y, laserEndX, laserEndY)
+        -- Свечение
+        love.graphics.setLineWidth(18)
+        love.graphics.setColor(1, 0, 0, 0.2)
+        love.graphics.line(cube.x, cube.y, laserEndX, laserEndY)
+        love.graphics.setLineWidth(1)
+    end
 
     -- Выбор спрайта игрока
     local imgToDraw
@@ -356,7 +401,7 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Эффект рывка (опционально)
+    -- Эффект рывка
     if isDashing then
         love.graphics.setColor(1, 1, 1, 0.3)
         love.graphics.circle("fill", cube.x, cube.y, PLAYER_SIZE * 1.2)
@@ -382,7 +427,7 @@ function game.draw()
     if currentDifficulty == "impossible" then diffText = "IMPOSSIBLE" end
     love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
 
-    -- Отображение статуса способности BUK CUBE
+    -- Статус способностей
     if equippedSkin == "BUK CUBE" then
         local cd = math.max(0, dashCooldown)
         if isDashing then
