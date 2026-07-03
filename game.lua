@@ -22,7 +22,7 @@ local currentDifficulty = "normal"
 
 -- ЛАЗЕР (hitscan-луч)
 local laserCooldown = 0
-local LASER_COOLDOWN = 5          -- секунд
+local LASER_COOLDOWN = 15          -- секунд
 local laserActive = false
 local laserTimer = 0
 local LASER_DURATION = 0.15
