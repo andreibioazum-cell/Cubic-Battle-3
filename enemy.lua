@@ -108,6 +108,19 @@ end
 function enemy.get() return e, SIZE, MAX_HP end
 function enemy.getBullets() return eBullets end
 
+-- Новая функция для нанесения урона врагу (используется лазером)
+function enemy.takeDamage(dmg)
+    if not e then return false end
+    e.hp = e.hp - dmg
+    e.hit = 1
+    if _G.playHitSound then _G.playHitSound() end
+    if e.hp <= 0 then
+        e = nil
+        return true
+    end
+    return false
+end
+
 function enemy.update(dt, px, py, playerBullets, onHitPlayer)
     for i = #eBullets, 1, -1 do
         local b = eBullets[i]
@@ -261,7 +274,7 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         local bx = b.x - e.x
         local by = b.y - e.y
         if bx * bx + by * by <= (SIZE * 0.55) ^ 2 then
-            local dmg = b.damage or 1   -- ★ Учитываем урон
+            local dmg = b.damage or 1
             eHP = eHP - dmg
             e.hit = 1
             if _G.playHitSound then _G.playHitSound() end
