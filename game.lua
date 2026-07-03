@@ -28,6 +28,7 @@ local laserTimer = 0
 local LASER_DURATION = 0.15
 local laserEndX, laserEndY = 0, 0
 local LASER_RANGE = 800           -- дальность луча
+local LASER_DAMAGE = 3            -- ★ УМЕНЬШЕННЫЙ УРОН
 
 -- Рывок (BUK CUBE)
 local dashCooldown = 0
@@ -114,7 +115,7 @@ local function fireLaser(px, py, aimX, aimY)
                 local cross = aimX * dy - aimY * dx
                 if math.abs(cross) < 20 then -- ширина луча ~20 пикселей
                     laserEndX, laserEndY = ex, ey
-                    local killed = enemy.takeDamage(5)
+                    local killed = enemy.takeDamage(LASER_DAMAGE)  -- ★ УМЕНЬШЕННЫЙ УРОН
                     if killed then
                         local reward = 10
                         if currentDifficulty == "easy" then reward = 5
