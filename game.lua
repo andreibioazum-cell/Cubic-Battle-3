@@ -20,12 +20,9 @@ local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
 
--- Щит (Nastya)
-local shieldActive = false
-local shieldTimer = 0
-local shieldCooldown = 0
-local SHIELD_DURATION = 3.0
-local SHIELD_COOLDOWN = 15.0
+-- ЛАЗЕР (вместо щита)
+local laserCooldown = 0
+local LASER_COOLDOWN = 5   -- секунд
 
 -- Рывок (BUK CUBE)
 local dashCooldown = 0
@@ -64,6 +61,28 @@ local function spawnDashBullet(x, y, dx, dy)
     if _G.playShootSound then _G.playShootSound() end
 end
 
+-- Новая функция для лазерного выстрела
+local function spawnLaserBullet(x, y, dx, dy)
+    if dx == 0 and dy == 0 then
+        dx, dy = 0, -1
+    end
+    local len = math.sqrt(dx*dx + dy*dy)
+    if len > 0 then
+        dx, dy = dx/len, dy/len
+    end
+    table.insert(bullets, {
+        x = x, y = y,
+        vx = dx * BULLET_SPEED * 1.5,   -- быстрее обычной
+        vy = dy * BULLET_SPEED * 1.5,
+        dirX = dx, dirY = dy,
+        life = 4,
+        isDash = false,
+        isLaser = true,                 -- метка для отрисовки
+        damage = 5                      -- высокий урон
+    })
+    if _G.playShootSound then _G.playShootSound() end
+end
+
 local function drawHPBar(x, y, w, h, hp, max, color)
     if hp < 0 then hp = 0 end
     love.graphics.setColor(0, 0, 0, 0.5)
@@ -79,7 +98,7 @@ end
 
 local function onHitPlayer(dmg)
     if dead then return end
-    if shieldActive then return end
+    -- Щита больше нет, урон всегда проходит
     cube.hp = cube.hp - dmg
     cube.hit = 1
     if _G.playHitSound then _G.playHitSound() end
@@ -98,9 +117,9 @@ function game.load()
 
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
     resurrectionUsed = false
-    shieldActive = false
-    shieldTimer = 0
-    shieldCooldown = 0
+
+    -- Инициализация лазера
+    laserCooldown = 0
 
     dashCooldown = 0
     dashTimer = 0
@@ -140,18 +159,8 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Обновление щита (Nastya)
-    if shieldActive then
-        shieldTimer = shieldTimer - dt
-        if shieldTimer <= 0 then
-            shieldActive = false
-            shieldCooldown = SHIELD_COOLDOWN
-        end
-    end
-    if shieldCooldown > 0 then
-        shieldCooldown = shieldCooldown - dt
-        if shieldCooldown < 0 then shieldCooldown = 0 end
-    end
+    -- Обновление лазера
+    laserCooldown = math.max(0, laserCooldown - dt)
 
     -- Обновление рывка (BUK)
     if dashCooldown > 0 then
@@ -166,13 +175,14 @@ function game.update(dt)
             resurrectionUsed = true
             cube.hit = 0
             controls.setAbilityAvailable(false)
-        elseif equippedSkin == "NASTYA CUBE" and not shieldActive and shieldCooldown <= 0 then
-            shieldActive = true
-            shieldTimer = SHIELD_DURATION
-            shieldCooldown = SHIELD_COOLDOWN
+        elseif equippedSkin == "NASTYA CUBE" and laserCooldown <= 0 then
+            -- ЛАЗЕР
+            local aimX, aimY = controls.getAim()
+            spawnLaserBullet(cube.x, cube.y, aimX, aimY)
+            laserCooldown = LASER_COOLDOWN
             controls.setAbilityAvailable(false)
         elseif equippedSkin == "BUK CUBE" and not isDashing and dashCooldown <= 0 then
-            -- Получаем направление движения
+            -- Рывок
             local dx, dy = controls.getMove()
             if dx == 0 and dy == 0 then
                 dx, dy = controls.getAim()
@@ -191,7 +201,6 @@ function game.update(dt)
             dashTimer = DASH_DURATION
             dashCooldown = DASH_COOLDOWN
             controls.setAbilityAvailable(false)
-            -- выпускаем белую пулю
             spawnDashBullet(cube.x, cube.y, dashDirX, dashDirY)
         end
     end
@@ -200,7 +209,7 @@ function game.update(dt)
     if equippedSkin == "AZUM CUBE" then
         controls.setAbilityAvailable(not resurrectionUsed and cube.hp <= 1)
     elseif equippedSkin == "NASTYA CUBE" then
-        controls.setAbilityAvailable(not shieldActive and shieldCooldown <= 0)
+        controls.setAbilityAvailable(laserCooldown <= 0)
     elseif equippedSkin == "BUK CUBE" then
         controls.setAbilityAvailable(not isDashing and dashCooldown <= 0)
     else
@@ -287,9 +296,16 @@ function game.draw()
         end
     end
 
-    -- Пули игрока (обычные – чёрные, рывка – белые большие)
+    -- Пули игрока (обычные – чёрные, рывка – белые большие, лазер – красные)
     for _, b in ipairs(bullets) do
-        if b.isDash then
+        if b.isLaser then
+            love.graphics.setColor(1, 0.1, 0.1, 1)
+            love.graphics.circle("fill", b.x, b.y, 16)
+            love.graphics.setColor(1, 1, 1, 0.5)
+            love.graphics.circle("fill", b.x, b.y, 10)
+            love.graphics.setColor(0, 0, 0, 0.5)
+            love.graphics.circle("line", b.x, b.y, 16)
+        elseif b.isDash then
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.circle("fill", b.x, b.y, 12)
             love.graphics.setColor(0, 0, 0, 0.3)
@@ -340,16 +356,6 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Щит (Nastya)
-    if shieldActive then
-        love.graphics.setColor(0.2, 0.8, 1, 0.3)
-        love.graphics.circle("fill", cube.x, cube.y, PLAYER_SIZE * 0.8)
-        love.graphics.setColor(0.2, 0.8, 1, 0.6)
-        love.graphics.setLineWidth(4)
-        love.graphics.circle("line", cube.x, cube.y, PLAYER_SIZE * 0.8)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-
     -- Эффект рывка (опционально)
     if isDashing then
         love.graphics.setColor(1, 1, 1, 0.3)
@@ -390,16 +396,13 @@ function game.draw()
             love.graphics.printf("DASH READY", px, py + 66, 200, "left")
         end
     elseif equippedSkin == "NASTYA CUBE" then
-        local cd = math.max(0, shieldCooldown)
-        if shieldActive then
-            love.graphics.setColor(0.2, 0.8, 1, 0.8)
-            love.graphics.printf("SHIELD: " .. math.ceil(shieldTimer) .. "s", px, py + 66, 200, "left")
-        elseif cd > 0 then
+        local cd = math.max(0, laserCooldown)
+        if cd > 0 then
             love.graphics.setColor(0.8, 0.8, 0.8, 0.8)
-            love.graphics.printf("SHIELD CD: " .. math.ceil(cd) .. "s", px, py + 66, 200, "left")
+            love.graphics.printf("LASER CD: " .. math.ceil(cd) .. "s", px, py + 66, 200, "left")
         else
-            love.graphics.setColor(0.2, 0.8, 1, 0.8)
-            love.graphics.printf("SHIELD READY", px, py + 66, 200, "left")
+            love.graphics.setColor(1, 0.2, 0.2, 0.8)
+            love.graphics.printf("LASER READY", px, py + 66, 200, "left")
         end
     end
 
