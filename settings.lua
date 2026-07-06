@@ -9,7 +9,7 @@ local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iO
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    local base = 1000        -- можно поменять на 1000 для ПК
+    local base = 1000
     if isMobile then base = 600 end
     return math.min(w, h) / base
 end
@@ -62,7 +62,7 @@ function settings.resize()
 end
 
 function settings.draw()
-    love.graphics.setColor(0.05, 0.02, 0.15, 1)
+    love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
     local w = love.graphics.getWidth()
@@ -70,10 +70,10 @@ function settings.draw()
 
     drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, nil, 1)
 
-    -- Кнопка Music
+    -- Music
     local musicText = musicOn and "MUSIC: ON" or "MUSIC: OFF"
-    local musicColor = musicOn and {0.35, 0.15, 0.75} or {0.5, 0.5, 0.5}
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    local musicColor = musicOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnMusic.x + 5*scale, btnMusic.y + 6*scale, btnMusic.w, btnMusic.h, 16*scale, 16*scale)
     love.graphics.setColor(musicColor[1], musicColor[2], musicColor[3], 1)
     love.graphics.rectangle("fill", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 16*scale, 16*scale)
@@ -82,10 +82,10 @@ function settings.draw()
     love.graphics.rectangle("line", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 16*scale, 16*scale)
     drawSpacedText(musicText, btnMusic.x, btnMusic.y + 22*scale, btnMusic.w, "center", fontBtn, nil, 1)
 
-    -- Кнопка Sound Effects
+    -- Sound Effects
     local sfxText = sfxOn and "SOUNDS: ON" or "SOUNDS: OFF"
-    local sfxColor = sfxOn and {0.35, 0.15, 0.75} or {0.5, 0.5, 0.5}
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    local sfxColor = sfxOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnSfx.x + 5*scale, btnSfx.y + 6*scale, btnSfx.w, btnSfx.h, 16*scale, 16*scale)
     love.graphics.setColor(sfxColor[1], sfxColor[2], sfxColor[3], 1)
     love.graphics.rectangle("fill", btnSfx.x, btnSfx.y, btnSfx.w, btnSfx.h, 16*scale, 16*scale)
@@ -94,10 +94,10 @@ function settings.draw()
     love.graphics.rectangle("line", btnSfx.x, btnSfx.y, btnSfx.w, btnSfx.h, 16*scale, 16*scale)
     drawSpacedText(sfxText, btnSfx.x, btnSfx.y + 22*scale, btnSfx.w, "center", fontBtn, nil, 1)
 
-    -- Кнопка Back
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    -- Back
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.setColor(0.2, 0.5, 0.9, 1)
     love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4 * scale)
