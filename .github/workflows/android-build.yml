@@ -1,11 +1,11 @@
-name: Build_Cubic_Battle_Android_Release_Unsigned
+name: Build_Cubic_Battle_Android_Debug
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  build-android-release:
+  build-android-debug:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
@@ -48,13 +48,9 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
-      # Меняем пакет на com.CB3
       - name: Set package name to com.CB3
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
-
-      # Убираем иконку (оставляем стандартную)
-      # Никаких шагов с иконкой нет
 
       - uses: actions/cache@v4
         with:
@@ -93,21 +89,20 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      # Собираем Release (без подписи, но это релизный билд)
-      - name: Build Release APK (unsigned)
+      - name: Build Debug APK
         working-directory: love-android
-        run: ./gradlew assembleEmbedNoRecordRelease --no-daemon --parallel --console=plain
+        run: ./gradlew assembleEmbedNoRecordDebug --no-daemon --parallel --console=plain
 
       - name: Collect APK
         id: set-output
         run: |
           APK=$(find love-android -name "*.apk" | head -1)
-          APK_NAME="CubicBattle3_$(date +'%Y%m%d_%H%M').apk"
+          APK_NAME="CubicBattle3_Debug_$(date +'%Y%m%d_%H%M').apk"
           cp "$APK" "$APK_NAME"
           echo "apk-name=$APK_NAME" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle3_APK
-          path: CubicBattle3_*.apk
+          name: CubicBattle3_Debug_APK
+          path: CubicBattle3_Debug_*.apk
           compression-level: 0
