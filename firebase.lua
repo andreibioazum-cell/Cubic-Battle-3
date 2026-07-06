@@ -1,35 +1,28 @@
--- firebase.lua – библиотека для Firebase Realtime Database (v1.0)
--- Работает через HTTPS (LuaSec) или socket.http как fallback
--- Поддерживает анонимную аутентификацию, GET, PUT, PATCH, POST, DELETE
-
 local firebase = {}
 
--- ===== КОНФИГУРАЦИЯ =====
 local config = {
     apiKey = nil,
     dbURL = nil,
     authToken = nil,
     timeout = 3,
-    verifySSL = false,  -- для Android лучше false
+    verifySSL = false,
 }
 
--- ===== ПРОВЕРКА НАЛИЧИЯ HTTPS =====
+local activeListeners = {}
+
 local function hasHttps()
     local ok, _ = pcall(require, "https")
     return ok
 end
 
--- ===== ВНУТРЕННИЙ HTTP-ЗАПРОС =====
 local function request(method, path, data, callback)
     if not config.dbURL then
-        error("❌ Firebase не инициализирован: вызовите firebase.init()")
+        error("firebase: not initialized")
     end
-
     local url = config.dbURL .. "/" .. path .. ".json"
     if config.authToken then
         url = url .. "?auth=" .. config.authToken
     end
-
     local options = {
         method = method,
         headers = { ["Content-Type"] = "application/json" },
@@ -39,14 +32,11 @@ local function request(method, path, data, callback)
     if data then
         options.data = data
     end
-
     local ok, code, body
-
     if hasHttps() then
         local https = require("https")
         ok, code, body = pcall(https.request, url, options)
     else
-        -- fallback на socket.http (если есть)
         local http = require("socket.http")
         local ltn12 = require("ltn12")
         local response = {}
@@ -64,30 +54,23 @@ local function request(method, path, data, callback)
             ok, code, body = false, code, "HTTP error"
         end
     end
-
     if ok and code and code >= 200 and code < 300 then
         if callback then callback(true, body) end
     else
-        if callback then callback(false, "Ошибка: " .. tostring(code) .. " " .. tostring(body)) end
+        if callback then callback(false, "Error: " .. tostring(code) .. " " .. tostring(body)) end
     end
 end
 
--- ===== ПУБЛИЧНЫЕ ФУНКЦИИ =====
-
--- Инициализация
 function firebase.init(options)
-    config.apiKey = options.apiKey or error("Не указан apiKey")
-    config.dbURL = options.dbURL or error("Не указан dbURL")
+    config.apiKey = options.apiKey or error("apiKey required")
+    config.dbURL = options.dbURL or error("dbURL required")
     config.timeout = options.timeout or 3
     config.verifySSL = options.verifySSL or false
-    config.authToken = nil
-    print("✅ Firebase инициализирован: " .. config.dbURL)
 end
 
--- Анонимная аутентификация
 function firebase.authAnonymous(callback)
     if not config.apiKey then
-        error("❌ apiKey не задан")
+        error("apiKey not set")
     end
     local authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" .. config.apiKey
     local options = {
@@ -97,7 +80,6 @@ function firebase.authAnonymous(callback)
         timeout = config.timeout,
         verify = config.verifySSL,
     }
-
     local ok, code, body
     if hasHttps() then
         local https = require("https")
@@ -120,26 +102,23 @@ function firebase.authAnonymous(callback)
             ok, code, body = false, code, "HTTP error"
         end
     end
-
     if ok and code == 200 then
         local data = love.data.decode("json", body)
         if data and data.idToken then
             config.authToken = data.idToken
             if callback then callback(true, data) end
         else
-            if callback then callback(false, "Нет idToken") end
+            if callback then callback(false, "Missing idToken") end
         end
     else
         if callback then callback(false, "Auth error: " .. tostring(code)) end
     end
 end
 
--- Установка токена вручную
 function firebase.setToken(token)
     config.authToken = token
 end
 
--- GET (чтение)
 function firebase.get(path, callback)
     request("GET", path, nil, function(success, data)
         if success then
@@ -151,7 +130,6 @@ function firebase.get(path, callback)
     end)
 end
 
--- PUT (запись/замена)
 function firebase.put(path, data, callback)
     local jsonData = love.data.encode("json", data)
     request("PUT", path, jsonData, function(success, body)
@@ -159,7 +137,6 @@ function firebase.put(path, data, callback)
     end)
 end
 
--- PATCH (частичное обновление)
 function firebase.patch(path, data, callback)
     local jsonData = love.data.encode("json", data)
     request("PATCH", path, jsonData, function(success, body)
@@ -167,7 +144,6 @@ function firebase.patch(path, data, callback)
     end)
 end
 
--- POST (добавление в коллекцию)
 function firebase.post(path, data, callback)
     local jsonData = love.data.encode("json", data)
     request("POST", path, jsonData, function(success, body)
@@ -175,16 +151,103 @@ function firebase.post(path, data, callback)
     end)
 end
 
--- DELETE (удаление)
 function firebase.delete(path, callback)
     request("DELETE", path, nil, function(success, body)
         if callback then callback(success, body) end
     end)
 end
 
--- Получить текущий токен
 function firebase.getToken()
     return config.authToken
+end
+
+function firebase.listen(path, callback)
+    if activeListeners[path] then
+        activeListeners[path].connection:close()
+        activeListeners[path] = nil
+    end
+
+    if not config.authToken then
+        error("firebase: not authenticated")
+    end
+
+    local url = config.dbURL .. "/" .. path .. ".json?auth=" .. config.authToken
+    local socket = require("socket")
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+
+    local req = {
+        url = url,
+        method = "GET",
+        headers = {
+            ["Accept"] = "text/event-stream",
+        },
+        sink = ltn12.sink.table({}),
+        create = function()
+            local sock = socket.tcp()
+            sock:settimeout(0)
+            return sock
+        end,
+    }
+
+    local conn = http.request(req)
+    if not conn then
+        callback(false, "Failed to connect")
+        return
+    end
+
+    activeListeners[path] = {
+        callback = callback,
+        connection = conn,
+    }
+
+    local function reader()
+        while true do
+            local chunk, err = conn:receive("*l")
+            if err then
+                firebase.listen(path, callback)
+                break
+            end
+            if chunk and chunk ~= "" and chunk:match("^data: ") then
+                local jsonData = chunk:sub(7)
+                local ok, data = pcall(love.data.decode, "json", jsonData)
+                if ok and data then
+                    callback(true, data)
+                end
+            end
+        end
+    end
+
+    local co = coroutine.create(reader)
+    activeListeners[path].coroutine = co
+    coroutine.resume(co)
+end
+
+function firebase.unlisten(path)
+    if activeListeners[path] then
+        activeListeners[path].connection:close()
+        activeListeners[path] = nil
+    end
+end
+
+function firebase.update()
+    for path, listener in pairs(activeListeners) do
+        if listener.coroutine then
+            local status = coroutine.status(listener.coroutine)
+            if status == "suspended" then
+                coroutine.resume(listener.coroutine)
+            elseif status == "dead" then
+                activeListeners[path] = nil
+            end
+        end
+    end
+end
+
+function firebase.closeAll()
+    for path, listener in pairs(activeListeners) do
+        listener.connection:close()
+    end
+    activeListeners = {}
 end
 
 return firebase
