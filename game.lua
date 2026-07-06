@@ -1,5 +1,6 @@
 local controls = require("controls")
 local enemy = require("enemy")
+local online = require("online")   -- для онлайн-режима
 
 local game = {}
 
@@ -20,17 +21,17 @@ local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
 
--- ЛАЗЕР (hitscan-луч)
+-- ЛАЗЕР
 local laserCooldown = 0
-local LASER_COOLDOWN = 15          -- секунд
+local LASER_COOLDOWN = 15
 local laserActive = false
 local laserTimer = 0
 local LASER_DURATION = 0.15
 local laserEndX, laserEndY = 0, 0
-local LASER_RANGE = 800           -- дальность луча
-local LASER_DAMAGE = 3            -- ★ УМЕНЬШЕННЫЙ УРОН
+local LASER_RANGE = 800
+local LASER_DAMAGE = 3
 
--- Рывок (BUK CUBE)
+-- Рывок
 local dashCooldown = 0
 local dashTimer = 0
 local isDashing = false
@@ -39,7 +40,10 @@ local DASH_SPEED_MULT = 4
 local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
--- --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+-- Флаг онлайн-режима
+local isOnlineMode = false
+
+-- ===== ВСПОМОГАТЕЛЬНЫЕ =====
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
@@ -92,7 +96,6 @@ local function onHitPlayer(dmg)
     end
 end
 
--- Функция активации лазера (hitscan)
 local function fireLaser(px, py, aimX, aimY)
     if aimX == 0 and aimY == 0 then
         aimX, aimY = 0, -1
@@ -102,7 +105,6 @@ local function fireLaser(px, py, aimX, aimY)
         aimX, aimY = aimX/len, aimY/len
     end
 
-    -- Проверка попадания в врага
     local e, _, _ = enemy.get()
     if e then
         local ex, ey = e.x, e.y
@@ -113,9 +115,9 @@ local function fireLaser(px, py, aimX, aimY)
             local dot = aimX * dx + aimY * dy
             if dot > 0 then
                 local cross = aimX * dy - aimY * dx
-                if math.abs(cross) < 20 then -- ширина луча ~20 пикселей
+                if math.abs(cross) < 20 then
                     laserEndX, laserEndY = ex, ey
-                    local killed = enemy.takeDamage(LASER_DAMAGE)  -- ★ УМЕНЬШЕННЫЙ УРОН
+                    local killed = enemy.takeDamage(LASER_DAMAGE)
                     if killed then
                         local reward = 10
                         if currentDifficulty == "easy" then reward = 5
@@ -131,16 +133,21 @@ local function fireLaser(px, py, aimX, aimY)
         end
     end
 
-    -- Если попадания нет – луч до максимальной дальности
     laserEndX = px + aimX * LASER_RANGE
     laserEndY = py + aimY * LASER_RANGE
 end
 
--- --- ЗАГРУЗКА И ОБНОВЛЕНИЕ ---
+-- ===== ПУБЛИЧНЫЕ =====
 
 function game.load()
-    currentDifficulty = _G.difficulty or "normal"
-    enemy.setDifficulty(currentDifficulty)
+    isOnlineMode = (GameState.current == "online")
+    if not isOnlineMode then
+        currentDifficulty = _G.difficulty or "normal"
+        enemy.setDifficulty(currentDifficulty)
+        enemy.reset()
+    else
+        enemy.reset()   -- врага нет в онлайне
+    end
 
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
     resurrectionUsed = false
@@ -175,7 +182,6 @@ function game.load()
 
     controls.load()
     enemy.load()
-    enemy.reset()
 end
 
 function game.resize()
@@ -187,7 +193,7 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Обновление лазера
+    -- Лазер
     laserCooldown = math.max(0, laserCooldown - dt)
     if laserActive then
         laserTimer = laserTimer - dt
@@ -196,13 +202,13 @@ function game.update(dt)
         end
     end
 
-    -- Обновление рывка
+    -- Рывок
     if dashCooldown > 0 then
         dashCooldown = dashCooldown - dt
         if dashCooldown < 0 then dashCooldown = 0 end
     end
 
-    -- Обработка активации способности
+    -- Активация способностей
     if controls.getAbilityTrigger() then
         if equippedSkin == "AZUM CUBE" and not resurrectionUsed and cube.hp <= 1 then
             cube.hp = 5
@@ -210,7 +216,6 @@ function game.update(dt)
             cube.hit = 0
             controls.setAbilityAvailable(false)
         elseif equippedSkin == "NASTYA CUBE" and laserCooldown <= 0 then
-            -- ЛАЗЕР (HITSCAN)
             local aimX, aimY = controls.getAim()
             fireLaser(cube.x, cube.y, aimX, aimY)
             laserActive = true
@@ -278,7 +283,7 @@ function game.update(dt)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Обновление обычных пуль
+    -- Обновление пуль игрока
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -287,34 +292,34 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
-    -- Обновление врага (передаём пули игрока)
-    local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
-    if enemyKilled then
-        local reward = 10
-        if currentDifficulty == "easy" then reward = 5
-        elseif currentDifficulty == "hard" then reward = 50
-        elseif currentDifficulty == "impossible" then reward = 100 end
-        SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
-        SAVE_SAVE()
-        GameState.current = "lobby"
-        return
-    end
+    -- Враг (только в одиночном режиме)
+    if not isOnlineMode then
+        local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
+        if enemyKilled then
+            local reward = 10
+            if currentDifficulty == "easy" then reward = 5
+            elseif currentDifficulty == "hard" then reward = 50
+            elseif currentDifficulty == "impossible" then reward = 100 end
+            SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
+            SAVE_SAVE()
+            GameState.current = "lobby"
+            return
+        end
 
-    -- Проверка попадания вражеских пуль в игрока
-    local eBullets = enemy.getBullets()
-    for i = #eBullets, 1, -1 do
-        local b = eBullets[i]
-        local bx = b.x - cube.x
-        local by = b.y - cube.y
-        if bx * bx + by * by <= (PLAYER_SIZE * 0.5) ^ 2 then
-            onHitPlayer(1)
-            table.remove(eBullets, i)
-            if dead then return end
+        -- Проверка попадания вражеских пуль
+        local eBullets = enemy.getBullets()
+        for i = #eBullets, 1, -1 do
+            local b = eBullets[i]
+            local bx = b.x - cube.x
+            local by = b.y - cube.y
+            if bx * bx + by * by <= (PLAYER_SIZE * 0.5) ^ 2 then
+                onHitPlayer(1)
+                table.remove(eBullets, i)
+                if dead then return end
+            end
         end
     end
 end
-
--- --- ОТРИСОВКА ---
 
 function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
@@ -332,7 +337,7 @@ function game.draw()
         end
     end
 
-    -- Обычные и рывковые пули (лазерных пуль нет)
+    -- Пули игрока
     for _, b in ipairs(bullets) do
         if b.isDash then
             love.graphics.setColor(1, 1, 1, 1)
@@ -344,7 +349,21 @@ function game.draw()
             love.graphics.circle("fill", b.x, b.y, 8)
         end
     end
-    enemy.drawBullets()
+
+    -- Враг (только в одиночном) или другие игроки (онлайн)
+    if not isOnlineMode then
+        enemy.drawBullets()
+        enemy.draw()
+    else
+        -- Рисуем других игроков
+        local others = online.getPlayers()
+        for uid, pos in pairs(others) do
+            love.graphics.setColor(1, 0.2, 0.2, 1)
+            love.graphics.circle("fill", pos.x, pos.y, PLAYER_SIZE)
+            love.graphics.setColor(1, 1, 1, 0.7)
+            love.graphics.print(string.sub(uid, 1, 4), pos.x - 20, pos.y - 30)
+        end
+    end
 
     -- Линия прицела
     if controls.isAiming() then
@@ -354,19 +373,14 @@ function game.draw()
         love.graphics.line(cube.x, cube.y, cube.x + ax * 180, cube.y + ay * 180)
     end
 
-    enemy.draw()
-
-    -- Отрисовка ЛАЗЕРА (луч)
+    -- Лазер
     if laserActive then
         love.graphics.setLineWidth(8)
-        -- Внешняя красная обводка
         love.graphics.setColor(1, 0, 0, 0.8)
         love.graphics.line(cube.x, cube.y, laserEndX, laserEndY)
-        -- Внутренняя белая сердцевина
         love.graphics.setLineWidth(3)
         love.graphics.setColor(1, 1, 1, 0.9)
         love.graphics.line(cube.x, cube.y, laserEndX, laserEndY)
-        -- Свечение
         love.graphics.setLineWidth(18)
         love.graphics.setColor(1, 0, 0, 0.2)
         love.graphics.line(cube.x, cube.y, laserEndX, laserEndY)
@@ -422,11 +436,15 @@ function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.printf("HP " .. math.max(0, cube.hp) .. " / " .. PLAYER_HP_MAX, px, py + 22, barW, "left")
 
-    local diffText = "NORMAL"
-    if currentDifficulty == "easy" then diffText = "EASY" end
-    if currentDifficulty == "hard" then diffText = "HARD" end
-    if currentDifficulty == "impossible" then diffText = "IMPOSSIBLE" end
-    love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
+    if not isOnlineMode then
+        local diffText = "NORMAL"
+        if currentDifficulty == "easy" then diffText = "EASY" end
+        if currentDifficulty == "hard" then diffText = "HARD" end
+        if currentDifficulty == "impossible" then diffText = "IMPOSSIBLE" end
+        love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
+    else
+        love.graphics.printf("ONLINE MODE", px, py + 44, 200, "left")
+    end
 
     -- Статус способностей
     if equippedSkin == "BUK CUBE" then
@@ -452,20 +470,20 @@ function game.draw()
         end
     end
 
-    -- ХП врага
-    local e, _, enemyMaxHP = enemy.get()
-    if e then
-        local epx = love.graphics.getWidth() - barW - 20
-        local epy = 20
-        drawHPBar(epx, epy, barW, barH, e.hp, enemyMaxHP, {0.9, 0.2, 0.2})
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("ENEMY " .. math.max(0, e.hp) .. " / " .. enemyMaxHP, epx, epy + 22, barW, "right")
+    -- ХП врага (только одиночный)
+    if not isOnlineMode then
+        local e, _, enemyMaxHP = enemy.get()
+        if e then
+            local epx = love.graphics.getWidth() - barW - 20
+            local epy = 20
+            drawHPBar(epx, epy, barW, barH, e.hp, enemyMaxHP, {0.9, 0.2, 0.2})
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.printf("ENEMY " .. math.max(0, e.hp) .. " / " .. enemyMaxHP, epx, epy + 22, barW, "right")
+        end
     end
 
     controls.draw()
 end
-
--- --- ОБРАБОТКА ВВОДА ---
 
 function game.touchpressed(id, x, y)
     controls.touchpressed(id, x, y)
@@ -485,6 +503,10 @@ end
 function game.spawnPlayerBullet(dx, dy)
     if dead then return end
     spawnBullet(cube.x, cube.y, dx, dy)
+end
+
+function game.getPlayerPosition()
+    return cube.x, cube.y
 end
 
 return game
