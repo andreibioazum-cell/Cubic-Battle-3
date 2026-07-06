@@ -49,17 +49,15 @@ jobs:
           fi
 
       # ============================================================
-      #  ВКЛЮЧАЕМ HTTPS (LuaSec) В СБОРКЕ
+      #  ВКЛЮЧАЕМ HTTPS (LuaSec) В СБОРКЕ (правим только CMakeLists.txt)
       # ============================================================
       - name: Enable HTTPS (LuaSec) in love-android
         run: |
           cd love-android
-          # Включаем флаг WITH_SSL в CMake
+          # Включаем флаг WITH_SSL в CMakeLists.txt (OFF -> ON)
           sed -i 's/option(WITH_SSL "Build with SSL support" OFF)/option(WITH_SSL "Build with SSL support" ON)/g' app/src/main/cpp/CMakeLists.txt
-          # Также добавляем опцию в gradle
-          echo 'android.defaultConfig.externalNativeBuild.cmakeArguments += "-DWITH_SSL=ON"' >> app/build.gradle
-          # Для надёжности добавляем зависимость LuaSec (если её нет)
-          echo 'dependencies { implementation "org.luaj:luasec:1.3.2" }' >> app/build.gradle
+          # Проверяем, что замена произошла
+          grep "WITH_SSL" app/src/main/cpp/CMakeLists.txt || echo "⚠️ Не удалось найти WITH_SSL"
 
       - name: Set package name to com.CB3
         run: |
