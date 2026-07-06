@@ -77,7 +77,7 @@ function difficulty.resize()
 end
 
 function difficulty.draw()
-    love.graphics.setColor(0.05, 0.02, 0.15, 1)
+    love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
     local w = love.graphics.getWidth()
@@ -86,7 +86,7 @@ function difficulty.draw()
     drawSpacedText("SELECT DIFFICULTY", 0, 60 * scale, w, "center", fontTitle, nil, 1)
 
     local function drawBtn(btn, label, color)
-        love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+        love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
         love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
         love.graphics.setColor(color[1], color[2], color[3], 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
@@ -96,15 +96,16 @@ function difficulty.draw()
         drawSpacedText(label, btn.x, btn.y + 20*scale, btn.w, "center", fontBtn, nil, 1)
     end
 
+    -- Цвета кнопок сложности оставим разными для наглядности, но основу сделаем синей
     drawBtn(btnEasy, "EASY", {0.2, 0.6, 0.2})
-    drawBtn(btnNormal, "NORMAL", {0.35, 0.15, 0.75})
+    drawBtn(btnNormal, "NORMAL", {0.2, 0.5, 0.9})
     drawBtn(btnHard, "HARD", {0.8, 0.2, 0.2})
     drawBtn(btnImpossible, "IMPOSSIBLE", {0.9, 0.0, 0.0})
 
     -- Back
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.setColor(0.2, 0.5, 0.9, 1)
     love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4 * scale)
