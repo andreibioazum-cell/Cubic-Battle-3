@@ -1,6 +1,6 @@
 local controls = require("controls")
 local enemy = require("enemy")
-local online = require("online")   -- для онлайн-режима
+local online = require("online")
 
 local game = {}
 
@@ -21,7 +21,6 @@ local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
 
--- ЛАЗЕР
 local laserCooldown = 0
 local LASER_COOLDOWN = 15
 local laserActive = false
@@ -31,7 +30,6 @@ local laserEndX, laserEndY = 0, 0
 local LASER_RANGE = 800
 local LASER_DAMAGE = 3
 
--- Рывок
 local dashCooldown = 0
 local dashTimer = 0
 local isDashing = false
@@ -40,10 +38,7 @@ local DASH_SPEED_MULT = 4
 local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
--- Флаг онлайн-режима
 local isOnlineMode = false
-
--- ===== ВСПОМОГАТЕЛЬНЫЕ =====
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
@@ -137,8 +132,6 @@ local function fireLaser(px, py, aimX, aimY)
     laserEndY = py + aimY * LASER_RANGE
 end
 
--- ===== ПУБЛИЧНЫЕ =====
-
 function game.load()
     isOnlineMode = (GameState.current == "online")
     if not isOnlineMode then
@@ -146,7 +139,7 @@ function game.load()
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
     else
-        enemy.reset()   -- врага нет в онлайне
+        enemy.reset()
     end
 
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
@@ -193,7 +186,6 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Лазер
     laserCooldown = math.max(0, laserCooldown - dt)
     if laserActive then
         laserTimer = laserTimer - dt
@@ -202,13 +194,11 @@ function game.update(dt)
         end
     end
 
-    -- Рывок
     if dashCooldown > 0 then
         dashCooldown = dashCooldown - dt
         if dashCooldown < 0 then dashCooldown = 0 end
     end
 
-    -- Активация способностей
     if controls.getAbilityTrigger() then
         if equippedSkin == "AZUM CUBE" and not resurrectionUsed and cube.hp <= 1 then
             cube.hp = 5
@@ -246,7 +236,6 @@ function game.update(dt)
         end
     end
 
-    -- Доступность способностей
     if equippedSkin == "AZUM CUBE" then
         controls.setAbilityAvailable(not resurrectionUsed and cube.hp <= 1)
     elseif equippedSkin == "NASTYA CUBE" then
@@ -257,7 +246,6 @@ function game.update(dt)
         controls.setAbilityAvailable(false)
     end
 
-    -- Движение игрока
     local dx, dy = controls.getMove()
     cube.x = cube.x + dx * cube.speed * dt
     cube.y = cube.y + dy * cube.speed * dt
@@ -266,7 +254,6 @@ function game.update(dt)
     end
     cube.hit = math.max(0, cube.hit - dt * 3)
 
-    -- Рывок
     if isDashing then
         dashTimer = dashTimer - dt
         cube.x = cube.x + dashDirX * cube.speed * DASH_SPEED_MULT * dt
@@ -276,14 +263,12 @@ function game.update(dt)
         end
     end
 
-    -- Камера
     local targetX = cube.x - love.graphics.getWidth() / 2
     local targetY = cube.y - love.graphics.getHeight() / 2
     local k = 1 - math.exp(-dt * 7.3)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Обновление пуль игрока
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -292,7 +277,6 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
-    -- Враг (только в одиночном режиме)
     if not isOnlineMode then
         local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
         if enemyKilled then
@@ -306,7 +290,6 @@ function game.update(dt)
             return
         end
 
-        -- Проверка попадания вражеских пуль
         local eBullets = enemy.getBullets()
         for i = #eBullets, 1, -1 do
             local b = eBullets[i]
@@ -326,7 +309,6 @@ function game.draw()
     love.graphics.push()
     love.graphics.translate(-cam.x, -cam.y)
 
-    -- Фон
     local w, h = love.graphics.getDimensions()
     local tw, th = bg:getWidth(), bg:getHeight()
     local sX = math.floor(cam.x / tw) * tw
@@ -337,7 +319,6 @@ function game.draw()
         end
     end
 
-    -- Пули игрока
     for _, b in ipairs(bullets) do
         if b.isDash then
             love.graphics.setColor(1, 1, 1, 1)
@@ -350,12 +331,10 @@ function game.draw()
         end
     end
 
-    -- Враг (только в одиночном) или другие игроки (онлайн)
     if not isOnlineMode then
         enemy.drawBullets()
         enemy.draw()
     else
-        -- Рисуем других игроков
         local others = online.getPlayers()
         for uid, pos in pairs(others) do
             love.graphics.setColor(1, 0.2, 0.2, 1)
@@ -365,7 +344,6 @@ function game.draw()
         end
     end
 
-    -- Линия прицела
     if controls.isAiming() then
         local ax, ay = controls.getAim()
         love.graphics.setColor(0, 0, 0, 0.55)
@@ -373,7 +351,6 @@ function game.draw()
         love.graphics.line(cube.x, cube.y, cube.x + ax * 180, cube.y + ay * 180)
     end
 
-    -- Лазер
     if laserActive then
         love.graphics.setLineWidth(8)
         love.graphics.setColor(1, 0, 0, 0.8)
@@ -387,7 +364,6 @@ function game.draw()
         love.graphics.setLineWidth(1)
     end
 
-    -- Выбор спрайта игрока
     local imgToDraw
     if equippedSkin == "AZUM CUBE" then
         imgToDraw = azumImg
@@ -399,7 +375,6 @@ function game.draw()
         imgToDraw = playerImg
     end
 
-    -- Тень
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
@@ -407,7 +382,6 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Игрок
     love.graphics.push()
     love.graphics.translate(cube.x, cube.y)
     love.graphics.rotate(cube.angle)
@@ -416,7 +390,6 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Эффект рывка
     if isDashing then
         love.graphics.setColor(1, 1, 1, 0.3)
         love.graphics.circle("fill", cube.x, cube.y, PLAYER_SIZE * 1.2)
@@ -427,7 +400,6 @@ function game.draw()
 
     love.graphics.pop()
 
-    -- HUD
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)
     local barW, barH = 200, 18
@@ -446,7 +418,6 @@ function game.draw()
         love.graphics.printf("ONLINE MODE", px, py + 44, 200, "left")
     end
 
-    -- Статус способностей
     if equippedSkin == "BUK CUBE" then
         local cd = math.max(0, dashCooldown)
         if isDashing then
@@ -470,7 +441,6 @@ function game.draw()
         end
     end
 
-    -- ХП врага (только одиночный)
     if not isOnlineMode then
         local e, _, enemyMaxHP = enemy.get()
         if e then
