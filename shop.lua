@@ -86,6 +86,7 @@ function shop.resize()
 end
 
 function shop.draw(coins)
+    coins = coins or 0   -- защита от nil
     love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
@@ -170,13 +171,13 @@ function shop.draw(coins)
 end
 
 function shop.touchpressed(id, x, y, coins, saveData)
-    -- Защита от nil
     if not saveData then
         print("Ошибка: saveData == nil в shop.touchpressed")
-        return coins, false
+        return coins or 0, false
     end
 
     local changed = false
+    coins = coins or 0
 
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
         playButtonSound()
@@ -230,7 +231,6 @@ function shop.touchpressed(id, x, y, coins, saveData)
         end
     end
 
-    -- Обновляем saveData
     saveData.ownedSkins = {}
     for _, name in ipairs(ownedSkins) do
         table.insert(saveData.ownedSkins, name)
