@@ -1,4 +1,4 @@
--- main.lua
+-- main.lua – главный файл игры
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -7,7 +7,7 @@ local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
 local difficulty = require("difficulty")
-local online = require("online")   -- модуль онлайн-синхронизации
+local online = require("online")   -- наш модуль для онлайн‑синхронизации
 
 GameState = { current = "lobby" }
 
@@ -171,7 +171,7 @@ function love.load()
     loadSave()
     controls.load()
     loadMusic()
-    online.init()  -- инициализация онлайн-модуля
+    online.init()  -- генерирует UUID
 end
 
 function love.update(dt)
@@ -189,6 +189,7 @@ function love.update(dt)
             if game.load then game.load() end
         elseif GameState.current == "online" then
             if game.load then game.load() end   -- загружаем игру без врага
+            -- подключаемся к Firebase
             online.connect(function(success)
                 if success then
                     print("✅ Онлайн режим активен")
@@ -220,7 +221,7 @@ function love.update(dt)
             shotCooldown = SHOT_DELAY
         end
     elseif GameState.current == "online" then
-        -- Передаём позицию игрока для отправки
+        -- обновляем синхронизацию
         if game.getPlayerPosition then
             local x, y = game.getPlayerPosition()
             online.onSendPosition = function() return x, y end
@@ -228,7 +229,7 @@ function love.update(dt)
         online.update(dt)
         game.update(dt)
         controls.update(dt)
-        -- Выстрелы в онлайн режиме (опционально)
+        -- выстрелы (опционально)
         if shotCooldown > 0 then
             shotCooldown = shotCooldown - dt
         end
@@ -271,12 +272,10 @@ function love.resize(w, h)
 end
 
 function love.keypressed(key)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "online" then
         controls.keypressed(key)
-    elseif GameState.current == "online" then
-        controls.keypressed(key)
-    elseif GameState.current == "settings" then
-        if settings.keypressed then settings.keypressed(key) end
+    elseif GameState.current == "settings" and settings.keypressed then
+        settings.keypressed(key)
     end
 
     if key == "escape" then
@@ -303,9 +302,7 @@ function love.keypressed(key)
 end
 
 function love.keyreleased(key)
-    if GameState.current == "game" then
-        controls.keyreleased(key)
-    elseif GameState.current == "online" then
+    if GameState.current == "game" or GameState.current == "online" then
         controls.keyreleased(key)
     end
 end
@@ -316,6 +313,9 @@ function love.textinput(t)
     end
 end
 
+-- ============================================================
+-- ГЛАВНАЯ ДИСПЕТЧЕРИЗАЦИЯ СОБЫТИЙ (исправленная)
+-- ============================================================
 local function dispatch(fn, ...)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then
@@ -330,12 +330,14 @@ local function dispatch(fn, ...)
         game[fn](...)
     elseif s == "shop" and shop[fn] then
         if fn == "touchpressed" then
-            local newCoins, changed = shop.touchpressed(..., SAVE_DATA.coins, SAVE_DATA)
-            if changed then
-                SAVE_SAVE()
-            end
+            local id, x, y = ...
+            local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
+            -- Всегда обновляем монеты, даже если changed == false (например, при переключении скина)
             if newCoins ~= SAVE_DATA.coins then
                 SAVE_DATA.coins = newCoins
+                SAVE_SAVE()
+            elseif changed then
+                -- Если изменился скин, но монеты те же – всё равно сохраняем
                 SAVE_SAVE()
             end
         else
