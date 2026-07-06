@@ -49,15 +49,21 @@ jobs:
           fi
 
       # ============================================================
-      #  ВКЛЮЧАЕМ HTTPS (LuaSec) В СБОРКЕ (правим только CMakeLists.txt)
+      #  ВКЛЮЧАЕМ HTTPS (LuaSec) НАДЁЖНО
       # ============================================================
       - name: Enable HTTPS (LuaSec) in love-android
         run: |
           cd love-android
-          # Включаем флаг WITH_SSL в CMakeLists.txt (OFF -> ON)
-          sed -i 's/option(WITH_SSL "Build with SSL support" OFF)/option(WITH_SSL "Build with SSL support" ON)/g' app/src/main/cpp/CMakeLists.txt
-          # Проверяем, что замена произошла
-          grep "WITH_SSL" app/src/main/cpp/CMakeLists.txt || echo "⚠️ Не удалось найти WITH_SSL"
+          # Если WITH_SSL нет – добавляем
+          if ! grep -q "WITH_SSL" app/src/main/cpp/CMakeLists.txt; then
+            echo "⚠️ WITH_SSL не найден, добавляем вручную..."
+            sed -i '/project(love)/a option(WITH_SSL "Build with SSL support" ON)' app/src/main/cpp/CMakeLists.txt
+          else
+            # Меняем OFF на ON (гибкий regex)
+            sed -i 's/option(WITH_SSL[[:space:]]*"Build with SSL support"[[:space:]]*OFF)/option(WITH_SSL "Build with SSL support" ON)/g' app/src/main/cpp/CMakeLists.txt
+          fi
+          # Проверяем
+          grep "WITH_SSL" app/src/main/cpp/CMakeLists.txt || echo "❌ Не удалось включить WITH_SSL"
 
       - name: Set package name to com.CB3
         run: |
