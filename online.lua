@@ -9,15 +9,14 @@ local PATH = "players/"
 -- ===== СОСТОЯНИЕ =====
 local myUid = nil
 local idToken = nil
-local players = {}      -- структура: { [uid] = { x, y, targetX, targetY, lerpTimer } }
+local players = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.25      -- отправка раз в 0.25 сек
-local FETCH_INTERVAL = 0.3      -- получение раз в 0.3 сек
+local SEND_INTERVAL = 0.25
+local FETCH_INTERVAL = 0.3
 local isConnected = false
 local authInProgress = false
 
--- ===== ГЕНЕРАТОР UUID =====
 local function generateUuid()
     local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
     return string.gsub(template, "[xy]", function(c)
@@ -28,7 +27,6 @@ local function generateUuid()
     end)
 end
 
--- ===== HTTPS ОБЁРТКА =====
 local function firebaseRequest(method, path, data, callback)
     if not idToken then
         if callback then callback(false, "No auth token") end
@@ -39,7 +37,7 @@ local function firebaseRequest(method, path, data, callback)
     local options = {
         method = method,
         headers = { ["Content-Type"] = "application/json" },
-        timeout = 2,   -- таймаут 2 секунды, чтобы не висеть
+        timeout = 2,
     }
     if data then
         options.data = data
@@ -49,11 +47,10 @@ local function firebaseRequest(method, path, data, callback)
     if success and code and code >= 200 and code < 300 then
         if callback then callback(true, body) end
     else
-        if callback then callback(false, "Ошибка: " .. tostring(code)) end
+        if callback then callback(false, "Ошибка: " .. tostring(code) .. " тело: " .. tostring(body)) end
     end
 end
 
--- ===== АУТЕНТИФИКАЦИЯ (анонимный вход) =====
 local function authenticate(callback)
     if authInProgress then return end
     if isConnected then
@@ -81,17 +78,16 @@ local function authenticate(callback)
             print("✅ Auth успешно: UID=" .. myUid)
             if callback then callback(true) end
         else
-            print("❌ Auth ответ без UID/token")
+            print("❌ Auth ответ без UID/token: " .. tostring(body))
             if callback then callback(false) end
         end
     else
-        print("❌ Auth ошибка: " .. tostring(code))
+        print("❌ Auth ошибка: " .. tostring(code) .. " тело: " .. tostring(body))
         if callback then callback(false) end
     end
     authInProgress = false
 end
 
--- ===== ПУБЛИЧНЫЕ ФУНКЦИИ =====
 function online.init()
     print("Online: модуль инициализирован")
 end
@@ -105,12 +101,17 @@ function online.connect(callback)
 end
 
 function online.sendPosition(x, y)
-    if not isConnected or not myUid then return end
+    if not isConnected or not myUid then
+        print("⚠️ Не отправлено: isConnected=" .. tostring(isConnected) .. " myUid=" .. tostring(myUid))
+        return
+    end
     local path = PATH .. myUid
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
-    firebaseRequest("PUT", path, data, function(success)
+    firebaseRequest("PUT", path, data, function(success, err)
         if not success then
-            print("⚠️ Ошибка отправки позиции")
+            print("⚠️ Ошибка отправки позиции: " .. tostring(err))
+        else
+            -- print("✅ Отправлено: x=" .. math.floor(x) .. " y=" .. math.floor(y))
         end
     end)
 end
@@ -121,16 +122,13 @@ function online.fetchPlayers()
         if success and body then
             local data = love.data.decode("json", body)
             if data then
-                local now = love.timer.getTime()
                 for uid, pos in pairs(data) do
                     if uid ~= myUid and pos.x and pos.y then
-                        -- Если игрок уже есть, интерполируем к новой позиции
                         if players[uid] then
                             players[uid].targetX = pos.x
                             players[uid].targetY = pos.y
                             players[uid].lerpTimer = 0
                         else
-                            -- Новый игрок – сразу ставим
                             players[uid] = {
                                 x = pos.x,
                                 y = pos.y,
@@ -141,18 +139,18 @@ function online.fetchPlayers()
                         end
                     end
                 end
-                -- Удаляем игроков, которых уже нет в базе (опционально)
                 for uid, _ in pairs(players) do
                     if not data[uid] then
                         players[uid] = nil
                     end
                 end
             end
+        else
+            print("⚠️ Ошибка получения: " .. tostring(body))
         end
     end)
 end
 
--- Возвращает таблицу с плавными позициями
 function online.getPlayers()
     return players
 end
@@ -173,18 +171,15 @@ function online.update(dt)
         return
     end
 
-    -- Интерполяция позиций всех игроков
     for uid, p in pairs(players) do
-        p.lerpTimer = p.lerpTimer + dt * 2.5   -- скорость интерполяции
+        p.lerpTimer = p.lerpTimer + dt * 2.5
         if p.lerpTimer > 1 then p.lerpTimer = 1 end
         local t = p.lerpTimer
-        -- Плавное движение (easing)
-        local smooth = t * t * (3 - 2 * t)  -- smoothstep
+        local smooth = t * t * (3 - 2 * t)
         p.x = p.x + (p.targetX - p.x) * smooth
         p.y = p.y + (p.targetY - p.y) * smooth
     end
 
-    -- Отправка позиции
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -196,7 +191,6 @@ function online.update(dt)
         end
     end
 
-    -- Получение данных
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
