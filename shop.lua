@@ -43,16 +43,16 @@ end
 
 function shop.load(saveData)
     ownedSkins = {}
-    if saveData.ownedSkins then
+    if saveData and saveData.ownedSkins then
         for _, name in ipairs(saveData.ownedSkins) do
             table.insert(ownedSkins, name)
         end
     else
-        if saveData.ownedSkin and saveData.ownedSkin ~= "NONE" then
+        if saveData and saveData.ownedSkin and saveData.ownedSkin ~= "NONE" then
             table.insert(ownedSkins, saveData.ownedSkin)
         end
     end
-    equippedSkin = saveData.equippedSkin or "NONE"
+    equippedSkin = (saveData and saveData.equippedSkin) or "NONE"
     currentSkinIndex = 1
     shop.resize()
 end
@@ -118,7 +118,6 @@ function shop.draw(coins)
         drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
     end
 
-    -- Главная кнопка
     local btnText, btnColor
     if not isOwned then
         btnText = "BUY"
@@ -171,6 +170,12 @@ function shop.draw(coins)
 end
 
 function shop.touchpressed(id, x, y, coins, saveData)
+    -- Защита от nil
+    if not saveData then
+        print("Ошибка: saveData == nil в shop.touchpressed")
+        return coins, false
+    end
+
     local changed = false
 
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
@@ -225,6 +230,7 @@ function shop.touchpressed(id, x, y, coins, saveData)
         end
     end
 
+    -- Обновляем saveData
     saveData.ownedSkins = {}
     for _, name in ipairs(ownedSkins) do
         table.insert(saveData.ownedSkins, name)
