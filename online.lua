@@ -1,5 +1,4 @@
 -- online.lua – синхронизация через Firebase REST API (HTTPS)
--- Использует встроенный модуль https (LuaSec) – работает на всех платформах
 local online = {}
 
 -- ===== ТВОИ ДАННЫЕ ИЗ FIREBASE =====
@@ -17,6 +16,17 @@ local SEND_INTERVAL = 0.1
 local FETCH_INTERVAL = 0.15
 local isConnected = false
 local authInProgress = false
+
+-- ===== ГЕНЕРАТОР UUID =====
+local function generateUuid()
+    local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+    return string.gsub(template, "[xy]", function(c)
+        local v = math.random(0, 15)
+        if c == "x" then return string.format("%x", v)
+        else return string.format("%x", math.random(8, 11))
+        end
+    end)
+end
 
 -- ===== HTTPS ОБЁРТКА =====
 local function firebaseRequest(method, path, data, callback)
@@ -80,6 +90,13 @@ local function authenticate(callback)
 end
 
 -- ===== ПУБЛИЧНЫЕ ФУНКЦИИ =====
+-- ИНИЦИАЛИЗАЦИЯ (вызывается из main.lua)
+function online.init()
+    -- Просто генерируем UUID, чтобы он был готов
+    -- Но реальный UID получим при аутентификации
+    print("Online: модуль инициализирован")
+end
+
 function online.connect(callback)
     if isConnected then
         if callback then callback(true) end
