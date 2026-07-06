@@ -9,12 +9,11 @@ local btnRight = { w = 60, h = 60, x = 0, y = 0 }
 local SKINS = {
     { name = "AZUM CUBE", price = 500 },
     { name = "NASTYA CUBE", price = 350 },
+    { name = "BUK CUBE", price = 400 },   -- <-- ДОБАВЛЕН
 }
 local currentSkinIndex = 1
-
 local ownedSkins = {}
 local equippedSkin = "NONE"
-
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
 local function getScale()
@@ -47,10 +46,6 @@ function shop.load(saveData)
         for _, name in ipairs(saveData.ownedSkins) do
             table.insert(ownedSkins, name)
         end
-    else
-        if saveData and saveData.ownedSkin and saveData.ownedSkin ~= "NONE" then
-            table.insert(ownedSkins, saveData.ownedSkin)
-        end
     end
     equippedSkin = (saveData and saveData.equippedSkin) or "NONE"
     currentSkinIndex = 1
@@ -60,7 +55,6 @@ end
 function shop.resize()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
-
     btnBack.w = 140 * scale
     btnBack.h = 55 * scale
     btnMain.w = 220 * scale
@@ -69,16 +63,13 @@ function shop.resize()
     btnLeft.h = 60 * scale
     btnRight.w = 60 * scale
     btnRight.h = 60 * scale
-
     btnBack.x = (w - btnBack.w) / 2
     btnMain.x = (w - btnMain.w) / 2
     btnMain.y = h/2 + 120 * scale
-
     btnLeft.x = w/2 - 180 * scale
     btnLeft.y = h/2 + 10 * scale
     btnRight.x = w/2 + 120 * scale
     btnRight.y = h/2 + 10 * scale
-
     local titleSize = math.max(32, 48 * scale)
     local btnSize   = math.max(20, 28 * scale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
@@ -86,7 +77,7 @@ function shop.resize()
 end
 
 function shop.draw(coins)
-    coins = coins or 0   -- защита от nil
+    coins = coins or 0
     love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
@@ -99,10 +90,7 @@ function shop.draw(coins)
     local skin = SKINS[currentSkinIndex]
     local isOwned = false
     for _, name in ipairs(ownedSkins) do
-        if name == skin.name then
-            isOwned = true
-            break
-        end
+        if name == skin.name then isOwned = true; break end
     end
     local isEquipped = (equippedSkin == skin.name)
 
@@ -121,14 +109,11 @@ function shop.draw(coins)
 
     local btnText, btnColor
     if not isOwned then
-        btnText = "BUY"
-        btnColor = {0.2, 0.5, 0.9}
+        btnText = "BUY"; btnColor = {0.2, 0.5, 0.9}
     elseif not isEquipped then
-        btnText = "EQUIP"
-        btnColor = {0.2, 0.5, 0.9}
+        btnText = "EQUIP"; btnColor = {0.2, 0.5, 0.9}
     else
-        btnText = "UNEQUIP"
-        btnColor = {0.8, 0.2, 0.2}
+        btnText = "UNEQUIP"; btnColor = {0.8, 0.2, 0.2}
     end
 
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
@@ -140,7 +125,6 @@ function shop.draw(coins)
     love.graphics.rectangle("line", btnMain.x, btnMain.y, btnMain.w, btnMain.h, 16*scale, 16*scale)
     drawSpacedText(btnText, btnMain.x, btnMain.y + 20*scale, btnMain.w, "center", fontBtn, nil, 1)
 
-    -- Стрелки
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnLeft.x + 4*scale, btnLeft.y + 4*scale, btnLeft.w, btnLeft.h, 10*scale, 10*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -159,7 +143,6 @@ function shop.draw(coins)
     love.graphics.rectangle("line", btnRight.x, btnRight.y, btnRight.w, btnRight.h, 10*scale, 10*scale)
     drawSpacedText(">", btnRight.x, btnRight.y + 12*scale, btnRight.w, "center", fontBtn, nil, 1)
 
-    -- Back
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -171,13 +154,13 @@ function shop.draw(coins)
 end
 
 function shop.touchpressed(id, x, y, coins, saveData)
+    coins = coins or 0
     if not saveData then
-        print("Ошибка: saveData == nil в shop.touchpressed")
-        return coins or 0, false
+        print("❌ saveData nil в shop.touchpressed")
+        return coins, false
     end
 
     local changed = false
-    coins = coins or 0
 
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
         playButtonSound()
@@ -204,10 +187,7 @@ function shop.touchpressed(id, x, y, coins, saveData)
         local skin = SKINS[currentSkinIndex]
         local isOwned = false
         for _, name in ipairs(ownedSkins) do
-            if name == skin.name then
-                isOwned = true
-                break
-            end
+            if name == skin.name then isOwned = true; break end
         end
         local isEquipped = (equippedSkin == skin.name)
 
@@ -216,18 +196,18 @@ function shop.touchpressed(id, x, y, coins, saveData)
                 coins = coins - skin.price
                 table.insert(ownedSkins, skin.name)
                 changed = true
-                print("Куплен скин " .. skin.name)
+                print("✅ Куплен " .. skin.name)
             else
-                print("Не хватает монет!")
+                print("❌ Не хватает монет!")
             end
         elseif not isEquipped then
             equippedSkin = skin.name
             changed = true
-            print("Надет скин " .. skin.name)
+            print("✅ Надет " .. skin.name)
         else
             equippedSkin = "NONE"
             changed = true
-            print("Снят скин " .. skin.name)
+            print("✅ Снят " .. skin.name)
         end
     end
 
