@@ -38,7 +38,8 @@ function toggleSfx()
 end
 
 local function loadMusic()
-    local ok, source = pcall(love.audio.newSource, "Kevin_MacLeod_-_Sneaky_Snitch_74768437.mp3", "stream")
+    -- ★ ИЗМЕНЕНО: теперь загружаем "Aaron Kenny - Christmas Village.mp3"
+    local ok, source = pcall(love.audio.newSource, "Aaron Kenny - Christmas Village.mp3", "stream")
     if ok and source then
         bgMusic = source
         bgMusic:setLooping(true)
@@ -46,7 +47,7 @@ local function loadMusic()
         if musicOn then bgMusic:play() end
     else
         musicOn = false
-        print("Не удалось загрузить музыку")
+        print("Не удалось загрузить музыку (Aaron Kenny - Christmas Village.mp3)")
     end
 end
 
