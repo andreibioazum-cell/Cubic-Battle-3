@@ -81,17 +81,10 @@ function credits.draw()
     drawSpacedText("Dima Saraev – Creator (10 years)", 0, y, w, "center", fontText)
     y = y + 50 * scale
     drawSpacedText("Dima Gustenyov – Owner (11 years)", 0, y, w, "center", fontText)
-    y = y + 80 * scale
 
-    drawSpacedText("Music:", 0, y, w, "center", fontText)
-    y = y + 55 * scale
-    drawSpacedText('"Sneaky Snitch" by Kevin MacLeod', 0, y, w, "center", fontText)
-    y = y + 45 * scale
-    drawSpacedText("(incompetech.com)", 0, y, w, "center", fontText)
-    y = y + 45 * scale
-    drawSpacedText("Licensed under CC: By Attribution 3.0", 0, y, w, "center", fontText)
+    -- Раздел музыки УДАЛЁН
 
-    -- Back
+    -- Кнопка Back (синяя, как везде)
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
