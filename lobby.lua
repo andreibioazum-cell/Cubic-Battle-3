@@ -7,8 +7,7 @@ local btns = {
     credits = { w = 220, h = 75, x = 0, y = 0 }
 }
 local fontTitle, fontSub, fontBtn
-local spaceCanvas
-local stars = {}
+local backgroundImage  -- <-- загруженное изображение
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
@@ -17,35 +16,6 @@ local function getScale()
     local base = 1000
     if isMobile then base = 600 end
     return math.min(w, h) / base
-end
-
-local function mkGrad(w, h)
-    return love.graphics.newMesh({
-        {0, 0, 0, 0, 0.02, 0.00, 0.10, 1},
-        {w, 0, 1, 0, 0.00, 0.05, 0.25, 1},
-        {w, h, 1, 1, 0.10, 0.15, 0.45, 1},
-        {0, h, 0, 1, 0.05, 0.10, 0.35, 1}
-    }, "fan", "static")
-end
-
-local function generateStars(w, h)
-    stars = {}
-    for i = 1, 100 do
-        table.insert(stars, {
-            x = math.random(w),
-            y = math.random(h),
-            size = math.random(1, 3),
-            alpha = math.random(50, 100) / 100,
-            speed = 40 + math.random(80)
-        })
-    end
-end
-
-local function generateSpace(w, h)
-    spaceCanvas = love.graphics.newCanvas(w, h)
-    love.graphics.setCanvas(spaceCanvas)
-    love.graphics.draw(mkGrad(w, h), 0, 0)
-    love.graphics.setCanvas()
 end
 
 local function place()
@@ -92,6 +62,9 @@ function lobby.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
+    -- Загружаем фоновое изображение
+    backgroundImage = love.graphics.newImage("Lobby_Snow.png")
+
     local titleSize = math.max(36, 72 * scale)
     local subSize   = math.max(18, 26 * scale)
     local btnSize   = math.max(22, 34 * scale)
@@ -100,14 +73,11 @@ function lobby.load()
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 
-    generateSpace(w, h)
-    generateStars(w, h)
     place()
 end
 
 function lobby.resize(w, h)
-    generateSpace(w, h)
-    generateStars(w, h)
+    -- При изменении размера окна просто пересчитываем расположение кнопок
     place()
     local scale = getScale()
     local titleSize = math.max(36, 72 * scale)
@@ -116,32 +86,19 @@ function lobby.resize(w, h)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
+    -- Изображение не нужно перезагружать, оно будет растягиваться при отрисовке
 end
 
 function lobby.update(dt)
-    local w, h = love.graphics.getDimensions()
-    for _, s in ipairs(stars) do
-        s.x = s.x + s.speed * dt
-        s.y = s.y + s.speed * dt
-        if s.x > w or s.y > h then
-            if math.random() > 0.5 then
-                s.x = math.random(-50, 0)
-                s.y = math.random(0, h)
-            else
-                s.x = math.random(0, w)
-                s.y = math.random(-50, 0)
-            end
-        end
-    end
+    -- Звёзды удалены, обновление не требуется
 end
 
 function lobby.draw()
-    love.graphics.setColor(1, 1, 1, 1)
-    if spaceCanvas then love.graphics.draw(spaceCanvas, 0, 0) end
-
-    for _, s in ipairs(stars) do
-        love.graphics.setColor(1, 1, 1, s.alpha)
-        love.graphics.rectangle("fill", s.x, s.y, s.size, s.size)
+    -- Рисуем фоновое изображение, растянутое на весь экран
+    if backgroundImage then
+        local w, h = love.graphics.getDimensions()
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(backgroundImage, 0, 0, 0, w / backgroundImage:getWidth(), h / backgroundImage:getHeight())
     end
 
     local w = love.graphics.getWidth()
