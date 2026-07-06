@@ -105,7 +105,8 @@ function mode_select.resize()
 end
 
 function mode_select.draw()
-    love.graphics.setColor(0.05, 0.02, 0.15, 1)
+    -- Фон
+    love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
     local w = love.graphics.getWidth()
@@ -114,9 +115,9 @@ function mode_select.draw()
     drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
     -- Кнопка Singleplayer
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnSingle.x + 5*scale, btnSingle.y + 6*scale, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.setColor(0.2, 0.5, 0.9, 1)
     love.graphics.rectangle("fill", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4 * scale)
@@ -124,9 +125,9 @@ function mode_select.draw()
     drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
 
     -- Кнопка Back
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.setColor(0.2, 0.5, 0.9, 1)
     love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.4 * scale)
@@ -143,7 +144,7 @@ function mode_select.touchpressed(id, x, y)
 
     if x >= btnSingle.x and x <= btnSingle.x + btnSingle.w and y >= btnSingle.y and y <= btnSingle.y + btnSingle.h then
         playButtonSound()
-        GameState.current = "difficulty"   -- теперь выбор сложности
+        GameState.current = "difficulty"
         return
     end
 end
