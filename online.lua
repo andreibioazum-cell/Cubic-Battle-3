@@ -1,4 +1,4 @@
--- online.lua – синхронизация через Firebase REST API
+-- online.lua – с отладочным выводом на экран
 local online = {}
 
 local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
@@ -14,6 +14,8 @@ local SEND_INTERVAL = 0.25
 local FETCH_INTERVAL = 0.3
 local isConnected = false
 local authInProgress = false
+local statusMessage = "Не подключено"
+local playerCount = 0
 
 local function generateUuid()
     local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
@@ -25,7 +27,6 @@ local function generateUuid()
     end)
 end
 
--- Проверяем, есть ли https
 local function hasHttps()
     local ok, _ = pcall(require, "https")
     return ok
@@ -37,7 +38,7 @@ local function firebaseRequest(method, path, data, callback)
         return
     end
     if not hasHttps() then
-        print("❌ Модуль https не найден! Скачай официальный APK LÖVE.")
+        statusMessage = "ОШИБКА: нет https"
         if callback then callback(false, "https not found") end
         return
     end
@@ -53,10 +54,13 @@ local function firebaseRequest(method, path, data, callback)
         options.data = data
     end
 
+    statusMessage = "Запрос: " .. method .. " " .. path
     local success, code, body = pcall(https.request, url, options)
     if success and code and code >= 200 and code < 300 then
+        statusMessage = "✅ " .. method .. " OK (" .. code .. ")"
         if callback then callback(true, body) end
     else
+        statusMessage = "❌ Ошибка " .. tostring(code)
         if callback then callback(false, "Ошибка: " .. tostring(code)) end
     end
 end
@@ -70,7 +74,7 @@ local function authenticate(callback)
     authInProgress = true
 
     if not hasHttps() then
-        print("❌ Нет https, аутентификация невозможна.")
+        statusMessage = "Нет https!"
         if callback then callback(false) end
         return
     end
@@ -85,6 +89,7 @@ local function authenticate(callback)
         verify = false,
     }
 
+    statusMessage = "Аутентификация..."
     local success, code, body = pcall(https.request, authUrl, options)
     if success and code == 200 then
         local data = love.data.decode("json", body)
@@ -92,21 +97,21 @@ local function authenticate(callback)
             myUid = data.localId
             idToken = data.idToken
             isConnected = true
-            print("✅ Auth успешно: UID=" .. myUid)
+            statusMessage = "✅ Auth OK, UID=" .. string.sub(myUid,1,8)
             if callback then callback(true) end
         else
-            print("❌ Auth ответ без UID/token")
+            statusMessage = "❌ Auth нет UID"
             if callback then callback(false) end
         end
     else
-        print("❌ Auth ошибка: " .. tostring(code))
+        statusMessage = "❌ Auth ошибка " .. tostring(code)
         if callback then callback(false) end
     end
     authInProgress = false
 end
 
 function online.init()
-    print("Online: модуль инициализирован")
+    statusMessage = "Модуль инициализирован"
 end
 
 function online.connect(callback)
@@ -123,7 +128,7 @@ function online.sendPosition(x, y)
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
     firebaseRequest("PUT", path, data, function(success)
         if not success then
-            print("⚠️ Ошибка отправки")
+            statusMessage = "⚠️ Ошибка PUT"
         end
     end)
 end
@@ -134,8 +139,10 @@ function online.fetchPlayers()
         if success and body then
             local data = love.data.decode("json", body)
             if data then
+                local count = 0
                 for uid, pos in pairs(data) do
                     if uid ~= myUid and pos.x and pos.y then
+                        count = count + 1
                         if players[uid] then
                             players[uid].targetX = pos.x
                             players[uid].targetY = pos.y
@@ -149,10 +156,15 @@ function online.fetchPlayers()
                         end
                     end
                 end
+                playerCount = count
+                -- удаляем ушедших
                 for uid, _ in pairs(players) do
                     if not data[uid] then players[uid] = nil end
                 end
+                statusMessage = "Игроков: " .. playerCount
             end
+        else
+            statusMessage = "❌ GET ошибка"
         end
     end)
 end
@@ -165,7 +177,7 @@ function online.leave()
     if not isConnected or not myUid then return end
     local path = PATH .. myUid
     firebaseRequest("DELETE", path, nil, function()
-        print("🗑️ Удалён")
+        statusMessage = "🗑️ Удалён"
     end)
     isConnected = false
     players = {}
@@ -177,6 +189,7 @@ function online.update(dt)
         return
     end
 
+    -- интерполяция
     for uid, p in pairs(players) do
         p.lerpTimer = p.lerpTimer + dt * 2.5
         if p.lerpTimer > 1 then p.lerpTimer = 1 end
@@ -202,6 +215,13 @@ function online.update(dt)
         fetchTimer = 0
         online.fetchPlayers()
     end
+end
+
+-- функция для отображения статуса на экране
+function online.drawStatus()
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("Online: " .. statusMessage, 10, love.graphics.getHeight() - 40)
+    love.graphics.print("Игроков: " .. playerCount, 10, love.graphics.getHeight() - 20)
 end
 
 return online
