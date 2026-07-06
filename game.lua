@@ -335,6 +335,7 @@ function game.draw()
         enemy.drawBullets()
         enemy.draw()
     else
+        -- Рисуем других игроков
         local others = online.getPlayers()
         for uid, pos in pairs(others) do
             love.graphics.setColor(1, 0.2, 0.2, 1)
