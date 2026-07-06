@@ -1,4 +1,4 @@
--- online.lua – синхронизация через Firebase REST API (HTTPS)
+-- online.lua – синхронизация через Firebase REST API (HTTPS) с интерполяцией
 local online = {}
 
 -- ===== ТВОИ ДАННЫЕ ИЗ FIREBASE =====
@@ -9,11 +9,11 @@ local PATH = "players/"
 -- ===== СОСТОЯНИЕ =====
 local myUid = nil
 local idToken = nil
-local players = {}
+local players = {}      -- структура: { [uid] = { x, y, targetX, targetY, lerpTimer } }
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.1
-local FETCH_INTERVAL = 0.15
+local SEND_INTERVAL = 0.25      -- отправка раз в 0.25 сек
+local FETCH_INTERVAL = 0.3      -- получение раз в 0.3 сек
 local isConnected = false
 local authInProgress = false
 
@@ -38,7 +38,8 @@ local function firebaseRequest(method, path, data, callback)
     local url = DB_URL .. "/" .. path .. ".json?auth=" .. idToken
     local options = {
         method = method,
-        headers = { ["Content-Type"] = "application/json" }
+        headers = { ["Content-Type"] = "application/json" },
+        timeout = 2,   -- таймаут 2 секунды, чтобы не висеть
     }
     if data then
         options.data = data
@@ -66,7 +67,8 @@ local function authenticate(callback)
     local options = {
         method = "POST",
         headers = { ["Content-Type"] = "application/json" },
-        data = '{"returnSecureToken":true}'
+        data = '{"returnSecureToken":true}',
+        timeout = 3
     }
 
     local success, code, body = pcall(https.request, authUrl, options)
@@ -90,10 +92,7 @@ local function authenticate(callback)
 end
 
 -- ===== ПУБЛИЧНЫЕ ФУНКЦИИ =====
--- ИНИЦИАЛИЗАЦИЯ (вызывается из main.lua)
 function online.init()
-    -- Просто генерируем UUID, чтобы он был готов
-    -- Но реальный UID получим при аутентификации
     print("Online: модуль инициализирован")
 end
 
@@ -122,18 +121,38 @@ function online.fetchPlayers()
         if success and body then
             local data = love.data.decode("json", body)
             if data then
-                local newPlayers = {}
+                local now = love.timer.getTime()
                 for uid, pos in pairs(data) do
                     if uid ~= myUid and pos.x and pos.y then
-                        newPlayers[uid] = { x = pos.x, y = pos.y }
+                        -- Если игрок уже есть, интерполируем к новой позиции
+                        if players[uid] then
+                            players[uid].targetX = pos.x
+                            players[uid].targetY = pos.y
+                            players[uid].lerpTimer = 0
+                        else
+                            -- Новый игрок – сразу ставим
+                            players[uid] = {
+                                x = pos.x,
+                                y = pos.y,
+                                targetX = pos.x,
+                                targetY = pos.y,
+                                lerpTimer = 0
+                            }
+                        end
                     end
                 end
-                players = newPlayers
+                -- Удаляем игроков, которых уже нет в базе (опционально)
+                for uid, _ in pairs(players) do
+                    if not data[uid] then
+                        players[uid] = nil
+                    end
+                end
             end
         end
     end)
 end
 
+-- Возвращает таблицу с плавными позициями
 function online.getPlayers()
     return players
 end
@@ -154,6 +173,18 @@ function online.update(dt)
         return
     end
 
+    -- Интерполяция позиций всех игроков
+    for uid, p in pairs(players) do
+        p.lerpTimer = p.lerpTimer + dt * 2.5   -- скорость интерполяции
+        if p.lerpTimer > 1 then p.lerpTimer = 1 end
+        local t = p.lerpTimer
+        -- Плавное движение (easing)
+        local smooth = t * t * (3 - 2 * t)  -- smoothstep
+        p.x = p.x + (p.targetX - p.x) * smooth
+        p.y = p.y + (p.targetY - p.y) * smooth
+    end
+
+    -- Отправка позиции
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -165,6 +196,7 @@ function online.update(dt)
         end
     end
 
+    -- Получение данных
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
