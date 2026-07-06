@@ -1,12 +1,10 @@
 -- online.lua – синхронизация через Firebase REST API (HTTPS) с интерполяцией
 local online = {}
 
--- ===== ТВОИ ДАННЫЕ ИЗ FIREBASE =====
 local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
 local PATH = "players/"
 
--- ===== СОСТОЯНИЕ =====
 local myUid = nil
 local idToken = nil
 local players = {}
@@ -37,17 +35,21 @@ local function firebaseRequest(method, path, data, callback)
     local options = {
         method = method,
         headers = { ["Content-Type"] = "application/json" },
-        timeout = 2,
+        timeout = 3,
+        verify = false,   -- ОТКЛЮЧАЕМ ПРОВЕРКУ СЕРТИФИКАТОВ ДЛЯ ANDROID
     }
     if data then
         options.data = data
     end
 
+    print("📤 Отправка запроса: " .. method .. " " .. url)
     local success, code, body = pcall(https.request, url, options)
     if success and code and code >= 200 and code < 300 then
+        print("✅ Ответ: " .. code)
         if callback then callback(true, body) end
     else
-        if callback then callback(false, "Ошибка: " .. tostring(code) .. " тело: " .. tostring(body)) end
+        print("❌ Ошибка: " .. tostring(code) .. " " .. tostring(body))
+        if callback then callback(false, "Ошибка: " .. tostring(code)) end
     end
 end
 
@@ -65,9 +67,11 @@ local function authenticate(callback)
         method = "POST",
         headers = { ["Content-Type"] = "application/json" },
         data = '{"returnSecureToken":true}',
-        timeout = 3
+        timeout = 3,
+        verify = false,
     }
 
+    print("🔑 Аутентификация...")
     local success, code, body = pcall(https.request, authUrl, options)
     if success and code == 200 then
         local data = love.data.decode("json", body)
@@ -78,11 +82,11 @@ local function authenticate(callback)
             print("✅ Auth успешно: UID=" .. myUid)
             if callback then callback(true) end
         else
-            print("❌ Auth ответ без UID/token: " .. tostring(body))
+            print("❌ Auth ответ без UID/token")
             if callback then callback(false) end
         end
     else
-        print("❌ Auth ошибка: " .. tostring(code) .. " тело: " .. tostring(body))
+        print("❌ Auth ошибка: " .. tostring(code) .. " " .. tostring(body))
         if callback then callback(false) end
     end
     authInProgress = false
@@ -102,16 +106,14 @@ end
 
 function online.sendPosition(x, y)
     if not isConnected or not myUid then
-        print("⚠️ Не отправлено: isConnected=" .. tostring(isConnected) .. " myUid=" .. tostring(myUid))
+        print("⚠️ Не отправлено: нет соединения или UID")
         return
     end
     local path = PATH .. myUid
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
-    firebaseRequest("PUT", path, data, function(success, err)
+    firebaseRequest("PUT", path, data, function(success)
         if not success then
-            print("⚠️ Ошибка отправки позиции: " .. tostring(err))
-        else
-            -- print("✅ Отправлено: x=" .. math.floor(x) .. " y=" .. math.floor(y))
+            print("⚠️ Ошибка отправки позиции")
         end
     end)
 end
@@ -122,6 +124,7 @@ function online.fetchPlayers()
         if success and body then
             local data = love.data.decode("json", body)
             if data then
+                local now = love.timer.getTime()
                 for uid, pos in pairs(data) do
                     if uid ~= myUid and pos.x and pos.y then
                         if players[uid] then
@@ -145,8 +148,6 @@ function online.fetchPlayers()
                     end
                 end
             end
-        else
-            print("⚠️ Ошибка получения: " .. tostring(body))
         end
     end)
 end
