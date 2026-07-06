@@ -7,7 +7,7 @@ on:
 jobs:
   build-android-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     outputs:
       apk-name: ${{ steps.set-output.outputs.apk-name }}
 
@@ -49,21 +49,52 @@ jobs:
           fi
 
       # ============================================================
-      #  ВКЛЮЧАЕМ HTTPS (LuaSec) НАДЁЖНО
+      #  СБОРКА OPENSSL ДЛЯ ARM64
       # ============================================================
-      - name: Enable HTTPS (LuaSec) in love-android
+      - name: Build OpenSSL for Android (arm64)
         run: |
           cd love-android
-          # Если WITH_SSL нет – добавляем
-          if ! grep -q "WITH_SSL" app/src/main/cpp/CMakeLists.txt; then
-            echo "⚠️ WITH_SSL не найден, добавляем вручную..."
-            sed -i '/project(love)/a option(WITH_SSL "Build with SSL support" ON)' app/src/main/cpp/CMakeLists.txt
-          else
-            # Меняем OFF на ON (гибкий regex)
-            sed -i 's/option(WITH_SSL[[:space:]]*"Build with SSL support"[[:space:]]*OFF)/option(WITH_SSL "Build with SSL support" ON)/g' app/src/main/cpp/CMakeLists.txt
-          fi
-          # Проверяем
-          grep "WITH_SSL" app/src/main/cpp/CMakeLists.txt || echo "❌ Не удалось включить WITH_SSL"
+          # Скачиваем исходники OpenSSL
+          wget -O openssl-1.1.1w.tar.gz https://www.openssl.org/source/openssl-1.1.1w.tar.gz
+          tar -xzf openssl-1.1.1w.tar.gz
+          cd openssl-1.1.1w
+          # Устанавливаем переменные для NDK
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/25.2.9519653"
+          export PATH="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export CC=clang
+          export AR=ar
+          # Настраиваем для arm64
+          ./Configure android-arm64 -D__ANDROID_API__=21 -no-shared -no-asm
+          make -j$(nproc)
+          # Копируем собранные библиотеки и заголовки в love-android
+          mkdir -p ../app/src/main/cpp/openssl/include
+          mkdir -p ../app/src/main/cpp/openssl/lib/arm64-v8a
+          cp -r include/openssl ../app/src/main/cpp/openssl/include/
+          cp libcrypto.a libssl.a ../app/src/main/cpp/openssl/lib/arm64-v8a/
+          cd ..
+
+      # ============================================================
+      #  ВКЛЮЧАЕМ SSL В LOVE-ANDROID
+      # ============================================================
+      - name: Enable SSL in love-android
+        run: |
+          cd love-android
+          # Добавляем пути к OpenSSL в CMakeLists.txt
+          cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
+
+          # Добавляем OpenSSL (собраны в папке openssl)
+          set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/openssl)
+          set(OPENSSL_INCLUDE_DIR ${OPENSSL_ROOT_DIR}/include)
+          set(OPENSSL_LIB_DIR ${OPENSSL_ROOT_DIR}/lib/${ANDROID_ABI})
+          add_library(crypto STATIC IMPORTED)
+          set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${OPENSSL_LIB_DIR}/libcrypto.a)
+          add_library(ssl STATIC IMPORTED)
+          set_target_properties(ssl PROPERTIES IMPORTED_LOCATION ${OPENSSL_LIB_DIR}/libssl.a)
+          target_link_libraries(love crypto ssl)
+
+          # Включаем WITH_SSL
+          option(WITH_SSL "Build with SSL support" ON)
+          EOF
 
       - name: Set package name to com.CB3
         run: |
