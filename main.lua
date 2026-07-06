@@ -1,4 +1,4 @@
--- main.lua для Cubic Battle 3
+-- main.lua
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -7,6 +7,7 @@ local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
 local difficulty = require("difficulty")
+local online = require("online")   -- модуль онлайн-синхронизации
 
 GameState = { current = "lobby" }
 
@@ -38,7 +39,6 @@ function toggleSfx()
 end
 
 local function loadMusic()
-    -- ★ ИЗМЕНЕНО: теперь загружаем "Aaron Kenny - Christmas Village.mp3"
     local ok, source = pcall(love.audio.newSource, "Aaron Kenny - Christmas Village.mp3", "stream")
     if ok and source then
         bgMusic = source
@@ -47,7 +47,7 @@ local function loadMusic()
         if musicOn then bgMusic:play() end
     else
         musicOn = false
-        print("Не удалось загрузить музыку (Aaron Kenny - Christmas Village.mp3)")
+        print("Не удалось загрузить музыку")
     end
 end
 
@@ -60,32 +60,20 @@ function playButtonSound()
     end
 end
 
--- ===== ЗВУКИ ВЫСТРЕЛА И ПОПАДАНИЯ (ИЗ ФАЙЛОВ) =====
-local shootSound = nil   -- шаблон
+local shootSound = nil
 local hitSound = nil
 
 function playShootSound()
     if not sfxOn then return end
-
-    -- Загружаем шаблон один раз (теперь .wav)
     if not shootSound then
-        local info = love.filesystem.getInfo("The_Sound_Of_A_Gunshot.wav")   -- ★ WAV
-        if info then
-            local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.wav", "static")   -- ★ WAV
-            if ok and source then
-                shootSound = source
-                shootSound:setVolume(1.0)
-            else
-                print("Ошибка загрузки The_Sound_Of_A_Gunshot.wav")
-                return
-            end
+        local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.wav", "static")
+        if ok and source then
+            shootSound = source
+            shootSound:setVolume(1.0)
         else
-            print("Файл The_Sound_Of_A_Gunshot.wav не найден!")
             return
         end
     end
-
-    -- Создаём клон и воспроизводим (наложение)
     local clone = shootSound:clone()
     clone:setVolume(1.0)
     clone:play()
@@ -93,30 +81,19 @@ end
 
 function playHitSound()
     if not sfxOn then return end
-
     if not hitSound then
-        local info = love.filesystem.getInfo("hit.mp3")
-        if info then
-            local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")
-            if ok and source then
-                hitSound = source
-                hitSound:setVolume(0.3)
-            else
-                print("Ошибка загрузки hit.mp3")
-                return
-            end
+        local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")
+        if ok and source then
+            hitSound = source
+            hitSound:setVolume(0.3)
         else
-            print("hit.mp3 не найден, звук попадания отключён")
             return
         end
     end
-
-    -- Можно тоже сделать клон, если нужно наложение, но пока оставляем как есть
     hitSound:stop()
     hitSound:play()
 end
 
--- Делаем функции доступными глобально
 _G.playShootSound = playShootSound
 _G.playHitSound = playHitSound
 game.playShootSound = playShootSound
@@ -141,14 +118,9 @@ function SAVE_SAVE()
                     tostring(musicOn and 1 or 0) .. "\n" ..
                     tostring(sfxOn and 1 or 0) .. "\n" ..
                     (SAVE_DATA.nickname or "Player")
-    local success, err = pcall(function()
+    pcall(function()
         love.filesystem.write(SAVE_FILE, content)
     end)
-    if success then
-        print("Сохранено: coins=" .. SAVE_DATA.coins .. ", owned=" .. ownedStr .. ", equipped=" .. SAVE_DATA.equippedSkin)
-    else
-        print("Ошибка сохранения: " .. tostring(err))
-    end
 end
 
 local function loadSave()
@@ -191,7 +163,6 @@ local function loadSave()
     }
     musicOn = musicVal == 1
     sfxOn = sfxVal == 1
-    print("Загружено: coins=" .. coins .. ", owned=" .. ownedStr .. ", equipped=" .. equippedSkin .. ", nick=" .. nickname)
 end
 
 -- ========== LOVE CALLBACKS ==========
@@ -200,6 +171,7 @@ function love.load()
     loadSave()
     controls.load()
     loadMusic()
+    online.init()  -- инициализация онлайн-модуля
 end
 
 function love.update(dt)
@@ -215,6 +187,15 @@ function love.update(dt)
             if difficulty.load then difficulty.load() end
         elseif GameState.current == "game" then
             if game.load then game.load() end
+        elseif GameState.current == "online" then
+            if game.load then game.load() end   -- загружаем игру без врага
+            online.connect(function(success)
+                if success then
+                    print("✅ Онлайн режим активен")
+                else
+                    print("❌ Не удалось подключиться к Firebase")
+                end
+            end)
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -227,13 +208,27 @@ function love.update(dt)
 
     if GameState.current == "lobby" then
         lobby.update(dt)
-    elseif GameState.current == "mode_select" then
-        -- ничего
-    elseif GameState.current == "difficulty" then
-        -- ничего
     elseif GameState.current == "game" then
         game.update(dt)
         controls.update(dt)
+        if shotCooldown > 0 then
+            shotCooldown = shotCooldown - dt
+        end
+        local shot, dx, dy = controls.getShot()
+        if shot and shotCooldown <= 0 and game.spawnPlayerBullet then
+            game.spawnPlayerBullet(dx, dy)
+            shotCooldown = SHOT_DELAY
+        end
+    elseif GameState.current == "online" then
+        -- Передаём позицию игрока для отправки
+        if game.getPlayerPosition then
+            local x, y = game.getPlayerPosition()
+            online.onSendPosition = function() return x, y end
+        end
+        online.update(dt)
+        game.update(dt)
+        controls.update(dt)
+        -- Выстрелы в онлайн режиме (опционально)
         if shotCooldown > 0 then
             shotCooldown = shotCooldown - dt
         end
@@ -252,7 +247,7 @@ function love.draw()
         mode_select.draw()
     elseif GameState.current == "difficulty" then
         difficulty.draw()
-    elseif GameState.current == "game" then
+    elseif GameState.current == "game" or GameState.current == "online" then
         game.draw()
         controls.draw()
     elseif GameState.current == "shop" then
@@ -278,14 +273,18 @@ end
 function love.keypressed(key)
     if GameState.current == "game" then
         controls.keypressed(key)
+    elseif GameState.current == "online" then
+        controls.keypressed(key)
     elseif GameState.current == "settings" then
-        if settings.keypressed then
-            settings.keypressed(key)
-        end
+        if settings.keypressed then settings.keypressed(key) end
     end
 
     if key == "escape" then
         if GameState.current == "game" then
+            GameState.current = "lobby"
+            playButtonSound()
+        elseif GameState.current == "online" then
+            online.leave()
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "mode_select" then
@@ -306,6 +305,8 @@ end
 function love.keyreleased(key)
     if GameState.current == "game" then
         controls.keyreleased(key)
+    elseif GameState.current == "online" then
+        controls.keyreleased(key)
     end
 end
 
@@ -315,19 +316,21 @@ function love.textinput(t)
     end
 end
 
-local function dispatch(fn, id, x, y)
+local function dispatch(fn, ...)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then
-        lobby[fn](id, x, y)
+        lobby[fn](...)
     elseif s == "mode_select" and mode_select[fn] then
-        mode_select[fn](id, x, y)
+        mode_select[fn](...)
     elseif s == "difficulty" and difficulty[fn] then
-        difficulty[fn](id, x, y)
+        difficulty[fn](...)
     elseif s == "game" and game[fn] then
-        game[fn](id, x, y)
+        game[fn](...)
+    elseif s == "online" and game[fn] then
+        game[fn](...)
     elseif s == "shop" and shop[fn] then
         if fn == "touchpressed" then
-            local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
+            local newCoins, changed = shop.touchpressed(..., SAVE_DATA.coins, SAVE_DATA)
             if changed then
                 SAVE_SAVE()
             end
@@ -336,12 +339,12 @@ local function dispatch(fn, id, x, y)
                 SAVE_SAVE()
             end
         else
-            shop[fn](id, x, y)
+            shop[fn](...)
         end
     elseif s == "credits" and credits[fn] then
-        credits[fn](id, x, y)
+        credits[fn](...)
     elseif s == "settings" and settings[fn] then
-        settings[fn](id, x, y)
+        settings[fn](...)
     end
 end
 
@@ -350,7 +353,7 @@ function love.touchpressed(id, x, y)
     if now - lastTap < 0.05 then return end
     lastTap = now
 
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "online" then
         controls.touchpressed(id, x, y)
     end
 
@@ -358,14 +361,14 @@ function love.touchpressed(id, x, y)
 end
 
 function love.touchmoved(id, x, y)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "online" then
         controls.touchmoved(id, x, y)
     end
     dispatch("touchmoved", id, x, y)
 end
 
 function love.touchreleased(id, x, y)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "online" then
         local shot, dx, dy = controls.touchreleased(id)
         if shot and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
