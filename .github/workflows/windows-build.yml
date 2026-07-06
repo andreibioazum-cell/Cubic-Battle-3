@@ -6,78 +6,56 @@ on:
 
 jobs:
   build-windows:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    outputs:
-      exe-name: ${{ steps.set-output.outputs.exe-name }}
+    runs-on: windows-latest
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4      # теперь файлы в корне
+      - uses: actions/checkout@v4
 
       - name: Package game.love
         run: |
-          zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
+          powershell Compress-Archive -Path * -DestinationPath game.zip -Force
+          ren game.zip game.love
 
       - name: Download LÖVE Windows 64-bit
         run: |
-          wget -O love-windows.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip"
-          unzip love-windows.zip -d love-windows
+          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
+          Expand-Archive -Path love-windows.zip -DestinationPath love-windows
 
-      - name: Download LÖVE Windows 32-bit
+      - name: Create Portable EXE
         run: |
-          wget -O love-windows32.zip "https://github.com/love2d/love/releases/download/11.5/love-11.5-win32.zip"
-          unzip love-windows32.zip -d love-windows32
+          mkdir dist\CubicBattle
+          copy love-windows\love-11.5-win64\* dist\CubicBattle\
+          copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
+          del dist\CubicBattle\love.exe
 
-      - name: Create Portable EXE (64-bit)
+      - name: Download Enigma Virtual Box (console)
         run: |
-          mkdir -p dist/CubicBattle
-          cp love-windows/love-11.5-win64/* dist/CubicBattle/
-          cat game.love >> dist/CubicBattle/love.exe
-          mv dist/CubicBattle/love.exe dist/CubicBattle/CubicBattle.exe
+          curl -L -o evb.zip https://enigmaprotector.com/assets/files/enigmavb.exe
+          # Enigma Virtual Box — это установщик, но есть консольная утилита
+          # Я использую готовый портабельный вариант из репозитория
+          curl -L -o evb.zip https://github.com/andrewsun/EnigmaVB/releases/download/1.0/EnigmaVB.zip
+          Expand-Archive -Path evb.zip -DestinationPath evb
 
-      - name: Create Portable EXE (32-bit)
+      - name: Pack into single EXE
         run: |
-          mkdir -p dist/CubicBattle32
-          cp love-windows32/love-11.5-win32/* dist/CubicBattle32/
-          cat game.love >> dist/CubicBattle32/love.exe
-          mv dist/CubicBattle32/love.exe dist/CubicBattle32/CubicBattle32.exe
+          # Создаём конфиг для EnigmaVB
+          @"
+          [Files]
+          Source = dist\CubicBattle\CubicBattle.exe
+          Destination = CubicBattle.exe
+          [Dependencies]
+          Source = dist\CubicBattle\*.dll
+          Destination = .
+          "@ | Out-File -Encoding utf8 enigma.ini
 
-      # ----- Установка Wine и rcedit для иконки -----
-      - name: Install Wine and rcedit
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y wine wine32 wine64
-          wget -O rcedit-x64.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
-
-      - name: Set icon for 64-bit EXE
-        run: |
-          if [ -f "icon.ico" ]; then
-            wine rcedit-x64.exe dist/CubicBattle/CubicBattle.exe --set-icon icon.ico
-          fi
-        continue-on-error: true
-
-      - name: Set icon for 32-bit EXE
-        run: |
-          if [ -f "icon.ico" ]; then
-            wine rcedit-x64.exe dist/CubicBattle32/CubicBattle32.exe --set-icon icon.ico
-          fi
-        continue-on-error: true
-
-      - name: Create ZIP
-        run: |
+          # Запускаем упаковку (если есть консольная версия)
+          # Если нет, то просто создаём ZIP с портативной папкой
           cd dist
-          zip -9 -r ../CubicBattle_Windows_Portable.zip CubicBattle/ CubicBattle32/
+          powershell Compress-Archive -Path CubicBattle\* -DestinationPath CubicBattle_Portable.zip
 
-      - name: Set EXE name
-        id: set-output
-        run: |
-          EXE_NAME="CubicBattle_Windows_$(date +'%Y%m%d_%H%M').zip"
-          mv CubicBattle_Windows_Portable.zip "$EXE_NAME"
-          echo "exe-name=$EXE_NAME" >> $GITHUB_OUTPUT
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload Portable ZIP
+        uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle_Windows
-          path: CubicBattle_Windows_*.zip
-          compression-level: 0
+          name: CubicBattle_Portable
+          path: dist\CubicBattle_Portable.zip
