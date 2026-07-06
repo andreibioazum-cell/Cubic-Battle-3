@@ -22,40 +22,15 @@ jobs:
           curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
           Expand-Archive -Path love-windows.zip -DestinationPath love-windows
 
-      - name: Create Portable EXE
+      - name: Create Portable EXE (64-bit)
         run: |
-          mkdir dist\CubicBattle
-          copy love-windows\love-11.5-win64\* dist\CubicBattle\
-          copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
-          del dist\CubicBattle\love.exe
-
-      - name: Download Enigma Virtual Box (console)
-        run: |
-          curl -L -o evb.zip https://enigmaprotector.com/assets/files/enigmavb.exe
-          # Enigma Virtual Box — это установщик, но есть консольная утилита
-          # Я использую готовый портабельный вариант из репозитория
-          curl -L -o evb.zip https://github.com/andrewsun/EnigmaVB/releases/download/1.0/EnigmaVB.zip
-          Expand-Archive -Path evb.zip -DestinationPath evb
-
-      - name: Pack into single EXE
-        run: |
-          # Создаём конфиг для EnigmaVB
-          @"
-          [Files]
-          Source = dist\CubicBattle\CubicBattle.exe
-          Destination = CubicBattle.exe
-          [Dependencies]
-          Source = dist\CubicBattle\*.dll
-          Destination = .
-          "@ | Out-File -Encoding utf8 enigma.ini
-
-          # Запускаем упаковку (если есть консольная версия)
-          # Если нет, то просто создаём ZIP с портативной папкой
-          cd dist
-          powershell Compress-Archive -Path CubicBattle\* -DestinationPath CubicBattle_Portable.zip
+          New-Item -ItemType Directory -Force -Path dist\CubicBattle
+          Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
+          cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
+          Remove-Item dist\CubicBattle\love.exe
 
       - name: Upload Portable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle_Portable
-          path: dist\CubicBattle_Portable.zip
+          name: CubicBattle_Windows
+          path: dist\CubicBattle
