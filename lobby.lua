@@ -7,8 +7,8 @@ local btns = {
     credits = { w = 220, h = 75, x = 0, y = 0 }
 }
 local fontTitle, fontSub, fontBtn
-local backgroundImage   -- загруженная картинка
-local snowflakes = {}   -- синие снежинки
+local backgroundImage
+local snowflakes = {}
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
@@ -59,7 +59,7 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX, y)
 end
 
--- Генерация синих снежинок (падают вниз)
+-- Генерация синих снежинок (падают вниз с покачиванием)
 local function generateSnowflakes(w, h)
     snowflakes = {}
     for i = 1, 120 do
@@ -125,7 +125,7 @@ function lobby.draw()
         love.graphics.draw(backgroundImage, 0, 0, 0, w / backgroundImage:getWidth(), h / backgroundImage:getHeight())
     end
 
-    -- Синие снежинки (поверх картинки)
+    -- Синие снежинки (крупные, с прозрачностью)
     for _, s in ipairs(snowflakes) do
         local alpha = 0.4 + 0.6 * (1 - s.y / love.graphics.getHeight())
         love.graphics.setColor(0.5, 0.8, 1.0, alpha)
