@@ -7,7 +7,8 @@ local btns = {
     credits = { w = 220, h = 75, x = 0, y = 0 }
 }
 local fontTitle, fontSub, fontBtn
-local backgroundImage  -- <-- загруженное изображение
+local backgroundImage
+local snowflakes = {}  -- массив снежинок
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
@@ -58,11 +59,65 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX, y)
 end
 
+-- Инициализация снежинок
+local function initSnowflakes(count)
+    local w, h = love.graphics.getDimensions()
+    snowflakes = {}
+    for i = 1, count do
+        table.insert(snowflakes, {
+            x = math.random(0, w),
+            y = math.random(-h, 0), -- начинаем сверху
+            size = math.random(3, 8), -- размер в пикселях
+            speed = 50 + math.random(100), -- скорость падения
+            alpha = 0.4 + math.random(60)/100, -- прозрачность
+            rotation = math.random() * 2 * math.pi,
+            rotSpeed = (math.random() - 0.5) * 2 -- скорость вращения
+        })
+    end
+end
+
+-- Обновление снежинок
+local function updateSnowflakes(dt)
+    local w, h = love.graphics.getDimensions()
+    for _, s in ipairs(snowflakes) do
+        s.y = s.y + s.speed * dt
+        s.rotation = s.rotation + s.rotSpeed * dt
+        if s.y > h + 20 then
+            s.y = -20
+            s.x = math.random(0, w)
+            s.speed = 50 + math.random(100)
+        end
+    end
+end
+
+-- Рисование снежинки (шестиконечная звезда)
+local function drawSnowflake(x, y, size, alpha, rotation)
+    love.graphics.setColor(0.4, 0.6, 1, alpha) -- светло-синий
+    -- Рисуем 6 лучей
+    local r = size
+    for i = 0, 5 do
+        local angle = rotation + i * math.pi / 3
+        local dx = math.cos(angle) * r
+        local dy = math.sin(angle) * r
+        love.graphics.line(x, y, x + dx, y + dy)
+        -- маленькие веточки на концах
+        local branchAngle = angle + math.pi / 6
+        local branchLen = r * 0.4
+        local bx = x + dx + math.cos(angle + math.pi/6) * branchLen
+        local by = y + dy + math.sin(angle + math.pi/6) * branchLen
+        love.graphics.line(x + dx, y + dy, bx, by)
+        local bx2 = x + dx + math.cos(angle - math.pi/6) * branchLen
+        local by2 = y + dy + math.sin(angle - math.pi/6) * branchLen
+        love.graphics.line(x + dx, y + dy, bx2, by2)
+    end
+    -- центр
+    love.graphics.circle("fill", x, y, r * 0.15)
+end
+
 function lobby.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    -- Загружаем фоновое изображение
     backgroundImage = love.graphics.newImage("Lobby_Snow.png")
 
     local titleSize = math.max(36, 72 * scale)
@@ -74,10 +129,10 @@ function lobby.load()
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 
     place()
+    initSnowflakes(60) -- количество снежинок
 end
 
 function lobby.resize(w, h)
-    -- При изменении размера окна просто пересчитываем расположение кнопок
     place()
     local scale = getScale()
     local titleSize = math.max(36, 72 * scale)
@@ -86,21 +141,28 @@ function lobby.resize(w, h)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
-    -- Изображение не нужно перезагружать, оно будет растягиваться при отрисовке
+    -- пересоздаём снежинки для новых размеров
+    initSnowflakes(60)
 end
 
 function lobby.update(dt)
-    -- Звёзды удалены, обновление не требуется
+    updateSnowflakes(dt)
 end
 
 function lobby.draw()
-    -- Рисуем фоновое изображение, растянутое на весь экран
+    -- 1. Фон
     if backgroundImage then
         local w, h = love.graphics.getDimensions()
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.draw(backgroundImage, 0, 0, 0, w / backgroundImage:getWidth(), h / backgroundImage:getHeight())
     end
 
+    -- 2. Снежинки
+    for _, s in ipairs(snowflakes) do
+        drawSnowflake(s.x, s.y, s.size, s.alpha, s.rotation)
+    end
+
+    -- 3. Текст и кнопки
     local w = love.graphics.getWidth()
     local scale = getScale()
 
@@ -109,14 +171,18 @@ function lobby.draw()
 
     for name, btn in pairs(btns) do
         local label = name:gsub("^%l", string.upper)
-        love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
-        love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
-        love.graphics.setColor(0.35, 0.15, 0.75, 1)
+        -- Тень
+        love.graphics.setColor(0, 0, 0, 0.4)
+        love.graphics.rectangle("fill", btn.x + 4*scale, btn.y + 5*scale, btn.w, btn.h, 16*scale, 16*scale)
+        -- Основной цвет кнопки - тёмно-синий
+        love.graphics.setColor(0.05, 0.15, 0.4, 1) -- тёмно-синий
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(3.8 * scale)
+        -- Обводка белая для контраста
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setLineWidth(2 * scale)
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
-        drawSpacedText(label, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn)
+        -- Текст белый
+        drawSpacedText(label, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn, nil, 1)
     end
 end
 
