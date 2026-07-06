@@ -1,172 +1,210 @@
--- online.lua – с отладочным выводом на экран
+-- online.lua – WebSocket клиент для LÖVE (без внешних библиотек)
+-- Подключается к серверу на Python (QPython) через ws://
 local online = {}
 
-local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
-local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
-local PATH = "players/"
+-- ===== НАСТРОЙКИ =====
+-- ЗАМЕНИ НА РЕАЛЬНЫЙ IP И ПОРТ СЕРВЕРА (который показал QPython)
+local SERVER_URL = "ws://192.168.0.102:8080"   -- пример, поменяй на свой
 
-local myUid = nil
-local idToken = nil
+-- ===== СОСТОЯНИЕ =====
+local ws = nil
+local connected = false
+local myId = nil
 local players = {}
 local sendTimer = 0
-local fetchTimer = 0
-local SEND_INTERVAL = 0.25
-local FETCH_INTERVAL = 0.3
-local isConnected = false
-local authInProgress = false
-local statusMessage = "Не подключено"
-local playerCount = 0
+local SEND_INTERVAL = 0.2   -- отправка позиции каждые 0.2 сек
 
-local function generateUuid()
-    local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
-    return string.gsub(template, "[xy]", function(c)
-        local v = math.random(0, 15)
-        if c == "x" then return string.format("%x", v)
-        else return string.format("%x", math.random(8, 11))
+-- ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+
+-- Base64 (для WebSocket handshake)
+local function base64(data)
+    local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    local padding = 2 - (string.len(data) % 3)
+    if padding == 3 then padding = 0 end
+    local result = {}
+    for i = 1, string.len(data), 3 do
+        local a, b, c = string.byte(data, i, i+2)
+        local n = (a or 0) * 65536 + (b or 0) * 256 + (c or 0)
+        for j = 1, 4 do
+            local idx = (n >> (6*(4-j))) & 0x3F
+            table.insert(result, b64chars:sub(idx+1, idx+1))
         end
-    end)
+    end
+    for i = 1, padding do
+        result[#result] = '='
+    end
+    return table.concat(result)
 end
 
-local function hasHttps()
-    local ok, _ = pcall(require, "https")
-    return ok
-end
+-- ===== ВСТРОЕННЫЙ WEBSOCKET КЛИЕНТ =====
+local function websocket_connect(url, onOpen, onMessage, onClose)
+    local socket = require("socket")
+    -- Парсим URL
+    local host, port, path = url:match("ws://([^:/]+)(%d*)(.*)")
+    if not host then return nil, "Invalid URL" end
+    if port == "" then port = 80 else port = tonumber(port) end
+    if path == "" then path = "/" end
 
-local function firebaseRequest(method, path, data, callback)
-    if not idToken then
-        if callback then callback(false, "No auth token") end
-        return
-    end
-    if not hasHttps() then
-        statusMessage = "ОШИБКА: нет https"
-        if callback then callback(false, "https not found") end
-        return
-    end
-    local https = require("https")
-    local url = DB_URL .. "/" .. path .. ".json?auth=" .. idToken
-    local options = {
-        method = method,
-        headers = { ["Content-Type"] = "application/json" },
-        timeout = 3,
-        verify = false,
-    }
-    if data then
-        options.data = data
-    end
+    local client = socket.tcp()
+    client:settimeout(3)
+    local ok, err = client:connect(host, port)
+    if not ok then return nil, err end
 
-    statusMessage = "Запрос: " .. method .. " " .. path
-    local success, code, body = pcall(https.request, url, options)
-    if success and code and code >= 200 and code < 300 then
-        statusMessage = "✅ " .. method .. " OK (" .. code .. ")"
-        if callback then callback(true, body) end
-    else
-        statusMessage = "❌ Ошибка " .. tostring(code)
-        if callback then callback(false, "Ошибка: " .. tostring(code)) end
-    end
-end
+    -- Генерируем ключ
+    local key = string.gsub(
+        ("%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c"):rep(4),
+        "%c",
+        function() return string.char(math.random(0, 255)) end
+    )
+    local acceptKey = base64(key)
 
-local function authenticate(callback)
-    if authInProgress then return end
-    if isConnected then
-        if callback then callback(true) end
-        return
-    end
-    authInProgress = true
+    -- Handshake
+    local handshake = string.format(
+        "GET %s HTTP/1.1\r\n" ..
+        "Host: %s\r\n" ..
+        "Upgrade: websocket\r\n" ..
+        "Connection: Upgrade\r\n" ..
+        "Sec-WebSocket-Key: %s\r\n" ..
+        "Sec-WebSocket-Version: 13\r\n" ..
+        "\r\n",
+        path, host, acceptKey
+    )
+    client:send(handshake)
 
-    if not hasHttps() then
-        statusMessage = "Нет https!"
-        if callback then callback(false) end
-        return
+    -- Читаем ответ
+    local response = ""
+    while true do
+        local line, err = client:receive("*l")
+        if not line then break end
+        response = response .. line .. "\r\n"
+        if line == "" then break end
     end
 
-    local https = require("https")
-    local authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" .. API_KEY
-    local options = {
-        method = "POST",
-        headers = { ["Content-Type"] = "application/json" },
-        data = '{"returnSecureToken":true}',
-        timeout = 3,
-        verify = false,
-    }
+    if not response:match("HTTP/1.1 101") then
+        client:close()
+        return nil, "Handshake failed"
+    end
 
-    statusMessage = "Аутентификация..."
-    local success, code, body = pcall(https.request, authUrl, options)
-    if success and code == 200 then
-        local data = love.data.decode("json", body)
-        if data and data.localId and data.idToken then
-            myUid = data.localId
-            idToken = data.idToken
-            isConnected = true
-            statusMessage = "✅ Auth OK, UID=" .. string.sub(myUid,1,8)
-            if callback then callback(true) end
+    if onOpen then onOpen() end
+
+    -- Отправка фрейма
+    local function sendFrame(data)
+        local frame = string.char(0x82) -- FIN + opcode text
+        local len = #data
+        if len < 126 then
+            frame = frame .. string.char(0x80 + len)
+        elseif len < 65536 then
+            frame = frame .. string.char(0x80 + 126) .. string.pack(">I2", len)
         else
-            statusMessage = "❌ Auth нет UID"
-            if callback then callback(false) end
+            frame = frame .. string.char(0x80 + 127) .. string.pack(">I8", len)
         end
-    else
-        statusMessage = "❌ Auth ошибка " .. tostring(code)
-        if callback then callback(false) end
+        -- Маска (клиент обязан маскировать)
+        local mask = string.char(math.random(0,255), math.random(0,255), math.random(0,255), math.random(0,255))
+        frame = frame .. mask
+        local masked = ""
+        for i = 1, len do
+            masked = masked .. string.char(string.byte(data, i) ~ string.byte(mask, (i-1)%4 + 1))
+        end
+        frame = frame .. masked
+        client:send(frame)
     end
-    authInProgress = false
+
+    -- Получение фреймов (неблокирующее)
+    local function receiveFrames()
+        while true do
+            local byte1, err = client:receive(1)
+            if not byte1 then break end
+            local opcode = string.byte(byte1) & 0x0F
+            if opcode == 0x8 then -- close
+                client:close()
+                if onClose then onClose() end
+                return
+            end
+            local byte2 = client:receive(1)
+            local len = string.byte(byte2) & 0x7F
+            if len == 126 then
+                len = string.unpack(">I2", client:receive(2))
+            elseif len == 127 then
+                len = string.unpack(">I8", client:receive(8))
+            end
+            -- Маска (сервер не маскирует, но мы пропускаем 4 байта)
+            local mask = client:receive(4) -- просто читаем, не используем
+            local payload = client:receive(len)
+            if payload then
+                if opcode == 0x1 then -- text
+                    if onMessage then onMessage(payload) end
+                end
+            end
+        end
+    end
+
+    return {
+        send = sendFrame,
+        receive = receiveFrames,
+        close = function() client:close() end,
+        socket = client
+    }
 end
+
+-- ===== ПУБЛИЧНЫЕ ФУНКЦИИ =====
 
 function online.init()
-    statusMessage = "Модуль инициализирован"
+    print("WebSocket клиент инициализирован")
 end
 
-function online.connect(callback)
-    if isConnected then
-        if callback then callback(true) end
+function online.connect()
+    if connected then
+        print("Уже подключены")
         return
     end
-    authenticate(callback)
+    ws = websocket_connect(SERVER_URL,
+        function() -- onOpen
+            print("✅ Подключено к серверу")
+            connected = true
+        end,
+        function(msg) -- onMessage
+            local ok, data = pcall(love.data.decode, "json", msg)
+            if ok and data then
+                if data.type == "init" then
+                    myId = data.id
+                    print("Мой ID: " .. myId)
+                elseif data.type == "join" then
+                    players[data.id] = { x = data.x, y = data.y }
+                    print("➕ Игрок " .. data.id .. " присоединился")
+                elseif data.type == "move" then
+                    if players[data.id] then
+                        players[data.id].x = data.x
+                        players[data.id].y = data.y
+                    else
+                        players[data.id] = { x = data.x, y = data.y }
+                    end
+                elseif data.type == "leave" then
+                    players[data.id] = nil
+                    print("➖ Игрок " .. data.id .. " ушёл")
+                end
+            end
+        end,
+        function() -- onClose
+            connected = false
+            ws = nil
+            print("❌ Соединение разорвано")
+        end
+    )
+    if not ws then
+        print("❌ Не удалось подключиться к серверу")
+    end
 end
 
 function online.sendPosition(x, y)
-    if not isConnected or not myUid then return end
-    local path = PATH .. myUid
-    local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
-    firebaseRequest("PUT", path, data, function(success)
-        if not success then
-            statusMessage = "⚠️ Ошибка PUT"
-        end
-    end)
+    if not connected or not ws or not myId then return end
+    local msg = '{"type":"move","x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
+    ws.send(msg)
 end
 
-function online.fetchPlayers()
-    if not isConnected then return end
-    firebaseRequest("GET", PATH, nil, function(success, body)
-        if success and body then
-            local data = love.data.decode("json", body)
-            if data then
-                local count = 0
-                for uid, pos in pairs(data) do
-                    if uid ~= myUid and pos.x and pos.y then
-                        count = count + 1
-                        if players[uid] then
-                            players[uid].targetX = pos.x
-                            players[uid].targetY = pos.y
-                            players[uid].lerpTimer = 0
-                        else
-                            players[uid] = {
-                                x = pos.x, y = pos.y,
-                                targetX = pos.x, targetY = pos.y,
-                                lerpTimer = 0
-                            }
-                        end
-                    end
-                end
-                playerCount = count
-                -- удаляем ушедших
-                for uid, _ in pairs(players) do
-                    if not data[uid] then players[uid] = nil end
-                end
-                statusMessage = "Игроков: " .. playerCount
-            end
-        else
-            statusMessage = "❌ GET ошибка"
-        end
-    end)
+function online.receive()
+    if connected and ws then
+        ws.receive()
+    end
 end
 
 function online.getPlayers()
@@ -174,31 +212,21 @@ function online.getPlayers()
 end
 
 function online.leave()
-    if not isConnected or not myUid then return end
-    local path = PATH .. myUid
-    firebaseRequest("DELETE", path, nil, function()
-        statusMessage = "🗑️ Удалён"
-    end)
-    isConnected = false
+    if ws then ws.close() end
+    connected = false
     players = {}
 end
 
 function online.update(dt)
-    if not isConnected then
+    if not connected then
+        -- Пытаемся переподключиться, если ещё не подключены
         online.connect()
         return
     end
+    -- Принимаем входящие сообщения
+    online.receive()
 
-    -- интерполяция
-    for uid, p in pairs(players) do
-        p.lerpTimer = p.lerpTimer + dt * 2.5
-        if p.lerpTimer > 1 then p.lerpTimer = 1 end
-        local t = p.lerpTimer
-        local smooth = t * t * (3 - 2 * t)
-        p.x = p.x + (p.targetX - p.x) * smooth
-        p.y = p.y + (p.targetY - p.y) * smooth
-    end
-
+    -- Отправляем свою позицию
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -209,19 +237,6 @@ function online.update(dt)
             end
         end
     end
-
-    fetchTimer = fetchTimer + dt
-    if fetchTimer >= FETCH_INTERVAL then
-        fetchTimer = 0
-        online.fetchPlayers()
-    end
-end
-
--- функция для отображения статуса на экране
-function online.drawStatus()
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Online: " .. statusMessage, 10, love.graphics.getHeight() - 40)
-    love.graphics.print("Игроков: " .. playerCount, 10, love.graphics.getHeight() - 20)
 end
 
 return online
