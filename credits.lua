@@ -7,10 +7,8 @@ local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iO
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    local base = 1000        -- для ПК теперь 500
-    if isMobile then
-        base = 800
-    end
+    local base = 1000
+    if isMobile then base = 800 end
     return math.min(w, h) / base
 end
 
@@ -68,7 +66,7 @@ function credits.resize()
 end
 
 function credits.draw()
-    love.graphics.setColor(0.05, 0.02, 0.15, 1)
+    love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
     local w = love.graphics.getWidth()
@@ -93,9 +91,10 @@ function credits.draw()
     y = y + 45 * scale
     drawSpacedText("Licensed under CC: By Attribution 3.0", 0, y, w, "center", fontText)
 
-    love.graphics.setColor(0.1, 0.0, 0.2, 0.5)
+    -- Back
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.setColor(0.2, 0.5, 0.9, 1)
     love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.8 * scale)
