@@ -1,4 +1,4 @@
--- main.lua – главный файл игры
+-- main.lua – полностью, с подключением online и firebase
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -7,7 +7,7 @@ local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
 local difficulty = require("difficulty")
-local online = require("online")   -- наш модуль для онлайн‑синхронизации
+local online = require("online")   -- наш модуль
 
 GameState = { current = "lobby" }
 
@@ -171,7 +171,7 @@ function love.load()
     loadSave()
     controls.load()
     loadMusic()
-    online.init()  -- генерирует UUID
+    online.init()  -- инициализируем Firebase
 end
 
 function love.update(dt)
@@ -188,8 +188,7 @@ function love.update(dt)
         elseif GameState.current == "game" then
             if game.load then game.load() end
         elseif GameState.current == "online" then
-            if game.load then game.load() end   -- загружаем игру без врага
-            -- подключаемся к Firebase
+            if game.load then game.load() end
             online.connect(function(success)
                 if success then
                     print("✅ Онлайн режим активен")
@@ -221,7 +220,6 @@ function love.update(dt)
             shotCooldown = SHOT_DELAY
         end
     elseif GameState.current == "online" then
-        -- обновляем синхронизацию
         if game.getPlayerPosition then
             local x, y = game.getPlayerPosition()
             online.onSendPosition = function() return x, y end
@@ -229,7 +227,6 @@ function love.update(dt)
         online.update(dt)
         game.update(dt)
         controls.update(dt)
-        -- выстрелы (опционально)
         if shotCooldown > 0 then
             shotCooldown = shotCooldown - dt
         end
@@ -313,9 +310,7 @@ function love.textinput(t)
     end
 end
 
--- ============================================================
--- ГЛАВНАЯ ДИСПЕТЧЕРИЗАЦИЯ СОБЫТИЙ (исправленная)
--- ============================================================
+-- ===== ДИСПЕТЧЕР =====
 local function dispatch(fn, ...)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then
@@ -332,12 +327,8 @@ local function dispatch(fn, ...)
         if fn == "touchpressed" then
             local id, x, y = ...
             local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
-            -- Всегда обновляем монеты, даже если changed == false (например, при переключении скина)
-            if newCoins ~= SAVE_DATA.coins then
+            if changed or newCoins ~= SAVE_DATA.coins then
                 SAVE_DATA.coins = newCoins
-                SAVE_SAVE()
-            elseif changed then
-                -- Если изменился скин, но монеты те же – всё равно сохраняем
                 SAVE_SAVE()
             end
         else
