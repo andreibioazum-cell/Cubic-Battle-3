@@ -1,11 +1,9 @@
--- online.lua – БЕЗ АУТЕНТИФИКАЦИИ, работает с правилами .read/.write = true
+-- online.lua – Firebase sync (no auth, open rules)
 local online = {}
 
--- ===== ТВОИ ДАННЫЕ =====
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
 local PATH = "players/"
 
--- ===== СОСТОЯНИЕ =====
 local myUid = nil
 local players = {}
 local sendTimer = 0
@@ -13,15 +11,13 @@ local fetchTimer = 0
 local SEND_INTERVAL = 0.2
 local FETCH_INTERVAL = 0.3
 local isConnected = false
-local debugText = "⏳ Ожидание..."
+local debugText = "Waiting..."
 
--- ===== ОТЛАДКА =====
 local function setDebug(text)
     debugText = text
     print("[DEBUG] " .. text)
 end
 
--- ===== HTTPS ЗАПРОС (без токена) =====
 local function firebaseRequest(method, path, data, callback)
     local https = require("https")
     local url = DB_URL .. "/" .. path .. ".json"
@@ -43,7 +39,6 @@ local function firebaseRequest(method, path, data, callback)
     end
 end
 
--- ===== ГЕНЕРАТОР UUID (для идентификации игрока) =====
 local function generateUuid()
     local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
     return string.gsub(template, "[xy]", function(c)
@@ -54,50 +49,47 @@ local function generateUuid()
     end)
 end
 
--- ===== ПУБЛИЧНЫЕ ФУНКЦИИ =====
-
 function online.init()
     myUid = generateUuid()
-    setDebug("🚀 Мой ID: " .. myUid)
+    setDebug("My ID: " .. myUid)
     isConnected = true
 end
 
 function online.connect(callback)
     if isConnected then
-        setDebug("✅ Уже подключены")
+        setDebug("Already connected")
         if callback then callback(true) end
         return
     end
-    -- В этой версии подключение происходит сразу, без аутентификации
     isConnected = true
     if callback then callback(true) end
 end
 
 function online.sendPosition(x, y)
     if not isConnected or not myUid then
-        setDebug("⚠️ Не отправлено: нет соединения или UID")
+        setDebug("Not connected or no UID")
         return
     end
     local path = PATH .. myUid
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
     firebaseRequest("PUT", path, data, function(success)
         if not success then
-            setDebug("⚠️ Ошибка отправки позиции")
+            setDebug("Failed to send position")
         else
-            setDebug("📤 Отправлено: " .. math.floor(x) .. "," .. math.floor(y))
+            setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
         end
     end)
 end
 
 function online.fetchPlayers()
     if not isConnected then
-        setDebug("⚠️ Не загружено: нет соединения")
+        setDebug("Not connected")
         return
     end
     firebaseRequest("GET", PATH, nil, function(success, body)
         if success and body then
-            local data = love.data.decode("json", body)
-            if data then
+            local ok, data = pcall(love.data.decode, "string", "json", body)  -- fixed here
+            if ok and data then
                 local newPlayers = {}
                 for uid, pos in pairs(data) do
                     if uid ~= myUid and pos.x and pos.y then
@@ -107,12 +99,12 @@ function online.fetchPlayers()
                 players = newPlayers
                 local count = 0
                 for _ in pairs(players) do count = count + 1 end
-                setDebug("👥 Загружено игроков: " .. count)
+                setDebug("Players loaded: " .. count)
             else
-                setDebug("⚠️ Нет данных о других игроках")
+                setDebug("Invalid JSON response")
             end
         else
-            setDebug("⚠️ Не удалось загрузить игроков")
+            setDebug("Failed to fetch players")
         end
     end)
 end
@@ -125,7 +117,7 @@ function online.leave()
     if not isConnected or not myUid then return end
     local path = PATH .. myUid
     firebaseRequest("DELETE", path, nil, function()
-        setDebug("🗑️ Данные удалены")
+        setDebug("Data deleted")
     end)
     isConnected = false
     players = {}
