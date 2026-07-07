@@ -1,4 +1,4 @@
--- room.lua – интерфейс для создания/входа в комнату (исправлен)
+-- room.lua – room creation/joining UI
 local room = {}
 
 local online = require("online")
@@ -87,7 +87,6 @@ function room.draw()
 
     drawSpacedText("MULTIPLAYER ROOM", 0, 80*scale, w, "center", fontTitle)
 
-    -- Поле ввода
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", inputField.x + 3*scale, inputField.y + 3*scale, inputField.w, inputField.h, 8*scale, 8*scale)
     love.graphics.setColor(0.1, 0.1, 0.1, 1)
@@ -115,7 +114,6 @@ function room.draw()
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf(label, inputField.x, inputField.y - 35*scale, inputField.w, "center")
 
-    -- CREATE button
     local colorCreate = (mode == "create") and {0.2, 0.7, 0.2} or {0.3, 0.3, 0.3}
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnCreate.x + 5*scale, btnCreate.y + 6*scale, btnCreate.w, btnCreate.h, 16*scale, 16*scale)
@@ -126,7 +124,6 @@ function room.draw()
     love.graphics.rectangle("line", btnCreate.x, btnCreate.y, btnCreate.w, btnCreate.h, 16*scale, 16*scale)
     drawSpacedText("CREATE", btnCreate.x, btnCreate.y + 18*scale, btnCreate.w, "center", fontBtn, nil, 1)
 
-    -- JOIN button
     local colorJoin = (mode == "join") and {0.2, 0.5, 0.9} or {0.3, 0.3, 0.3}
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnJoin.x + 5*scale, btnJoin.y + 6*scale, btnJoin.w, btnJoin.h, 16*scale, 16*scale)
@@ -144,7 +141,6 @@ function room.draw()
         love.graphics.printf(statusMessage, 0, h/2 + 150*scale, w, "center")
     end
 
-    -- Back
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
