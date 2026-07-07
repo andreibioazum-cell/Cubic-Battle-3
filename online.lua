@@ -1,10 +1,11 @@
--- online.lua – стабильная версия с отображением ошибок
+-- online.lua – полный онлайн с никами, безопасным парсингом и отладкой
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
 local PATH = "players/"
 
 local myUid = nil
+local myNickname = nil
 local players = {}
 local sendTimer = 0
 local fetchTimer = 0
@@ -12,7 +13,6 @@ local SEND_INTERVAL = 0.2
 local FETCH_INTERVAL = 0.3
 local isConnected = false
 local debugText = "Waiting..."
-local lastRawResponse = ""
 
 local function setDebug(text)
     debugText = text
@@ -50,20 +50,71 @@ local function generateUuid()
     end)
 end
 
-function online.init()
+-- Проверка, занят ли ник
+function online.isNicknameTaken(nickname, callback)
+    if not nickname or nickname == "" then
+        callback(false, "Nickname cannot be empty")
+        return
+    end
+    firebaseRequest("GET", PATH, nil, function(success, body)
+        if success and body then
+            local ok, data = pcall(love.data.decode, "string", "json", body)
+            if ok and data then
+                for uid, info in pairs(data) do
+                    if info.nickname and info.nickname == nickname and uid ~= myUid then
+                        callback(true, "Nickname already taken")
+                        return
+                    end
+                end
+                callback(false, "Nickname available")
+            else
+                callback(false, "No players yet")
+            end
+        else
+            callback(false, "Failed to check")
+        end
+    end)
+end
+
+function online.init(nickname, callback)
+    if not nickname or nickname == "" then
+        setDebug("Nickname required")
+        if callback then callback(false, "Nickname required") end
+        return
+    end
+
     myUid = generateUuid()
-    setDebug("My ID: " .. myUid)
-    isConnected = true
+    myNickname = nickname
+    setDebug("My ID: " .. myUid .. ", nick: " .. nickname)
+
+    online.isNicknameTaken(nickname, function(taken, msg)
+        if taken then
+            setDebug("Nickname taken: " .. msg)
+            if callback then callback(false, msg) end
+            return
+        end
+
+        local path = PATH .. myUid
+        local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '"}'
+        firebaseRequest("PUT", path, data, function(success)
+            if success then
+                isConnected = true
+                setDebug("Connected as " .. nickname)
+                if callback then callback(true) end
+            else
+                setDebug("Failed to register")
+                if callback then callback(false, "Registration failed") end
+            end
+        end)
+    end)
 end
 
 function online.connect(callback)
     if isConnected then
-        setDebug("Already connected")
         if callback then callback(true) end
-        return
+    else
+        if callback then callback(false, "Not connected") end
     end
-    isConnected = true
-    if callback then callback(true) end
 end
 
 function online.sendPosition(x, y)
@@ -72,12 +123,12 @@ function online.sendPosition(x, y)
         return
     end
     local path = PATH .. myUid
-    local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
+    local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. ',"nickname":"' .. myNickname .. '"}'
     firebaseRequest("PUT", path, data, function(success, body)
-        if success then
-            setDebug("PUT OK")
-        else
+        if not success then
             setDebug("PUT failed: " .. (body or "unknown"))
+        else
+            setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
         end
     end)
 end
@@ -89,31 +140,27 @@ function online.fetchPlayers()
     end
     firebaseRequest("GET", PATH, nil, function(success, body)
         if success then
-            -- Сохраняем сырой ответ для отладки
-            lastRawResponse = body or "(empty)"
-            -- Пытаемся распарсить JSON
+            if body == "null" or body == "" then
+                players = {}
+                setDebug("Players loaded: 0 (empty)")
+                return
+            end
             local ok, data = pcall(love.data.decode, "string", "json", body)
             if ok and data then
-                -- Проверяем, что data — таблица
-                if type(data) == "table" then
-                    local newPlayers = {}
-                    for uid, pos in pairs(data) do
-                        if uid ~= myUid and pos.x and pos.y then
-                            newPlayers[uid] = { x = pos.x, y = pos.y }
-                        end
+                local newPlayers = {}
+                for uid, info in pairs(data) do
+                    if uid ~= myUid and info.x and info.y then
+                        newPlayers[uid] = { x = info.x, y = info.y, nickname = info.nickname or "???" }
                     end
-                    players = newPlayers
-                    local count = 0
-                    for _ in pairs(players) do count = count + 1 end
-                    setDebug("Players loaded: " .. count)
-                else
-                    setDebug("Response is not a table: " .. tostring(data))
                 end
+                players = newPlayers
+                local count = 0
+                for _ in pairs(players) do count = count + 1 end
+                setDebug("Players loaded: " .. count)
             else
-                -- Если не удалось распарсить, показываем превью ответа
-                local preview = (body and #body > 150) and body:sub(1, 150) .. "..." or (body or "(empty)")
+                local preview = (body and #body > 200) and body:sub(1, 200) .. "..." or body or "(empty)"
                 setDebug("Invalid JSON: " .. preview)
-                print("[ERROR] Full response:", body)
+                print("[ERROR] Invalid JSON from Firebase:", body)
             end
         else
             setDebug("GET failed: " .. (body or "unknown"))
@@ -133,11 +180,12 @@ function online.leave()
     end)
     isConnected = false
     players = {}
+    myUid = nil
+    myNickname = nil
 end
 
 function online.update(dt)
     if not isConnected then
-        online.connect()
         return
     end
 
