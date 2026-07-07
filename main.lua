@@ -1,4 +1,4 @@
--- main.lua – полностью, с подключением online и firebase
+-- main.lua
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -7,7 +7,7 @@ local credits = require("credits")
 local settings = require("settings")
 local mode_select = require("mode_select")
 local difficulty = require("difficulty")
-local online = require("online")   -- наш модуль
+local online = require("online")
 
 GameState = { current = "lobby" }
 
@@ -47,7 +47,7 @@ local function loadMusic()
         if musicOn then bgMusic:play() end
     else
         musicOn = false
-        print("Не удалось загрузить музыку")
+        print("Music not loaded")
     end
 end
 
@@ -126,14 +126,14 @@ end
 local function loadSave()
     local info = love.filesystem.getInfo(SAVE_FILE)
     if not info then
-        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true, sfxOn = true, nickname = "Player" }
         musicOn = true
         sfxOn = true
         return
     end
     local data, err = love.filesystem.read(SAVE_FILE)
     if not data then
-        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
+        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true, sfxOn = true, nickname = "Player" }
         musicOn = true
         sfxOn = true
         return
@@ -171,14 +171,14 @@ function love.load()
     loadSave()
     controls.load()
     loadMusic()
-    online.init()  -- инициализируем Firebase
+    online.init()
 end
 
 function love.update(dt)
     if dt > 0.05 then dt = 0.05 end
 
     if GameState.current ~= lastState then
-        print("Переход в состояние: " .. tostring(GameState.current))
+        print("Switch to: " .. tostring(GameState.current))
         if GameState.current == "lobby" then
             if lobby.load then lobby.load() end
         elseif GameState.current == "mode_select" then
@@ -189,11 +189,12 @@ function love.update(dt)
             if game.load then game.load() end
         elseif GameState.current == "online" then
             if game.load then game.load() end
-            online.connect(function(success)
+            local nickname = SAVE_DATA.nickname or "Player"
+            online.init(nickname, function(success, msg)
                 if success then
-                    print("✅ Онлайн режим активен")
+                    print("Online started as " .. nickname)
                 else
-                    print("❌ Не удалось подключиться к Firebase")
+                    print("Online error: " .. msg)
                 end
             end)
         elseif GameState.current == "shop" then
@@ -310,7 +311,7 @@ function love.textinput(t)
     end
 end
 
--- ===== ДИСПЕТЧЕР =====
+-- ===== DISPATCHER =====
 local function dispatch(fn, ...)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then
