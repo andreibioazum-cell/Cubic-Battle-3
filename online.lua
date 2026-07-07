@@ -1,4 +1,4 @@
--- online.lua – полная синхронизация с комнатами
+-- online.lua – full multiplayer with rooms, interpolation, debug
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
@@ -10,8 +10,8 @@ local myRoomCode = nil
 local players = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.2
-local FETCH_INTERVAL = 0.3
+local SEND_INTERVAL = 0.15
+local FETCH_INTERVAL = 0.2
 local isConnected = false
 local debugText = "Waiting..."
 
@@ -52,7 +52,7 @@ local function generateUuid()
 end
 
 function online.init()
-    setDebug("Online module initialized")
+    setDebug("Online module ready")
 end
 
 function online.generateRoomCode()
@@ -173,7 +173,14 @@ function online.fetchPlayers()
                 local newPlayers = {}
                 for uid, info in pairs(data) do
                     if uid ~= myUid and info.x and info.y then
-                        newPlayers[uid] = { x = info.x, y = info.y, nickname = info.nickname or "???" }
+                        newPlayers[uid] = { 
+                            x = info.x, 
+                            y = info.y, 
+                            nickname = info.nickname or "???",
+                            targetX = info.x,
+                            targetY = info.y,
+                            lerpTimer = 1
+                        }
                     end
                 end
                 players = newPlayers
@@ -210,6 +217,18 @@ end
 function online.update(dt)
     if not isConnected then
         return
+    end
+
+    -- Interpolation
+    local lerpSpeed = 6.0
+    for uid, p in pairs(players) do
+        if p.targetX and p.targetY then
+            p.lerpTimer = math.min(1, (p.lerpTimer or 0) + dt * lerpSpeed)
+            local t = p.lerpTimer
+            local smooth = t * t * (3 - 2 * t)
+            p.x = p.x + (p.targetX - p.x) * smooth
+            p.y = p.y + (p.targetY - p.y) * smooth
+        end
     end
 
     sendTimer = sendTimer + dt
