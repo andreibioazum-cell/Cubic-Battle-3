@@ -1,3 +1,4 @@
+-- mode_select.lua – выбор режима с комнатами
 local mode_select = {}
 
 local fontTitle, fontBtn
@@ -92,10 +93,10 @@ function mode_select.load()
     btnBack.h   = 55 * scale
 
     btnSingle.x = (w - btnSingle.w) / 2
-    btnSingle.y = h/2 - 120 * scale
+    btnSingle.y = h/2 - 130 * scale
 
     btnMulti.x = (w - btnMulti.w) / 2
-    btnMulti.y = h/2 - 20 * scale
+    btnMulti.y = h/2 - 30 * scale
 
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - 100 * scale
@@ -119,7 +120,6 @@ function mode_select.draw()
 
     drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
-    -- SINGLEPLAYER
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnSingle.x + 5*scale, btnSingle.y + 6*scale, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -129,7 +129,6 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
 
-    -- MULTIPLAYER
     love.graphics.setColor(0.0, 0.3, 0.0, 0.5)
     love.graphics.rectangle("fill", btnMulti.x + 5*scale, btnMulti.y + 6*scale, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.8, 0.2, 1)
@@ -139,7 +138,6 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     drawSpacedText("MULTIPLAYER", btnMulti.x, btnMulti.y + 22*scale, btnMulti.w, "center", fontBtn, nil, 1)
 
-    -- BACK
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -165,7 +163,7 @@ function mode_select.touchpressed(id, x, y)
 
     if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
         playButtonSound()
-        GameState.current = "online"
+        GameState.current = "room"
         return
     end
 end
