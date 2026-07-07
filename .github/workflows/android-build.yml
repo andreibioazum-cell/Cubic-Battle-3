@@ -7,7 +7,7 @@ on:
 jobs:
   build-android-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     outputs:
       apk-name: ${{ steps.set-output.outputs.apk-name }}
 
@@ -49,37 +49,46 @@ jobs:
           fi
 
       # ============================================================
-      #  СКАЧИВАЕМ ГОТОВЫЕ БИБЛИОТЕКИ OPENSSL ДЛЯ ANDROID (arm64)
+      #  КЭШИРОВАНИЕ СОБРАННОГО OPENSSL
       # ============================================================
-      - name: Download prebuilt OpenSSL for Android (arm64)
+      - name: Cache OpenSSL
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: love-android/app/src/main/cpp/openssl
+          key: openssl-arm64-${{ hashFiles('love-android/openssl-1.1.1w.tar.gz') }}
+
+      - name: Download OpenSSL sources
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
         run: |
           cd love-android
-          mkdir -p app/src/main/cpp/openssl/include
-          mkdir -p app/src/main/cpp/openssl/lib/arm64-v8a
-          # Скачиваем заголовки и библиотеки из официального репозитория OpenSSL (или другого источника)
-          # Используем предварительно собранные бинарники от команды OpenSSL для Android
-          wget -O openssl-android-arm64.zip https://github.com/leenooks/OpenSSL-for-Android-Prebuilt/releases/download/1.1.1w/openssl-1.1.1w-android-arm64.zip
-          unzip -o openssl-android-arm64.zip -d openssl-temp
-          cp -r openssl-temp/include/openssl app/src/main/cpp/openssl/include/
-          cp openssl-temp/lib/libcrypto.a app/src/main/cpp/openssl/lib/arm64-v8a/
-          cp openssl-temp/lib/libssl.a app/src/main/cpp/openssl/lib/arm64-v8a/
+          wget -O openssl-1.1.1w.tar.gz https://www.openssl.org/source/openssl-1.1.1w.tar.gz
+
+      - name: Build OpenSSL for Android (arm64)
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
+        run: |
+          cd love-android
+          tar -xzf openssl-1.1.1w.tar.gz
+          cd openssl-1.1.1w
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/25.2.9519653"
+          export PATH="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export CC=clang
+          export AR=ar
+          ./Configure android-arm64 -D__ANDROID_API__=21 -no-shared -no-asm
+          make -j$(nproc)
+          mkdir -p ../app/src/main/cpp/openssl/include
+          mkdir -p ../app/src/main/cpp/openssl/lib/arm64-v8a
+          cp -r include/openssl ../app/src/main/cpp/openssl/include/
+          cp libcrypto.a libssl.a ../app/src/main/cpp/openssl/lib/arm64-v8a/
+          cd ..
 
       # ============================================================
-      #  ВКЛЮЧАЕМ SSL В LOVE-ANDROID
+      #  ВКЛЮЧАЕМ SSL В LOVE-ANDROID (если ещё не включено)
       # ============================================================
       - name: Enable SSL in love-android
         run: |
           cd love-android
-          if [ -d "app/src/main/cpp/openssl" ]; then
-            echo "OpenSSL found, enabling SSL..."
-          else
-            echo "OpenSSL not found, skipping SSL..."
-            exit 1
-          fi
-          # Проверяем, есть ли уже WITH_SSL в CMakeLists.txt
-          if grep -q "WITH_SSL" app/src/main/cpp/CMakeLists.txt; then
-            echo "WITH_SSL already present"
-          else
+          if ! grep -q "WITH_SSL" app/src/main/cpp/CMakeLists.txt; then
             echo "Adding WITH_SSL to CMakeLists.txt"
             cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
 
@@ -94,6 +103,8 @@ jobs:
           target_link_libraries(love crypto ssl)
           option(WITH_SSL "Build with SSL support" ON)
           EOF
+          else
+            echo "WITH_SSL already present"
           fi
 
       - name: Set package name to com.CB3
