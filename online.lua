@@ -1,4 +1,4 @@
--- online.lua – полный онлайн с защитой от любых ошибок JSON
+-- online.lua – парсит JSON даже если он битый
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
@@ -50,6 +50,24 @@ local function generateUuid()
     end)
 end
 
+-- ===== БРУТФОРС-ПАРСИНГ JSON (работает даже с битым JSON) =====
+local function bruteParseJson(str)
+    if not str or str == "" or str == "null" then return nil end
+    local result = {}
+    -- Ищем ключи и значения (поддерживаем строки и числа)
+    for key, value in string.gmatch(str, '"([%w_]+)"%s*:%s*([^,}]+)') do
+        -- Убираем кавычки у строковых значений
+        local val = value:gsub('^"', ''):gsub('"$', ''):gsub('^%s+', ''):gsub('%s+$', '')
+        local num = tonumber(val)
+        if num then
+            result[key] = num
+        else
+            result[key] = val
+        end
+    end
+    return result
+end
+
 function online.isNicknameTaken(nickname, callback)
     if not nickname or nickname == "" then
         callback(false, "Nickname cannot be empty")
@@ -57,8 +75,8 @@ function online.isNicknameTaken(nickname, callback)
     end
     firebaseRequest("GET", PATH, nil, function(success, body)
         if success and body then
-            local ok, data = pcall(love.data.decode, "string", "json", body)
-            if ok and data then
+            local data = bruteParseJson(body)
+            if data then
                 for uid, info in pairs(data) do
                     if info.nickname and info.nickname == nickname and uid ~= myUid then
                         callback(true, "Nickname already taken")
@@ -138,20 +156,14 @@ function online.fetchPlayers()
     end
     firebaseRequest("GET", PATH, nil, function(success, body)
         if success then
-            -- Выводим полный ответ в консоль (чтобы видеть, что приходит)
-            print("[FIREBASE RAW] Response length:", #body)
-            print("[FIREBASE RAW] Full response:", body)
-
-            if body == "null" or body == "" then
-                players = {}
-                setDebug("Players loaded: 0 (empty)")
+            if not body or body == "" or body == "null" then
+                setDebug("No players data")
                 return
             end
 
-            -- Пытаемся декодировать JSON с защитой
+            -- Сначала пробуем штатный парсинг (для валидного JSON)
             local ok, data = pcall(love.data.decode, "string", "json", body)
-            if ok and data then
-                -- Обновляем игроков
+            if ok and data and not data.error then
                 local newPlayers = {}
                 for uid, info in pairs(data) do
                     if uid ~= myUid and info.x and info.y then
@@ -162,12 +174,25 @@ function online.fetchPlayers()
                 local count = 0
                 for _ in pairs(players) do count = count + 1 end
                 setDebug("Players loaded: " .. count)
+                return
+            end
+
+            -- Если штатный парсинг не удался — используем брутфорс
+            local data = bruteParseJson(body)
+            if data then
+                local newPlayers = {}
+                for uid, info in pairs(data) do
+                    if uid ~= myUid and info.x and info.y then
+                        newPlayers[uid] = { x = info.x, y = info.y, nickname = info.nickname or "???" }
+                    end
+                end
+                players = newPlayers
+                local count = 0
+                for _ in pairs(players) do count = count + 1 end
+                setDebug("Players loaded (brute): " .. count)
             else
-                -- Если JSON битый, показываем превью на экране и в консоли
-                local preview = (body and #body > 200) and body:sub(1, 200) .. "..." or body or "(empty)"
-                setDebug("Invalid JSON: " .. preview)
-                print("[ERROR] Invalid JSON from Firebase, full response below:")
-                print(body)
+                setDebug("Failed to parse response: " .. body:sub(1, 100))
+                print("[ERROR] Cannot parse:", body)
             end
         else
             setDebug("GET failed: " .. (body or "unknown"))
@@ -189,21 +214,6 @@ function online.leave()
     players = {}
     myUid = nil
     myNickname = nil
-end
-
--- Функция для принудительного добавления тестового игрока (для отладки)
-function online.debugAddTestPlayer(nickname)
-    if not nickname then nickname = "TestBot" end
-    local testUid = generateUuid()
-    local path = PATH .. testUid
-    local data = '{"x":200,"y":300,"nickname":"' .. nickname .. '"}'
-    firebaseRequest("PUT", path, data, function(success)
-        if success then
-            setDebug("Test player added: " .. nickname)
-        else
-            setDebug("Failed to add test player")
-        end
-    end)
 end
 
 function online.update(dt)
