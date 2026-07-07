@@ -8,6 +8,7 @@ local settings = require("settings")
 local mode_select = require("mode_select")
 local difficulty = require("difficulty")
 local online = require("online")
+local room = require("room")   -- новый модуль
 
 GameState = { current = "lobby" }
 
@@ -17,155 +18,9 @@ local lastState = nil
 local shotCooldown = 0
 local SHOT_DELAY = 0.15
 
--- ========== ЗВУКИ И МУЗЫКА ==========
-local bgMusic = nil
-musicOn = true
-sfxOn = true
+-- ЗВУКИ И МУЗЫКА (оставь как есть)
+-- ...
 
-function toggleMusic()
-    if bgMusic then
-        if bgMusic:isPlaying() then
-            bgMusic:pause()
-            musicOn = false
-        else
-            bgMusic:play()
-            musicOn = true
-        end
-    end
-end
-
-function toggleSfx()
-    sfxOn = not sfxOn
-end
-
-local function loadMusic()
-    local ok, source = pcall(love.audio.newSource, "Aaron Kenny - Christmas Village.mp3", "stream")
-    if ok and source then
-        bgMusic = source
-        bgMusic:setLooping(true)
-        bgMusic:setVolume(0.5)
-        if musicOn then bgMusic:play() end
-    else
-        musicOn = false
-        print("Music not loaded")
-    end
-end
-
-function playButtonSound()
-    if not sfxOn then return end
-    local sound, err = love.audio.newSource("cartoon-button-click-sound.mp3", "static")
-    if sound then
-        sound:setVolume(0.5)
-        sound:play()
-    end
-end
-
-local shootSound = nil
-local hitSound = nil
-
-function playShootSound()
-    if not sfxOn then return end
-    if not shootSound then
-        local ok, source = pcall(love.audio.newSource, "The_Sound_Of_A_Gunshot.wav", "static")
-        if ok and source then
-            shootSound = source
-            shootSound:setVolume(1.0)
-        else
-            return
-        end
-    end
-    local clone = shootSound:clone()
-    clone:setVolume(1.0)
-    clone:play()
-end
-
-function playHitSound()
-    if not sfxOn then return end
-    if not hitSound then
-        local ok, source = pcall(love.audio.newSource, "hit.mp3", "static")
-        if ok and source then
-            hitSound = source
-            hitSound:setVolume(0.3)
-        else
-            return
-        end
-    end
-    hitSound:stop()
-    hitSound:play()
-end
-
-_G.playShootSound = playShootSound
-_G.playHitSound = playHitSound
-game.playShootSound = playShootSound
-game.playHitSound = playHitSound
-
--- ========== СОХРАНЕНИЕ ==========
-SAVE_DATA = { 
-    coins = 0, 
-    ownedSkins = {}, 
-    equippedSkin = "NONE", 
-    musicOn = true, 
-    sfxOn = true,
-    nickname = "Player"
-}
-local SAVE_FILE = "data.txt"
-
-function SAVE_SAVE()
-    local ownedStr = table.concat(SAVE_DATA.ownedSkins, ",")
-    local content = tostring(SAVE_DATA.coins) .. "\n" ..
-                    ownedStr .. "\n" ..
-                    SAVE_DATA.equippedSkin .. "\n" ..
-                    tostring(musicOn and 1 or 0) .. "\n" ..
-                    tostring(sfxOn and 1 or 0) .. "\n" ..
-                    (SAVE_DATA.nickname or "Player")
-    pcall(function()
-        love.filesystem.write(SAVE_FILE, content)
-    end)
-end
-
-local function loadSave()
-    local info = love.filesystem.getInfo(SAVE_FILE)
-    if not info then
-        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true, sfxOn = true, nickname = "Player" }
-        musicOn = true
-        sfxOn = true
-        return
-    end
-    local data, err = love.filesystem.read(SAVE_FILE)
-    if not data then
-        SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", musicOn = true, sfxOn = true, nickname = "Player" }
-        musicOn = true
-        sfxOn = true
-        return
-    end
-    local lines = {}
-    for line in data:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
-    end
-    local coins = tonumber(lines[1]) or 0
-    local ownedStr = lines[2] or ""
-    local equippedSkin = lines[3] or "NONE"
-    local musicVal = tonumber(lines[4]) or 1
-    local sfxVal = tonumber(lines[5]) or 1
-    local nickname = lines[6] or "Player"
-
-    local ownedSkins = {}
-    if ownedStr ~= "" then
-        for name in ownedStr:gmatch("[^,]+") do
-            table.insert(ownedSkins, name)
-        end
-    end
-    SAVE_DATA = { 
-        coins = coins, 
-        ownedSkins = ownedSkins, 
-        equippedSkin = equippedSkin,
-        nickname = nickname
-    }
-    musicOn = musicVal == 1
-    sfxOn = sfxVal == 1
-end
-
--- ========== LOVE CALLBACKS ==========
 function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
     loadSave()
@@ -194,9 +49,11 @@ function love.update(dt)
                 if success then
                     print("Online started as " .. nickname)
                 else
-                    print("Online error: " .. msg)
+                    print("Online error:", msg)
                 end
             end)
+        elseif GameState.current == "room" then
+            if room.load then room.load() end
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -236,6 +93,8 @@ function love.update(dt)
             game.spawnPlayerBullet(dx, dy)
             shotCooldown = SHOT_DELAY
         end
+    elseif GameState.current == "room" then
+        -- ничего не обновляем
     end
 end
 
@@ -249,6 +108,8 @@ function love.draw()
     elseif GameState.current == "game" or GameState.current == "online" then
         game.draw()
         controls.draw()
+    elseif GameState.current == "room" then
+        room.draw()
     elseif GameState.current == "shop" then
         shop.draw(SAVE_DATA.coins)
     elseif GameState.current == "credits" then
@@ -274,14 +135,20 @@ function love.keypressed(key)
         controls.keypressed(key)
     elseif GameState.current == "settings" and settings.keypressed then
         settings.keypressed(key)
+    elseif GameState.current == "room" and room.keypressed then
+        room.keypressed(key)
     end
 
     if key == "escape" then
         if GameState.current == "game" then
+            online.leave()
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "online" then
             online.leave()
+            GameState.current = "lobby"
+            playButtonSound()
+        elseif GameState.current == "room" then
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "mode_select" then
@@ -308,6 +175,8 @@ end
 function love.textinput(t)
     if GameState.current == "settings" and settings.textinput then
         settings.textinput(t)
+    elseif GameState.current == "room" and room.textinput then
+        room.textinput(t)
     end
 end
 
@@ -324,6 +193,8 @@ local function dispatch(fn, ...)
         game[fn](...)
     elseif s == "online" and game[fn] then
         game[fn](...)
+    elseif s == "room" and room[fn] then
+        room[fn](...)
     elseif s == "shop" and shop[fn] then
         if fn == "touchpressed" then
             local id, x, y = ...
