@@ -7,7 +7,7 @@ on:
 jobs:
   build-android-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     outputs:
       apk-name: ${{ steps.set-output.outputs.apk-name }}
 
@@ -49,9 +49,17 @@ jobs:
           fi
 
       # ============================================================
-      #  СБОРКА OPENSSL ДЛЯ ARM64
+      #  СБОРКА OPENSSL ДЛЯ ARM64 (С КЭШИРОВАНИЕМ)
       # ============================================================
+      - name: Cache OpenSSL
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: love-android/app/src/main/cpp/openssl
+          key: openssl-arm64-v5
+
       - name: Build OpenSSL for Android (arm64)
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
         run: |
           cd love-android
           wget -O openssl-1.1.1w.tar.gz https://www.openssl.org/source/openssl-1.1.1w.tar.gz
@@ -70,14 +78,26 @@ jobs:
           cd ..
 
       # ============================================================
-      #  ВКЛЮЧАЕМ SSL В LOVE-ANDROID
+      #  ВКЛЮЧАЕМ SSL В LOVE-ANDROID (С ПРОВЕРКОЙ)
       # ============================================================
       - name: Enable SSL in love-android
         run: |
           cd love-android
-          cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
+          # Проверяем, есть ли уже openssl
+          if [ -d "app/src/main/cpp/openssl" ]; then
+            echo "OpenSSL found, enabling SSL..."
+          else
+            echo "OpenSSL not found, skipping SSL..."
+            exit 1
+          fi
+          # Проверяем, есть ли уже WITH_SSL в CMakeLists.txt
+          if grep -q "WITH_SSL" app/src/main/cpp/CMakeLists.txt; then
+            echo "WITH_SSL already present"
+          else
+            echo "Adding WITH_SSL to CMakeLists.txt"
+            cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
 
-          # Добавляем OpenSSL
+          # OpenSSL
           set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/openssl)
           set(OPENSSL_INCLUDE_DIR ${OPENSSL_ROOT_DIR}/include)
           set(OPENSSL_LIB_DIR ${OPENSSL_ROOT_DIR}/lib/${ANDROID_ABI})
@@ -88,6 +108,7 @@ jobs:
           target_link_libraries(love crypto ssl)
           option(WITH_SSL "Build with SSL support" ON)
           EOF
+          fi
 
       - name: Set package name to com.CB3
         run: |
