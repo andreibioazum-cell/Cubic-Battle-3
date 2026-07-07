@@ -83,7 +83,6 @@ function settings.draw()
 
     drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, nil, 1)
 
-    -- Music button
     local musicText = musicOn and "MUSIC: ON" or "MUSIC: OFF"
     local musicColor = musicOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
@@ -95,7 +94,6 @@ function settings.draw()
     love.graphics.rectangle("line", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 16*scale, 16*scale)
     drawSpacedText(musicText, btnMusic.x, btnMusic.y + 22*scale, btnMusic.w, "center", fontBtn, nil, 1)
 
-    -- SFX button
     local sfxText = sfxOn and "SOUNDS: ON" or "SOUNDS: OFF"
     local sfxColor = sfxOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
@@ -107,7 +105,6 @@ function settings.draw()
     love.graphics.rectangle("line", btnSfx.x, btnSfx.y, btnSfx.w, btnSfx.h, 16*scale, 16*scale)
     drawSpacedText(sfxText, btnSfx.x, btnSfx.y + 22*scale, btnSfx.w, "center", fontBtn, nil, 1)
 
-    -- Nickname input field
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", inputField.x + 3*scale, inputField.y + 3*scale, inputField.w, inputField.h, 8*scale, 8*scale)
     love.graphics.setColor(0.1, 0.1, 0.1, 1)
@@ -127,16 +124,13 @@ function settings.draw()
     end
     love.graphics.setFont(fontInput)
     love.graphics.setColor(1, 1, 1, 1)
-    local tw = fontInput:getWidth(displayName)
     local th = fontInput:getHeight()
     love.graphics.print(displayName, inputField.x + 15*scale, inputField.y + (inputField.h - th)/2)
 
-    -- Label above the field
     love.graphics.setFont(fontBtn)
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf("NICKNAME", inputField.x, inputField.y - 35*scale, inputField.w, "center")
 
-    -- Back button
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -199,18 +193,14 @@ function settings.keypressed(key)
     end
     if key == "backspace" then
         nickname = nickname:sub(1, -2)
+        SAVE_DATA.nickname = nickname
+        SAVE_SAVE()
         return
-    end
-    -- allow only printable ASCII (32-126)
-    if key and #key == 1 and key:byte() >= 32 and key:byte() <= 126 then
-        nickname = nickname .. key
-        if #nickname > 20 then nickname = nickname:sub(1, 20) end
     end
 end
 
 function settings.textinput(t)
     if inputActive then
-        -- filter only printable ASCII
         local filtered = ""
         for i = 1, #t do
             local b = t:byte(i)
@@ -220,6 +210,8 @@ function settings.textinput(t)
         end
         nickname = nickname .. filtered
         if #nickname > 20 then nickname = nickname:sub(1, 20) end
+        SAVE_DATA.nickname = nickname
+        SAVE_SAVE()
     end
 end
 
