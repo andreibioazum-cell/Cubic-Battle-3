@@ -1,4 +1,4 @@
--- main.lua – полностью рабочий, с сохранениями и поддержкой комнат
+-- main.lua – главный файл игры
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
