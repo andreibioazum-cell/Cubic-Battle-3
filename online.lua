@@ -1,4 +1,4 @@
--- online.lua – with nicknames, check duplicates, auto cleanup
+-- online.lua – full multiplayer module for Cubic Battle
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
@@ -50,7 +50,6 @@ local function generateUuid()
     end)
 end
 
--- Проверка уникальности ника
 function online.isNicknameTaken(nickname, callback)
     if not nickname or nickname == "" then
         callback(false, "Nickname cannot be empty")
@@ -87,7 +86,6 @@ function online.init(nickname, callback)
     myNickname = nickname
     setDebug("My ID: " .. myUid .. ", nick: " .. nickname)
 
-    -- Сначала проверяем уникальность ника
     online.isNicknameTaken(nickname, function(taken, msg)
         if taken then
             setDebug("Nickname taken: " .. msg)
@@ -95,7 +93,6 @@ function online.init(nickname, callback)
             return
         end
 
-        -- Сохраняем свои данные в Firebase
         local path = PATH .. myUid
         local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '"}'
         firebaseRequest("PUT", path, data, function(success)
@@ -112,7 +109,6 @@ function online.init(nickname, callback)
 end
 
 function online.connect(callback)
-    -- init уже подключает, здесь просто возвращаем статус
     if isConnected then
         if callback then callback(true) end
     else
