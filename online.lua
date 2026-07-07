@@ -1,11 +1,12 @@
--- online.lua – парсит JSON даже если он битый
+-- online.lua – синхронизация через Firebase с поддержкой комнат
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
-local PATH = "players/"
+local ROOMS_PATH = "rooms/"
 
 local myUid = nil
 local myNickname = nil
+local myRoomCode = nil
 local players = {}
 local sendTimer = 0
 local fetchTimer = 0
@@ -50,95 +51,96 @@ local function generateUuid()
     end)
 end
 
--- ===== БРУТФОРС-ПАРСИНГ JSON (работает даже с битым JSON) =====
-local function bruteParseJson(str)
-    if not str or str == "" or str == "null" then return nil end
-    local result = {}
-    -- Ищем ключи и значения (поддерживаем строки и числа)
-    for key, value in string.gmatch(str, '"([%w_]+)"%s*:%s*([^,}]+)') do
-        -- Убираем кавычки у строковых значений
-        local val = value:gsub('^"', ''):gsub('"$', ''):gsub('^%s+', ''):gsub('%s+$', '')
-        local num = tonumber(val)
-        if num then
-            result[key] = num
-        else
-            result[key] = val
-        end
+function online.generateRoomCode()
+    local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    local code = ""
+    for i = 1, 5 do
+        local idx = math.random(1, #chars)
+        code = code .. chars:sub(idx, idx)
     end
-    return result
+    return code
 end
 
-function online.isNicknameTaken(nickname, callback)
-    if not nickname or nickname == "" then
-        callback(false, "Nickname cannot be empty")
-        return
-    end
-    firebaseRequest("GET", PATH, nil, function(success, body)
-        if success and body then
-            local data = bruteParseJson(body)
-            if data then
-                for uid, info in pairs(data) do
-                    if info.nickname and info.nickname == nickname and uid ~= myUid then
-                        callback(true, "Nickname already taken")
-                        return
-                    end
-                end
-                callback(false, "Nickname available")
-            else
-                callback(false, "No players yet")
-            end
+function online.roomExists(roomCode, callback)
+    firebaseRequest("GET", ROOMS_PATH .. roomCode .. "/info", nil, function(success, body)
+        if success and body and body ~= "null" then
+            callback(true)
         else
-            callback(false, "Failed to check")
+            callback(false)
         end
     end)
 end
 
-function online.init(nickname, callback)
+function online.createRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
-        setDebug("Nickname required, using 'Player'")
-        nickname = "Player"
+        setDebug("Nickname required")
+        if callback then callback(false, "Nickname required") end
+        return
+    end
+    if not roomCode or roomCode == "" then
+        roomCode = online.generateRoomCode()
     end
 
+    myRoomCode = roomCode
     myUid = generateUuid()
     myNickname = nickname
-    setDebug("My ID: " .. myUid .. ", nick: " .. nickname)
 
-    online.isNicknameTaken(nickname, function(taken, msg)
-        if taken then
-            setDebug("Nickname taken: " .. msg)
-            if callback then callback(false, msg) end
+    local path = ROOMS_PATH .. roomCode .. "/info"
+    local infoData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
+    firebaseRequest("PUT", path, infoData, function(success)
+        if not success then
+            setDebug("Failed to create room")
+            if callback then callback(false, "Failed to create room") end
+            return
+        end
+        online.joinRoom(roomCode, nickname, callback)
+    end)
+end
+
+function online.joinRoom(roomCode, nickname, callback)
+    if not nickname or nickname == "" then
+        setDebug("Nickname required")
+        if callback then callback(false, "Nickname required") end
+        return
+    end
+    if not roomCode or roomCode == "" then
+        setDebug("Room code required")
+        if callback then callback(false, "Room code required") end
+        return
+    end
+
+    online.roomExists(roomCode, function(exists)
+        if not exists then
+            setDebug("Room does not exist")
+            if callback then callback(false, "Room not found") end
             return
         end
 
-        local path = PATH .. myUid
+        myRoomCode = roomCode
+        myUid = generateUuid()
+        myNickname = nickname
+
+        local path = ROOMS_PATH .. roomCode .. "/players/" .. myUid
         local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '"}'
         firebaseRequest("PUT", path, data, function(success)
             if success then
                 isConnected = true
-                setDebug("Connected as " .. nickname)
+                setDebug("Joined room " .. roomCode .. " as " .. nickname)
                 if callback then callback(true) end
             else
-                setDebug("Failed to register")
-                if callback then callback(false, "Registration failed") end
+                setDebug("Failed to join room")
+                if callback then callback(false, "Failed to join room") end
             end
         end)
     end)
 end
 
-function online.connect(callback)
-    if isConnected then
-        if callback then callback(true) end
-    else
-        if callback then callback(false, "Not connected") end
-    end
-end
-
 function online.sendPosition(x, y)
-    if not isConnected or not myUid then
-        setDebug("Not connected or no UID")
+    if not isConnected or not myUid or not myRoomCode then
+        setDebug("Not connected or no room")
         return
     end
-    local path = PATH .. myUid
+    local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. ',"nickname":"' .. myNickname .. '"}'
     firebaseRequest("PUT", path, data, function(success, body)
         if not success then
@@ -150,20 +152,20 @@ function online.sendPosition(x, y)
 end
 
 function online.fetchPlayers()
-    if not isConnected then
-        setDebug("Not connected")
+    if not isConnected or not myRoomCode then
+        setDebug("Not connected or no room")
         return
     end
-    firebaseRequest("GET", PATH, nil, function(success, body)
+    local path = ROOMS_PATH .. myRoomCode .. "/players/"
+    firebaseRequest("GET", path, nil, function(success, body)
         if success then
             if not body or body == "" or body == "null" then
-                setDebug("No players data")
+                players = {}
+                setDebug("No players in room")
                 return
             end
-
-            -- Сначала пробуем штатный парсинг (для валидного JSON)
             local ok, data = pcall(love.data.decode, "string", "json", body)
-            if ok and data and not data.error then
+            if ok and data then
                 local newPlayers = {}
                 for uid, info in pairs(data) do
                     if uid ~= myUid and info.x and info.y then
@@ -173,26 +175,10 @@ function online.fetchPlayers()
                 players = newPlayers
                 local count = 0
                 for _ in pairs(players) do count = count + 1 end
-                setDebug("Players loaded: " .. count)
-                return
-            end
-
-            -- Если штатный парсинг не удался — используем брутфорс
-            local data = bruteParseJson(body)
-            if data then
-                local newPlayers = {}
-                for uid, info in pairs(data) do
-                    if uid ~= myUid and info.x and info.y then
-                        newPlayers[uid] = { x = info.x, y = info.y, nickname = info.nickname or "???" }
-                    end
-                end
-                players = newPlayers
-                local count = 0
-                for _ in pairs(players) do count = count + 1 end
-                setDebug("Players loaded (brute): " .. count)
+                setDebug("Players in room: " .. count)
             else
-                setDebug("Failed to parse response: " .. body:sub(1, 100))
-                print("[ERROR] Cannot parse:", body)
+                setDebug("Invalid JSON, skipping")
+                print("[ERROR] Invalid JSON from Firebase:", body)
             end
         else
             setDebug("GET failed: " .. (body or "unknown"))
@@ -205,15 +191,16 @@ function online.getPlayers()
 end
 
 function online.leave()
-    if not isConnected or not myUid then return end
-    local path = PATH .. myUid
+    if not isConnected or not myUid or not myRoomCode then return end
+    local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
     firebaseRequest("DELETE", path, nil, function()
-        setDebug("Data deleted")
+        setDebug("Left room")
     end)
     isConnected = false
     players = {}
     myUid = nil
     myNickname = nil
+    myRoomCode = nil
 end
 
 function online.update(dt)
