@@ -1,4 +1,4 @@
--- online.lua – Firebase sync without auth, open rules (.read/.write = true)
+-- online.lua – стабильная версия с отображением ошибок
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
@@ -12,6 +12,7 @@ local SEND_INTERVAL = 0.2
 local FETCH_INTERVAL = 0.3
 local isConnected = false
 local debugText = "Waiting..."
+local lastRawResponse = ""
 
 local function setDebug(text)
     debugText = text
@@ -25,7 +26,7 @@ local function firebaseRequest(method, path, data, callback)
         method = method,
         headers = { ["Content-Type"] = "application/json" },
         timeout = 5,
-        verify = false,   -- отключаем проверку сертификатов (для Android)
+        verify = false,
     }
     if data then
         options.data = data
@@ -72,11 +73,11 @@ function online.sendPosition(x, y)
     end
     local path = PATH .. myUid
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
-    firebaseRequest("PUT", path, data, function(success)
-        if not success then
-            setDebug("Failed to send position")
+    firebaseRequest("PUT", path, data, function(success, body)
+        if success then
+            setDebug("PUT OK")
         else
-            setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
+            setDebug("PUT failed: " .. (body or "unknown"))
         end
     end)
 end
@@ -87,28 +88,35 @@ function online.fetchPlayers()
         return
     end
     firebaseRequest("GET", PATH, nil, function(success, body)
-        if success and body then
-            -- Правильный синтаксис для LÖVE 11.x: любые 'string', 'json', данные
+        if success then
+            -- Сохраняем сырой ответ для отладки
+            lastRawResponse = body or "(empty)"
+            -- Пытаемся распарсить JSON
             local ok, data = pcall(love.data.decode, "string", "json", body)
             if ok and data then
-                local newPlayers = {}
-                for uid, pos in pairs(data) do
-                    if uid ~= myUid and pos.x and pos.y then
-                        newPlayers[uid] = { x = pos.x, y = pos.y }
+                -- Проверяем, что data — таблица
+                if type(data) == "table" then
+                    local newPlayers = {}
+                    for uid, pos in pairs(data) do
+                        if uid ~= myUid and pos.x and pos.y then
+                            newPlayers[uid] = { x = pos.x, y = pos.y }
+                        end
                     end
+                    players = newPlayers
+                    local count = 0
+                    for _ in pairs(players) do count = count + 1 end
+                    setDebug("Players loaded: " .. count)
+                else
+                    setDebug("Response is not a table: " .. tostring(data))
                 end
-                players = newPlayers
-                local count = 0
-                for _ in pairs(players) do count = count + 1 end
-                setDebug("Players loaded: " .. count)
             else
-                -- Если не удалось распарсить JSON, показываем первые 200 символов ответа
-                local preview = body:sub(1, 200)
-                setDebug("Invalid JSON response: " .. preview)
-                print("[ERROR] Invalid JSON from Firebase:", body)
+                -- Если не удалось распарсить, показываем превью ответа
+                local preview = (body and #body > 150) and body:sub(1, 150) .. "..." or (body or "(empty)")
+                setDebug("Invalid JSON: " .. preview)
+                print("[ERROR] Full response:", body)
             end
         else
-            setDebug("Failed to fetch players")
+            setDebug("GET failed: " .. (body or "unknown"))
         end
     end)
 end
