@@ -1,4 +1,4 @@
--- room.lua – интерфейс для создания/входа в комнату
+-- room.lua – интерфейс для создания/входа в комнату (исправлен)
 local room = {}
 
 local online = require("online")
@@ -82,10 +82,12 @@ function room.draw()
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
     local w = love.graphics.getWidth()
+    local h = love.graphics.getHeight()
     local scale = getScale()
 
     drawSpacedText("MULTIPLAYER ROOM", 0, 80*scale, w, "center", fontTitle)
 
+    -- Поле ввода
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", inputField.x + 3*scale, inputField.y + 3*scale, inputField.w, inputField.h, 8*scale, 8*scale)
     love.graphics.setColor(0.1, 0.1, 0.1, 1)
@@ -142,6 +144,7 @@ function room.draw()
         love.graphics.printf(statusMessage, 0, h/2 + 150*scale, w, "center")
     end
 
+    -- Back
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
