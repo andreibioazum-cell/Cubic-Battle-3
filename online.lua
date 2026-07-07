@@ -1,10 +1,11 @@
--- online.lua – Firebase sync (no auth, open rules)
+-- online.lua – with nicknames, check duplicates, auto cleanup
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
 local PATH = "players/"
 
 local myUid = nil
+local myNickname = nil
 local players = {}
 local sendTimer = 0
 local fetchTimer = 0
@@ -49,20 +50,74 @@ local function generateUuid()
     end)
 end
 
-function online.init()
+-- Проверка уникальности ника
+function online.isNicknameTaken(nickname, callback)
+    if not nickname or nickname == "" then
+        callback(false, "Nickname cannot be empty")
+        return
+    end
+    firebaseRequest("GET", PATH, nil, function(success, body)
+        if success and body then
+            local ok, data = pcall(love.data.decode, "string", "json", body)
+            if ok and data then
+                for uid, info in pairs(data) do
+                    if info.nickname and info.nickname == nickname and uid ~= myUid then
+                        callback(true, "Nickname already taken")
+                        return
+                    end
+                end
+                callback(false, "Nickname available")
+            else
+                callback(false, "No players yet")
+            end
+        else
+            callback(false, "Failed to check")
+        end
+    end)
+end
+
+function online.init(nickname, callback)
+    if not nickname or nickname == "" then
+        setDebug("Nickname required")
+        if callback then callback(false, "Nickname required") end
+        return
+    end
+
     myUid = generateUuid()
-    setDebug("My ID: " .. myUid)
-    isConnected = true
+    myNickname = nickname
+    setDebug("My ID: " .. myUid .. ", nick: " .. nickname)
+
+    -- Сначала проверяем уникальность ника
+    online.isNicknameTaken(nickname, function(taken, msg)
+        if taken then
+            setDebug("Nickname taken: " .. msg)
+            if callback then callback(false, msg) end
+            return
+        end
+
+        -- Сохраняем свои данные в Firebase
+        local path = PATH .. myUid
+        local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '"}'
+        firebaseRequest("PUT", path, data, function(success)
+            if success then
+                isConnected = true
+                setDebug("Connected as " .. nickname)
+                if callback then callback(true) end
+            else
+                setDebug("Failed to register")
+                if callback then callback(false, "Registration failed") end
+            end
+        end)
+    end)
 end
 
 function online.connect(callback)
+    -- init уже подключает, здесь просто возвращаем статус
     if isConnected then
-        setDebug("Already connected")
         if callback then callback(true) end
-        return
+    else
+        if callback then callback(false, "Not connected") end
     end
-    isConnected = true
-    if callback then callback(true) end
 end
 
 function online.sendPosition(x, y)
@@ -71,7 +126,7 @@ function online.sendPosition(x, y)
         return
     end
     local path = PATH .. myUid
-    local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. '}'
+    local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. ',"nickname":"' .. myNickname .. '"}'
     firebaseRequest("PUT", path, data, function(success)
         if not success then
             setDebug("Failed to send position")
@@ -88,12 +143,12 @@ function online.fetchPlayers()
     end
     firebaseRequest("GET", PATH, nil, function(success, body)
         if success and body then
-            local ok, data = pcall(love.data.decode, "string", "json", body)  -- fixed here
+            local ok, data = pcall(love.data.decode, "string", "json", body)
             if ok and data then
                 local newPlayers = {}
-                for uid, pos in pairs(data) do
-                    if uid ~= myUid and pos.x and pos.y then
-                        newPlayers[uid] = { x = pos.x, y = pos.y }
+                for uid, info in pairs(data) do
+                    if uid ~= myUid and info.x and info.y then
+                        newPlayers[uid] = { x = info.x, y = info.y, nickname = info.nickname or "???" }
                     end
                 end
                 players = newPlayers
@@ -121,11 +176,12 @@ function online.leave()
     end)
     isConnected = false
     players = {}
+    myUid = nil
+    myNickname = nil
 end
 
 function online.update(dt)
     if not isConnected then
-        online.connect()
         return
     end
 
