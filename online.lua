@@ -1,4 +1,4 @@
--- online.lua – синхронизация через Firebase с поддержкой комнат
+-- online.lua – полная синхронизация с комнатами
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
@@ -52,7 +52,6 @@ local function generateUuid()
 end
 
 function online.init()
-    -- пустая функция для обратной совместимости
     setDebug("Online module initialized")
 end
 
@@ -233,6 +232,10 @@ end
 
 function online.getDebugText()
     return debugText
+end
+
+function online.isConnected()
+    return isConnected
 end
 
 return online
