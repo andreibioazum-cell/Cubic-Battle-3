@@ -1,8 +1,9 @@
-local game = {}
-
+-- game.lua – полная игровая логика: офлайн с врагом, онлайн с игроками
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
+
+local game = {}
 
 SAVE_DATA = SAVE_DATA or { coins = 0, ownedSkin = "NONE", equippedSkin = "NONE" }
 SAVE_SAVE = SAVE_SAVE or function() end
@@ -99,29 +100,31 @@ local function fireLaser(px, py, aimX, aimY)
     if len > 0 then
         aimX, aimY = aimX/len, aimY/len
     end
-    local e, _, _ = enemy.get()
-    if e then
-        local ex, ey = e.x, e.y
-        local dx = ex - px
-        local dy = ey - py
-        local distToEnemy = math.sqrt(dx*dx + dy*dy)
-        if distToEnemy <= LASER_RANGE then
-            local dot = aimX * dx + aimY * dy
-            if dot > 0 then
-                local cross = aimX * dy - aimY * dx
-                if math.abs(cross) < 20 then
-                    laserEndX, laserEndY = ex, ey
-                    local killed = enemy.takeDamage(LASER_DAMAGE)
-                    if killed then
-                        local reward = 10
-                        if currentDifficulty == "easy" then reward = 5
-                        elseif currentDifficulty == "hard" then reward = 50
-                        elseif currentDifficulty == "impossible" then reward = 100 end
-                        SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
-                        SAVE_SAVE()
-                        GameState.current = "lobby"
+    if not isOnlineMode then
+        local e, _, _ = enemy.get()
+        if e then
+            local ex, ey = e.x, e.y
+            local dx = ex - px
+            local dy = ey - py
+            local distToEnemy = math.sqrt(dx*dx + dy*dy)
+            if distToEnemy <= LASER_RANGE then
+                local dot = aimX * dx + aimY * dy
+                if dot > 0 then
+                    local cross = aimX * dy - aimY * dx
+                    if math.abs(cross) < 20 then
+                        laserEndX, laserEndY = ex, ey
+                        local killed = enemy.takeDamage(LASER_DAMAGE)
+                        if killed then
+                            local reward = 10
+                            if currentDifficulty == "easy" then reward = 5
+                            elseif currentDifficulty == "hard" then reward = 50
+                            elseif currentDifficulty == "impossible" then reward = 100 end
+                            SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
+                            SAVE_SAVE()
+                            GameState.current = "lobby"
+                        end
+                        return
                     end
-                    return
                 end
             end
         end
@@ -131,12 +134,15 @@ local function fireLaser(px, py, aimX, aimY)
 end
 
 function game.load()
-    isOnlineMode = (GameState.current == "online")
+    isOnlineMode = (_G.roomCode ~= nil and _G.roomCode ~= "")
+
     if not isOnlineMode then
+        -- singleplayer: enemy and difficulty
         currentDifficulty = _G.difficulty or "normal"
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
     else
+        -- multiplayer: no enemy, no difficulty
         enemy.reset()
     end
 
@@ -336,7 +342,7 @@ function game.draw()
             love.graphics.setColor(1, 0.2, 0.2, 1)
             love.graphics.circle("fill", pos.x, pos.y, PLAYER_SIZE)
             love.graphics.setColor(1, 1, 1, 0.7)
-            love.graphics.print(string.sub(uid, 1, 4), pos.x - 20, pos.y - 30)
+            love.graphics.print(pos.nickname or "???", pos.x - 20, pos.y - 30)
         end
     end
 
@@ -411,7 +417,7 @@ function game.draw()
         if currentDifficulty == "impossible" then diffText = "IMPOSSIBLE" end
         love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
     else
-        love.graphics.printf("ONLINE MODE", px, py + 44, 200, "left")
+        love.graphics.printf("ONLINE PVP", px, py + 44, 200, "left")
     end
 
     if equippedSkin == "BUK CUBE" then
@@ -448,7 +454,7 @@ function game.draw()
         end
     end
 
-    -- ===== ОТЛАДКА ОНЛАЙН-РЕЖИМА =====
+    -- Отладка онлайн
     if isOnlineMode then
         local debugText = online.getDebugText()
         if debugText then
