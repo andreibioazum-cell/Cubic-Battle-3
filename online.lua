@@ -1,4 +1,4 @@
--- online.lua – с интерполяцией (плавное движение)
+-- online.lua – полный онлайн с защитой от любых ошибок JSON
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com"
@@ -6,11 +6,11 @@ local PATH = "players/"
 
 local myUid = nil
 local myNickname = nil
-local players = {}  -- теперь храним: { x, y, targetX, targetY, lerpTimer, nickname }
+local players = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.15      -- отправка чаще (0.15 сек)
-local FETCH_INTERVAL = 0.2      -- получение чаще (0.2 сек)
+local SEND_INTERVAL = 0.2
+local FETCH_INTERVAL = 0.3
 local isConnected = false
 local debugText = "Waiting..."
 
@@ -77,9 +77,8 @@ end
 
 function online.init(nickname, callback)
     if not nickname or nickname == "" then
-        setDebug("Nickname required")
-        if callback then callback(false, "Nickname required") end
-        return
+        setDebug("Nickname required, using 'Player'")
+        nickname = "Player"
     end
 
     myUid = generateUuid()
@@ -139,51 +138,36 @@ function online.fetchPlayers()
     end
     firebaseRequest("GET", PATH, nil, function(success, body)
         if success then
+            -- Выводим полный ответ в консоль (чтобы видеть, что приходит)
+            print("[FIREBASE RAW] Response length:", #body)
+            print("[FIREBASE RAW] Full response:", body)
+
             if body == "null" or body == "" then
-                -- Удаляем игроков, которых больше нет
-                for uid in pairs(players) do
-                    players[uid] = nil
-                end
+                players = {}
                 setDebug("Players loaded: 0 (empty)")
                 return
             end
+
+            -- Пытаемся декодировать JSON с защитой
             local ok, data = pcall(love.data.decode, "string", "json", body)
             if ok and data then
-                -- Обновляем или добавляем игроков с интерполяцией
+                -- Обновляем игроков
+                local newPlayers = {}
                 for uid, info in pairs(data) do
                     if uid ~= myUid and info.x and info.y then
-                        if players[uid] then
-                            -- Обновляем цель для интерполяции
-                            players[uid].targetX = info.x
-                            players[uid].targetY = info.y
-                            players[uid].lerpTimer = 0
-                            players[uid].nickname = info.nickname or "???"
-                        else
-                            -- Новый игрок — сразу ставим в целевую позицию
-                            players[uid] = {
-                                x = info.x,
-                                y = info.y,
-                                targetX = info.x,
-                                targetY = info.y,
-                                lerpTimer = 1,  -- сразу в конце
-                                nickname = info.nickname or "???"
-                            }
-                        end
+                        newPlayers[uid] = { x = info.x, y = info.y, nickname = info.nickname or "???" }
                     end
                 end
-                -- Удаляем игроков, которых больше нет в Firebase
-                for uid in pairs(players) do
-                    if not data[uid] then
-                        players[uid] = nil
-                    end
-                end
+                players = newPlayers
                 local count = 0
                 for _ in pairs(players) do count = count + 1 end
                 setDebug("Players loaded: " .. count)
             else
+                -- Если JSON битый, показываем превью на экране и в консоли
                 local preview = (body and #body > 200) and body:sub(1, 200) .. "..." or body or "(empty)"
                 setDebug("Invalid JSON: " .. preview)
-                print("[ERROR] Invalid JSON from Firebase:", body)
+                print("[ERROR] Invalid JSON from Firebase, full response below:")
+                print(body)
             end
         else
             setDebug("GET failed: " .. (body or "unknown"))
@@ -207,23 +191,26 @@ function online.leave()
     myNickname = nil
 end
 
+-- Функция для принудительного добавления тестового игрока (для отладки)
+function online.debugAddTestPlayer(nickname)
+    if not nickname then nickname = "TestBot" end
+    local testUid = generateUuid()
+    local path = PATH .. testUid
+    local data = '{"x":200,"y":300,"nickname":"' .. nickname .. '"}'
+    firebaseRequest("PUT", path, data, function(success)
+        if success then
+            setDebug("Test player added: " .. nickname)
+        else
+            setDebug("Failed to add test player")
+        end
+    end)
+end
+
 function online.update(dt)
     if not isConnected then
         return
     end
 
-    -- Интерполяция позиций других игроков
-    local lerpSpeed = 6.0   -- скорость интерполяции (чем выше, тем быстрее догоняет цель)
-    for uid, p in pairs(players) do
-        p.lerpTimer = math.min(1, p.lerpTimer + dt * lerpSpeed)
-        local t = p.lerpTimer
-        -- Плавное движение (easing)
-        local smooth = t * t * (3 - 2 * t)  -- smoothstep
-        p.x = p.x + (p.targetX - p.x) * smooth
-        p.y = p.y + (p.targetY - p.y) * smooth
-    end
-
-    -- Отправка позиции
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -235,7 +222,6 @@ function online.update(dt)
         end
     end
 
-    -- Получение данных
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
