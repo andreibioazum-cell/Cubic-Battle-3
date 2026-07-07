@@ -51,6 +51,11 @@ local function generateUuid()
     end)
 end
 
+function online.init()
+    -- пустая функция для обратной совместимости
+    setDebug("Online module initialized")
+end
+
 function online.generateRoomCode()
     local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     local code = ""
