@@ -7,11 +7,93 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
 
+      # ============================================================
+      #  УСТАНОВКА JAVA И КОМПИЛЯЦИЯ JAVA-МОСТА
+      # ============================================================
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Compile Java Firebase Bridge
+        run: |
+          mkdir java_bridge
+          cd java_bridge
+
+          # Создаём Java-файл
+          @"
+          import java.io.*;
+          import java.util.*;
+          import com.google.firebase.*;
+          import com.google.firebase.database.*;
+
+          public class FirebaseBridge {
+              private static DatabaseReference ref;
+
+              public static void main(String[] args) throws Exception {
+                  FirebaseApp.initializeApp();
+                  ref = FirebaseDatabase.getInstance().getReference();
+                  System.out.println("[FirebaseBridge] Ready");
+                  BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+                  String line;
+                  while ((line = reader.readLine()) != null) {
+                      if (line.startsWith("PUT")) {
+                          String[] parts = line.split(" ", 3);
+                          if (parts.length == 3) {
+                              ref.child(parts[1]).setValueAsync(parts[2]);
+                              System.out.println("OK");
+                          }
+                      } else if (line.startsWith("GET")) {
+                          String[] parts = line.split(" ", 2);
+                          if (parts.length == 2) {
+                              ref.child(parts[1]).addListenerForSingleValueEvent(new ValueEventListener() {
+                                  public void onDataChange(DataSnapshot snapshot) {
+                                      System.out.println("DATA: " + snapshot.getValue());
+                                  }
+                                  public void onCancelled(DatabaseError error) {
+                                      System.out.println("ERROR: " + error.getMessage());
+                                  }
+                              });
+                          }
+                      } else if (line.startsWith("DELETE")) {
+                          String[] parts = line.split(" ", 2);
+                          if (parts.length == 2) {
+                              ref.child(parts[1]).removeValueAsync();
+                              System.out.println("OK");
+                          }
+                      } else if (line.equals("EXIT")) {
+                          break;
+                      }
+                  }
+                  System.exit(0);
+              }
+          }
+          "@ | Out-File -Encoding utf8 FirebaseBridge.java
+
+          # Скачиваем Firebase SDK через Maven
+          mkdir libs
+          cd libs
+          curl -L -o firebase-admin.jar https://repo1.maven.org/maven2/com/google/firebase/firebase-admin/9.2.0/firebase-admin-9.2.0.jar
+          curl -L -o google-auth.jar https://repo1.maven.org/maven2/com/google/auth/google-auth-library-oauth2-http/1.22.0/google-auth-library-oauth2-http-1.22.0.jar
+          curl -L -o google-http-gson.jar https://repo1.maven.org/maven2/com/google/http-client/google-http-client-gson/1.43.3/google-http-client-gson-1.43.3.jar
+          curl -L -o google-http.jar https://repo1.maven.org/maven2/com/google/http-client/google-http-client/1.43.3/google-http-client-1.43.3.jar
+          cd ..
+
+          # Компилируем Java
+          javac -cp "libs/*;." FirebaseBridge.java
+
+          # Создаём JAR
+          jar cf firebase-bridge.jar FirebaseBridge.class
+
+      # ============================================================
+      #  СБОРКА EXE
+      # ============================================================
       - name: Package game.love
         run: |
           powershell Compress-Archive -Path * -DestinationPath game.zip -Force
@@ -28,6 +110,21 @@ jobs:
           Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
           cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
           Remove-Item dist\CubicBattle\love.exe
+
+      - name: Add Java Bridge and Firebase SDK
+        run: |
+          # Копируем JAR и SDK в папку с игрой
+          Copy-Item java_bridge\firebase-bridge.jar dist\CubicBattle\
+          Copy-Item java_bridge\libs\*.jar dist\CubicBattle\
+
+      - name: Create run.bat (for Windows)
+        run: |
+          @"
+          @echo off
+          start /b java -jar firebase-bridge.jar
+          timeout /t 1 /nobreak >nul
+          CubicBattle.exe
+          "@ | Out-File -Encoding ascii dist\CubicBattle\run.bat
 
       - name: Upload Portable ZIP
         uses: actions/upload-artifact@v4
