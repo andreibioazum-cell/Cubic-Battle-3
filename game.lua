@@ -1,4 +1,4 @@
--- game.lua – полная игровая логика: офлайн с врагом, онлайн с игроками
+-- game.lua – полный игровой модуль с поддержкой онлайна и скинов
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -21,6 +21,7 @@ local dead = false
 local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
+local isOnlineMode = false
 
 local laserCooldown = 0
 local LASER_COOLDOWN = 15
@@ -38,8 +39,6 @@ local DASH_DURATION = 0.2
 local DASH_SPEED_MULT = 4
 local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
-
-local isOnlineMode = false
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
@@ -137,12 +136,10 @@ function game.load()
     isOnlineMode = (_G.roomCode ~= nil and _G.roomCode ~= "")
 
     if not isOnlineMode then
-        -- singleplayer: enemy and difficulty
         currentDifficulty = _G.difficulty or "normal"
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
     else
-        -- multiplayer: no enemy, no difficulty
         enemy.reset()
     end
 
@@ -339,8 +336,18 @@ function game.draw()
     else
         local others = online.getPlayers()
         for uid, pos in pairs(others) do
+            local imgToDraw
+            if pos.skin == "AZUM CUBE" then
+                imgToDraw = azumImg
+            elseif pos.skin == "NASTYA CUBE" then
+                imgToDraw = nastyaImg
+            elseif pos.skin == "BUK CUBE" then
+                imgToDraw = bukImg
+            else
+                imgToDraw = playerImg
+            end
             love.graphics.setColor(1, 0.2, 0.2, 1)
-            love.graphics.circle("fill", pos.x, pos.y, PLAYER_SIZE)
+            love.graphics.draw(imgToDraw, pos.x - PLAYER_SIZE/2, pos.y - PLAYER_SIZE/2, 0, 1, 1)
             love.graphics.setColor(1, 1, 1, 0.7)
             love.graphics.print(pos.nickname or "???", pos.x - 20, pos.y - 30)
         end
@@ -454,7 +461,6 @@ function game.draw()
         end
     end
 
-    -- Отладка онлайн
     if isOnlineMode then
         local debugText = online.getDebugText()
         if debugText then
