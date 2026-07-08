@@ -1,4 +1,4 @@
--- main.lua – главный файл игры
+-- main.lua – полный файл с поддержкой онлайна
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -18,7 +18,7 @@ local lastState = nil
 local shotCooldown = 0
 local SHOT_DELAY = 0.15
 
--- ========== ЗВУКИ И МУЗЫКА ==========
+-- ЗВУКИ И МУЗЫКА
 local bgMusic = nil
 musicOn = true
 sfxOn = true
@@ -100,7 +100,7 @@ _G.playHitSound = playHitSound
 game.playShootSound = playShootSound
 game.playHitSound = playHitSound
 
--- ========== СОХРАНЕНИЕ ==========
+-- СОХРАНЕНИЕ
 SAVE_DATA = { 
     coins = 0, 
     ownedSkins = {}, 
@@ -166,7 +166,7 @@ function loadSave()
     sfxOn = sfxVal == 1
 end
 
--- ========== LOVE CALLBACKS ==========
+-- LOVE CALLBACKS
 function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
     loadSave()
@@ -191,13 +191,7 @@ function love.update(dt)
         elseif GameState.current == "online" then
             if game.load then game.load() end
             local nickname = SAVE_DATA.nickname or "Player"
-            online.init(nickname, function(success, msg)
-                if success then
-                    print("Online started as " .. nickname)
-                else
-                    print("Online error:", msg)
-                end
-            end)
+            -- online.init уже вызван в love.load
         elseif GameState.current == "room" then
             if room.load then room.load() end
         elseif GameState.current == "shop" then
@@ -326,7 +320,7 @@ function love.textinput(t)
     end
 end
 
--- ===== DISPATCHER =====
+-- DISPATCHER
 local function dispatch(fn, ...)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then
