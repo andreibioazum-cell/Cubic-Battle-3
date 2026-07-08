@@ -12,21 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ============================================================
-      #  УСТАНОВКА JAVA И КОМПИЛЯЦИЯ JAVA-МОСТА
-      # ============================================================
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
+      # ============================================================
+      #  КОМПИЛЯЦИЯ JAVA-МОСТА (ПОЛНЫЙ НАБОР ЗАВИСИМОСТЕЙ)
+      # ============================================================
       - name: Compile Java Firebase Bridge
         run: |
           mkdir java_bridge
           cd java_bridge
 
-          # Создаём Java-файл
           @"
           import java.io.*;
           import java.util.*;
@@ -40,32 +39,46 @@ jobs:
                   FirebaseApp.initializeApp();
                   ref = FirebaseDatabase.getInstance().getReference();
                   System.out.println("[FirebaseBridge] Ready");
+
                   BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
                   String line;
                   while ((line = reader.readLine()) != null) {
+                      line = line.trim();
                       if (line.startsWith("PUT")) {
                           String[] parts = line.split(" ", 3);
                           if (parts.length == 3) {
-                              ref.child(parts[1]).setValueAsync(parts[2]);
-                              System.out.println("OK");
+                              try {
+                                  ref.child(parts[1]).setValue(parts[2]);
+                                  System.out.println("OK");
+                              } catch (Exception e) {
+                                  System.out.println("ERROR: " + e.getMessage());
+                              }
                           }
                       } else if (line.startsWith("GET")) {
                           String[] parts = line.split(" ", 2);
                           if (parts.length == 2) {
-                              ref.child(parts[1]).addListenerForSingleValueEvent(new ValueEventListener() {
-                                  public void onDataChange(DataSnapshot snapshot) {
-                                      System.out.println("DATA: " + snapshot.getValue());
-                                  }
-                                  public void onCancelled(DatabaseError error) {
-                                      System.out.println("ERROR: " + error.getMessage());
-                                  }
-                              });
+                              try {
+                                  ref.child(parts[1]).addListenerForSingleValueEvent(new ValueEventListener() {
+                                      public void onDataChange(DataSnapshot snapshot) {
+                                          System.out.println("DATA: " + snapshot.getValue());
+                                      }
+                                      public void onCancelled(DatabaseError error) {
+                                          System.out.println("ERROR: " + error.getMessage());
+                                      }
+                                  });
+                              } catch (Exception e) {
+                                  System.out.println("ERROR: " + e.getMessage());
+                              }
                           }
                       } else if (line.startsWith("DELETE")) {
                           String[] parts = line.split(" ", 2);
                           if (parts.length == 2) {
-                              ref.child(parts[1]).removeValueAsync();
-                              System.out.println("OK");
+                              try {
+                                  ref.child(parts[1]).removeValue();
+                                  System.out.println("OK");
+                              } catch (Exception e) {
+                                  System.out.println("ERROR: " + e.getMessage());
+                              }
                           }
                       } else if (line.equals("EXIT")) {
                           break;
@@ -76,20 +89,30 @@ jobs:
           }
           "@ | Out-File -Encoding utf8 FirebaseBridge.java
 
-          # Скачиваем Firebase SDK через Maven
           mkdir libs
           cd libs
           curl -L -o firebase-admin.jar https://repo1.maven.org/maven2/com/google/firebase/firebase-admin/9.2.0/firebase-admin-9.2.0.jar
           curl -L -o google-auth.jar https://repo1.maven.org/maven2/com/google/auth/google-auth-library-oauth2-http/1.22.0/google-auth-library-oauth2-http-1.22.0.jar
           curl -L -o google-http-gson.jar https://repo1.maven.org/maven2/com/google/http-client/google-http-client-gson/1.43.3/google-http-client-gson-1.43.3.jar
           curl -L -o google-http.jar https://repo1.maven.org/maven2/com/google/http-client/google-http-client/1.43.3/google-http-client-1.43.3.jar
+          curl -L -o google-api-client.jar https://repo1.maven.org/maven2/com/google/api-client/google-api-client/2.2.0/google-api-client-2.2.0.jar
+          curl -L -o api-common.jar https://repo1.maven.org/maven2/com/google/api/api-common/2.2.0/api-common-2.2.0.jar
+          curl -L -o google-api-core.jar https://repo1.maven.org/maven2/com/google/api/api-common/2.2.0/api-common-2.2.0.jar
+          curl -L -o guava.jar https://repo1.maven.org/maven2/com/google/guava/guava/31.1-jre/guava-31.1-jre.jar
+          curl -L -o gson.jar https://repo1.maven.org/maven2/com/google/code/gson/gson/2.9.0/gson-2.9.0.jar
           cd ..
 
-          # Компилируем Java
+          # Компилируем
           javac -cp "libs/*;." FirebaseBridge.java
 
           # Создаём JAR
           jar cf firebase-bridge.jar FirebaseBridge.class
+
+          # Копируем JAR и все зависимости в корень (для запуска)
+          cd ..
+          mkdir -p dist\CubicBattle
+          copy java_bridge\firebase-bridge.jar dist\CubicBattle\
+          copy java_bridge\libs\*.jar dist\CubicBattle\
 
       # ============================================================
       #  СБОРКА EXE
@@ -111,13 +134,7 @@ jobs:
           cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
           Remove-Item dist\CubicBattle\love.exe
 
-      - name: Add Java Bridge and Firebase SDK
-        run: |
-          # Копируем JAR и SDK в папку с игрой
-          Copy-Item java_bridge\firebase-bridge.jar dist\CubicBattle\
-          Copy-Item java_bridge\libs\*.jar dist\CubicBattle\
-
-      - name: Create run.bat (for Windows)
+      - name: Create run.bat
         run: |
           @"
           @echo off
