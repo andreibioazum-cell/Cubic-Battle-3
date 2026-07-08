@@ -65,16 +65,11 @@ jobs:
           fi
 
       # ============================================================
-      #  СОЗДАНИЕ JAVA-ФАЙЛА И ВСТРАИВАНИЕ ЕГО В APK
+      #  СОЗДАНИЕ JAVA-КЛАССА ДЛЯ FIREBASE
       # ============================================================
-      - name: Create and embed Java Firebase Bridge
+      - name: Create Java Firebase class
         run: |
-          echo "Creating Java Firebase Bridge..."
-          
-          # Создаём папку для Java
           mkdir -p love-android/app/src/main/java/com/CB3
-          
-          # Создаём Java-файл
           cat > love-android/app/src/main/java/com/CB3/FirebaseBridge.java << 'EOF'
           package com.CB3;
 
@@ -123,26 +118,88 @@ jobs:
               }
           }
           EOF
-          
-          echo "✅ Java file created at love-android/app/src/main/java/com/CB3/FirebaseBridge.java"
-          ls -la love-android/app/src/main/java/com/CB3/
+
+      # ============================================================
+      #  СОЗДАНИЕ JNI-МОСТА (C++), ЧТОБЫ ВЫЗЫВАТЬ JAVA ИЗ LUA
+      # ============================================================
+      - name: Create JNI bridge
+        run: |
+          mkdir -p love-android/app/src/main/cpp
+          cat > love-android/app/src/main/cpp/firebase_jni.cpp << 'EOF'
+          #include <jni.h>
+          #include <string>
+          #include <android/log.h>
+
+          #define LOG_TAG "FirebaseJNI"
+          #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+
+          extern "C" {
+
+          JNIEXPORT jstring JNICALL
+          Java_com_CB3_FirebaseBridge_sendRequest(JNIEnv *env, jobject thiz,
+                                                   jstring method, jstring path, jstring body) {
+              const char *methodStr = env->GetStringUTFChars(method, nullptr);
+              const char *pathStr = env->GetStringUTFChars(path, nullptr);
+              const char *bodyStr = env->GetStringUTFChars(body, nullptr);
+
+              LOGI("JNI: sendRequest called with method=%s, path=%s", methodStr, pathStr);
+
+              std::string result = "{\"error\":\"JNI bridge not implemented yet\"}";
+
+              env->ReleaseStringUTFChars(method, methodStr);
+              env->ReleaseStringUTFChars(path, pathStr);
+              env->ReleaseStringUTFChars(body, bodyStr);
+
+              return env->NewStringUTF(result.c_str());
+          }
+
+          }
+          EOF
+
+      # ============================================================
+      #  НАСТРОЙКА GRADLE ДЛЯ КОМПИЛЯЦИИ JNI
+      # ============================================================
+      - name: Configure Gradle for JNI
+        run: |
+          cat >> love-android/app/build.gradle << 'EOF'
+
+          android {
+              defaultConfig {
+                  externalNativeBuild {
+                      cmake {
+                          cppFlags "-std=c++11"
+                      }
+                  }
+              }
+              externalNativeBuild {
+                  cmake {
+                      path "CMakeLists.txt"
+                  }
+              }
+          }
+          EOF
+
+          cat > love-android/app/CMakeLists.txt << 'EOF'
+          cmake_minimum_required(VERSION 3.4.1)
+          project(firebase_bridge)
+
+          add_library(firebase_bridge SHARED
+              src/main/cpp/firebase_jni.cpp
+          )
+
+          find_library(log-lib log)
+          target_link_libraries(firebase_bridge ${log-lib})
+          EOF
 
       - name: Set package name and app name
         run: |
-          echo "Setting package name and app name..."
-          
-          # Меняем пакет
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
-          
-          # Меняем название приложения
           mkdir -p love-android/app/src/main/res/values
           cat > love-android/app/src/main/res/values/strings.xml << 'EOF'
           <resources>
               <string name="app_name">Cubic Battle 3</string>
           </resources>
           EOF
-          
-          echo "✅ Package and app name set"
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -162,16 +219,12 @@ jobs:
 
       - name: Package game.love
         run: |
-          echo "Packaging game.love..."
           zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
-          echo "✅ game.love created"
 
       - name: Embed game
         run: |
-          echo "Embedding game in APK..."
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
-          echo "✅ game.love embedded"
 
       - name: Force arm64 only
         run: |
@@ -195,14 +248,13 @@ jobs:
         run: |
           APK_FILE=$(find love-android -name "*.apk" | head -1)
           if [ -z "$APK_FILE" ]; then
-            echo "❌ No APK found!"
+            echo "No APK found!"
             exit 1
           fi
           NEW_NAME="Cubic Battle 3.apk"
           cp "$APK_FILE" "$NEW_NAME"
           echo "APK_NAME=$NEW_NAME" >> $GITHUB_ENV
           echo "✅ APK created: $NEW_NAME"
-          ls -la *.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
