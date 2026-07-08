@@ -1,3 +1,4 @@
+-- shop.lua – магазин с обновлением скина в онлайне
 local shop = {}
 
 local fontTitle, fontBtn
@@ -5,11 +6,12 @@ local btnBack = { w = 140, h = 55, x = 0, y = 30 }
 local btnMain = { w = 220, h = 75, x = 0, y = 0 }
 local btnLeft = { w = 60, h = 60, x = 0, y = 0 }
 local btnRight = { w = 60, h = 60, x = 0, y = 0 }
+local online = require("online")
 
 local SKINS = {
     { name = "AZUM CUBE", price = 500 },
     { name = "NASTYA CUBE", price = 350 },
-    { name = "BUK CUBE", price = 400 },   -- <-- ДОБАВЛЕН
+    { name = "BUK CUBE", price = 400 },
 }
 local currentSkinIndex = 1
 local ownedSkins = {}
@@ -204,10 +206,17 @@ function shop.touchpressed(id, x, y, coins, saveData)
             equippedSkin = skin.name
             changed = true
             print("✅ Надет " .. skin.name)
+            -- ОБНОВЛЯЕМ СКИН В ОНЛАЙНЕ
+            if online.isConnected and online.isConnected() then
+                online.updateSkin(skin.name)
+            end
         else
             equippedSkin = "NONE"
             changed = true
             print("✅ Снят " .. skin.name)
+            if online.isConnected and online.isConnected() then
+                online.updateSkin("NONE")
+            end
         end
     end
 
