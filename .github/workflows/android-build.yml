@@ -48,28 +48,20 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
-      # ============================================================
-      #  КОМПИЛЯЦИЯ JAVA-МОСТА
-      # ============================================================
       - name: Compile Java Firebase Bridge
         run: |
           mkdir -p java_bridge
           cd java_bridge
-
           cat > FirebaseBridge.java << 'EOF'
           import java.io.*;
-          import java.util.*;
-          import com.google.firebase.*;
-          import com.google.firebase.database.*;
+          import java.net.*;
+          import java.nio.charset.StandardCharsets;
 
           public class FirebaseBridge {
-              private static DatabaseReference ref;
+              private static final String DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/";
 
               public static void main(String[] args) throws Exception {
-                  FirebaseApp.initializeApp();
-                  ref = FirebaseDatabase.getInstance().getReference();
-                  System.out.println("[FirebaseBridge] Ready");
-
+                  System.out.println("[FirebaseBridge] Ready (REST API)");
                   BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
                   String line;
                   while ((line = reader.readLine()) != null) {
@@ -77,32 +69,23 @@ jobs:
                       if (line.startsWith("PUT")) {
                           String[] parts = line.split(" ", 3);
                           if (parts.length == 3) {
-                              try {
-                                  ref.child(parts[1]).setValue(parts[2]);
-                                  System.out.println("OK");
-                              } catch (Exception e) {
-                                  System.out.println("ERROR: " + e.getMessage());
-                              }
+                              String url = DB_URL + parts[1] + ".json";
+                              String response = sendRequest("PUT", url, parts[2]);
+                              System.out.println(response.contains("error") ? "ERROR: " + response : "OK");
                           }
                       } else if (line.startsWith("GET")) {
                           String[] parts = line.split(" ", 2);
                           if (parts.length == 2) {
-                              try {
-                                  DataSnapshot snapshot = ref.child(parts[1]).get();
-                                  System.out.println("DATA: " + snapshot.getValue());
-                              } catch (Exception e) {
-                                  System.out.println("ERROR: " + e.getMessage());
-                              }
+                              String url = DB_URL + parts[1] + ".json";
+                              String response = sendRequest("GET", url, null);
+                              System.out.println(response);
                           }
                       } else if (line.startsWith("DELETE")) {
                           String[] parts = line.split(" ", 2);
                           if (parts.length == 2) {
-                              try {
-                                  ref.child(parts[1]).removeValue();
-                                  System.out.println("OK");
-                              } catch (Exception e) {
-                                  System.out.println("ERROR: " + e.getMessage());
-                              }
+                              String url = DB_URL + parts[1] + ".json";
+                              String response = sendRequest("DELETE", url, null);
+                              System.out.println(response.contains("error") ? "ERROR: " + response : "OK");
                           }
                       } else if (line.equals("EXIT")) {
                           break;
@@ -110,27 +93,38 @@ jobs:
                   }
                   System.exit(0);
               }
+
+              private static String sendRequest(String method, String urlString, String body) throws Exception {
+                  HttpURLConnection conn = (HttpURLConnection) new URL(urlString).openConnection();
+                  conn.setRequestMethod(method);
+                  conn.setRequestProperty("Content-Type", "application/json");
+                  conn.setConnectTimeout(5000);
+                  conn.setReadTimeout(5000);
+                  if (body != null) {
+                      conn.setDoOutput(true);
+                      try (OutputStream os = conn.getOutputStream()) {
+                          os.write(body.getBytes(StandardCharsets.UTF_8));
+                      }
+                  }
+                  int code = conn.getResponseCode();
+                  InputStream is = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
+                  BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+                  StringBuilder response = new StringBuilder();
+                  String line;
+                  while ((line = reader.readLine()) != null) {
+                      response.append(line);
+                  }
+                  conn.disconnect();
+                  if (code >= 200 && code < 300) {
+                      return response.toString();
+                  } else {
+                      return "{\"error\": \"HTTP " + code + "\", \"body\": " + response.toString() + "}";
+                  }
+              }
           }
           EOF
-
-          # Скачиваем зависимости
-          mkdir -p libs
-          cd libs
-          wget -q https://repo1.maven.org/maven2/com/google/firebase/firebase-admin/9.2.0/firebase-admin-9.2.0.jar
-          wget -q https://repo1.maven.org/maven2/com/google/auth/google-auth-library-oauth2-http/1.22.0/google-auth-library-oauth2-http-1.22.0.jar
-          wget -q https://repo1.maven.org/maven2/com/google/http-client/google-http-client-gson/1.43.3/google-http-client-gson-1.43.3.jar
-          wget -q https://repo1.maven.org/maven2/com/google/http-client/google-http-client/1.43.3/google-http-client-1.43.3.jar
-          wget -q https://repo1.maven.org/maven2/com/google/api-client/google-api-client/2.2.0/google-api-client-2.2.0.jar
-          wget -q https://repo1.maven.org/maven2/com/google/api/api-common/2.2.0/api-common-2.2.0.jar
-          cd ..
-
-          # Компилируем
-          javac -cp "libs/*:." FirebaseBridge.java
-
-          # Создаём JAR
+          javac FirebaseBridge.java
           jar cf firebase-bridge.jar FirebaseBridge.class
-
-          # Копируем JAR в APK
           mkdir -p ../love-android/app/src/main/assets
           cp firebase-bridge.jar ../love-android/app/src/main/assets/
 
