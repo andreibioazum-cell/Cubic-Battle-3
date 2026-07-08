@@ -65,7 +65,7 @@ jobs:
           fi
 
       # ============================================================
-      #  СОЗДАНИЕ JAVA-КЛАССА ДЛЯ FIREBASE
+      #  СОЗДАНИЕ JAVA-КЛАССА
       # ============================================================
       - name: Create Java Firebase class
         run: |
@@ -120,7 +120,7 @@ jobs:
           EOF
 
       # ============================================================
-      #  СОЗДАНИЕ JNI-МОСТА (C++), ЧТОБЫ ВЫЗЫВАТЬ JAVA ИЗ LUA
+      #  СОЗДАНИЕ JNI-МОСТА (C++)
       # ============================================================
       - name: Create JNI bridge
         run: |
@@ -135,29 +135,43 @@ jobs:
 
           extern "C" {
 
+          // Глобальная ссылка на класс и метод (кешируем)
+          static jclass firebaseClass = nullptr;
+          static jmethodID sendRequestMethod = nullptr;
+
           JNIEXPORT jstring JNICALL
           Java_com_CB3_FirebaseBridge_sendRequest(JNIEnv *env, jobject thiz,
                                                    jstring method, jstring path, jstring body) {
-              const char *methodStr = env->GetStringUTFChars(method, nullptr);
-              const char *pathStr = env->GetStringUTFChars(path, nullptr);
-              const char *bodyStr = env->GetStringUTFChars(body, nullptr);
+              // Кешируем класс и метод при первом вызове
+              if (firebaseClass == nullptr) {
+                  jclass cls = env->FindClass("com/CB3/FirebaseBridge");
+                  if (cls == nullptr) {
+                      LOGI("Failed to find FirebaseBridge class");
+                      return env->NewStringUTF("{\"error\":\"Class not found\"}");
+                  }
+                  firebaseClass = (jclass)env->NewGlobalRef(cls);
+                  sendRequestMethod = env->GetStaticMethodID(firebaseClass, "sendRequest",
+                      "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+                  if (sendRequestMethod == nullptr) {
+                      LOGI("Failed to find sendRequest method");
+                      return env->NewStringUTF("{\"error\":\"Method not found\"}");
+                  }
+              }
 
-              LOGI("JNI: sendRequest called with method=%s, path=%s", methodStr, pathStr);
+              // Вызываем Java-метод
+              jstring result = (jstring)env->CallStaticObjectMethod(firebaseClass, sendRequestMethod, method, path, body);
+              if (result == nullptr) {
+                  return env->NewStringUTF("{\"error\":\"Java method returned null\"}");
+              }
 
-              std::string result = "{\"error\":\"JNI bridge not implemented yet\"}";
-
-              env->ReleaseStringUTFChars(method, methodStr);
-              env->ReleaseStringUTFChars(path, pathStr);
-              env->ReleaseStringUTFChars(body, bodyStr);
-
-              return env->NewStringUTF(result.c_str());
+              return result;
           }
 
           }
           EOF
 
       # ============================================================
-      #  НАСТРОЙКА GRADLE ДЛЯ КОМПИЛЯЦИИ JNI
+      #  НАСТРОЙКА GRADLE ДЛЯ JNI
       # ============================================================
       - name: Configure Gradle for JNI
         run: |
@@ -167,7 +181,7 @@ jobs:
               defaultConfig {
                   externalNativeBuild {
                       cmake {
-                          cppFlags "-std=c++11"
+                          cppFlags "-std=c++17"
                       }
                   }
               }
@@ -191,6 +205,9 @@ jobs:
           target_link_libraries(firebase_bridge ${log-lib})
           EOF
 
+      # ============================================================
+      #  НАСТРОЙКА ПАКЕТА И НАЗВАНИЯ
+      # ============================================================
       - name: Set package name and app name
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
