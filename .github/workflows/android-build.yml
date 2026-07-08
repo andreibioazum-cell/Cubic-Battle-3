@@ -1,15 +1,15 @@
-name: Build_Cubic_Battle_Android_Debug
+name: Build_Cubic_Battle_Android_Release
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  build-android-debug:
+  build-android-release:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
-      apk-name: ${{ steps.set-output.outputs.apk-name }}
+      aab-name: ${{ steps.set-output.outputs.aab-name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +19,23 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      - name: Setup Android SDK (no emulator)
+        run: |
+          mkdir -p /usr/local/lib/android/sdk
+          cd /usr/local/lib/android/sdk
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          export PATH=$PATH:/usr/local/lib/android/sdk/cmdline-tools/latest/bin
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-33" "build-tools;33.0.0"
+
+      - name: Export Android Home
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
       - uses: actions/cache@v4
         with:
@@ -169,20 +185,23 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      - name: Build Debug APK
+      # ============================================================
+      #  СБОРКА AAB (ВМЕСТО APK)
+      # ============================================================
+      - name: Build Release AAB
         working-directory: love-android
-        run: ./gradlew assembleEmbedNoRecordDebug --no-daemon --parallel --console=plain
+        run: ./gradlew bundleEmbedNoRecordRelease --no-daemon --parallel --console=plain
 
-      - name: Collect APK
+      - name: Collect AAB
         id: set-output
         run: |
-          APK=$(find love-android -name "*.apk" | head -1)
-          APK_NAME="CubicBattle3_Debug_$(date +'%Y%m%d_%H%M').apk"
-          cp "$APK" "$APK_NAME"
-          echo "apk-name=$APK_NAME" >> $GITHUB_OUTPUT
+          AAB=$(find love-android -name "*.aab" | head -1)
+          AAB_NAME="CubicBattle3_$(date +'%Y%m%d_%H%M').aab"
+          cp "$AAB" "$AAB_NAME"
+          echo "aab-name=$AAB_NAME" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle3_Debug_APK
-          path: CubicBattle3_Debug_*.apk
+          name: CubicBattle3_AAB
+          path: CubicBattle3_*.aab
           compression-level: 0
