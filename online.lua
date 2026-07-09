@@ -1,4 +1,4 @@
--- online.lua – ПК: LuaSocket, Android: JNI
+-- online.lua – БЕЗ JAVA, только Lua (работает на ПК и Android)
 local online = {}
 
 local PATH = "players/"
@@ -11,43 +11,22 @@ local mySkin = "NONE"
 local players = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.15
-local FETCH_INTERVAL = 0.2
+local SEND_INTERVAL = 0.2
+local FETCH_INTERVAL = 0.3
 local isConnected = false
 local debugText = "Waiting..."
-
-local isAndroid = (love.system.getOS() == "Android")
-local ffi = nil
-
--- ============================================================
---  JNI ДЛЯ ANDROID
--- ============================================================
-if isAndroid then
-    local ok, result = pcall(require, "ffi")
-    if ok then
-        ffi = result
-        ffi.cdef([[
-            const char* Java_com_CB3_FirebaseBridge_sendRequest(const char* method, const char* path, const char* body);
-        ]])
-    end
-end
+local retryCount = 0
+local maxRetries = 3
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: LuaSocket, Android: JNI)
+--  ОТПРАВКА ЗАПРОСОВ ЧЕРЕЗ socket.http
 -- ============================================================
-local function sendRequest(method, path, body)
-    -- Android: JNI
-    if isAndroid and ffi then
-        local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
-        return ffi.string(result)
-    end
-    
-    -- ПК: LuaSocket через SSL
+local function sendRequest(method, path, body, callback)
     local http = require("socket.http")
     local ltn12 = require("ltn12")
-    local url = DB_URL .. path .. ".json"
     
-    -- Сначала пробуем HTTPS через socket.http (с SSL)
+    -- Пробуем HTTPS
+    local url = DB_URL .. path .. ".json"
     local response_table = {}
     local res, code, headers = http.request{
         url = url,
@@ -57,14 +36,16 @@ local function sendRequest(method, path, body)
         },
         source = body and ltn12.source.string(body) or nil,
         sink = ltn12.sink.table(response_table),
-        timeout = 10,
+        timeout = 5,
     }
     
     local codeNum = tonumber(code)
     if codeNum and codeNum >= 200 and codeNum < 300 then
-        return table.concat(response_table)
+        local result = table.concat(response_table)
+        if callback then callback(true, result) end
+        return result
     else
-        -- Если HTTPS не работает, пробуем HTTP (без SSL)
+        -- Пробуем HTTP (без SSL)
         local httpUrl = "http://cubic-battle-3-default-rtdb.firebaseio.com/" .. path .. ".json"
         local response_table2 = {}
         local res2, code2, headers2 = http.request{
@@ -75,15 +56,39 @@ local function sendRequest(method, path, body)
             },
             source = body and ltn12.source.string(body) or nil,
             sink = ltn12.sink.table(response_table2),
-            timeout = 10,
+            timeout = 5,
         }
         local codeNum2 = tonumber(code2)
         if codeNum2 and codeNum2 >= 200 and codeNum2 < 300 then
-            return table.concat(response_table2)
+            local result = table.concat(response_table2)
+            if callback then callback(true, result) end
+            return result
         else
-            return "{\"error\":\"HTTP " .. tostring(code) .. " / " .. tostring(code2) .. "\"}"
+            local err = "{\"error\":\"HTTP " .. tostring(code) .. " / " .. tostring(code2) .. "\"}"
+            if callback then callback(false, err) end
+            return err
         end
     end
+end
+
+-- ============================================================
+--  ОТПРАВКА С ПОВТОРОМ
+-- ============================================================
+local function sendRequestWithRetry(method, path, body, callback, attempt)
+    attempt = attempt or 0
+    local result = sendRequest(method, path, body, function(success, data)
+        if success then
+            if callback then callback(true, data) end
+        else
+            if attempt < maxRetries then
+                setDebug("Retry " .. (attempt + 1) .. "/" .. maxRetries .. " for " .. path)
+                love.timer.sleep(0.5)
+                sendRequestWithRetry(method, path, body, callback, attempt + 1)
+            else
+                if callback then callback(false, data) end
+            end
+        end
+    end)
 end
 
 local function setDebug(text)
@@ -113,7 +118,7 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (LuaSocket)"))
+    setDebug("Online ready (no Java)")
 end
 
 function online.createRoom(roomCode, nickname, callback)
@@ -133,15 +138,16 @@ function online.createRoom(roomCode, nickname, callback)
 
     local path = PATH .. myUid
     local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local response = sendRequest("PUT", path, data)
-    if response and response:match("error") then
-        setDebug("Failed to create room: " .. response)
-        if callback then callback(false, response) end
-    else
-        isConnected = true
-        setDebug("Room created: " .. roomCode)
-        if callback then callback(true) end
-    end
+    sendRequestWithRetry("PUT", path, data, function(success, response)
+        if success then
+            isConnected = true
+            setDebug("Room created: " .. roomCode)
+            if callback then callback(true) end
+        else
+            setDebug("Failed to create room: " .. response)
+            if callback then callback(false, response) end
+        end
+    end)
 end
 
 function online.joinRoom(roomCode, nickname, callback)
@@ -163,15 +169,16 @@ function online.joinRoom(roomCode, nickname, callback)
 
     local path = PATH .. myUid
     local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local response = sendRequest("PUT", path, data)
-    if response and response:match("error") then
-        setDebug("Failed to join room: " .. response)
-        if callback then callback(false, response) end
-    else
-        isConnected = true
-        setDebug("Joined room: " .. roomCode)
-        if callback then callback(true) end
-    end
+    sendRequestWithRetry("PUT", path, data, function(success, response)
+        if success then
+            isConnected = true
+            setDebug("Joined room: " .. roomCode)
+            if callback then callback(true) end
+        else
+            setDebug("Failed to join room: " .. response)
+            if callback then callback(false, response) end
+        end
+    end)
 end
 
 function online.sendPosition(x, y)
@@ -181,12 +188,13 @@ function online.sendPosition(x, y)
     end
     local path = PATH .. myUid
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. ',"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
-    local response = sendRequest("PUT", path, data)
-    if response and response:match("error") then
-        setDebug("Failed to send: " .. response)
-    else
-        setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
-    end
+    sendRequestWithRetry("PUT", path, data, function(success, response)
+        if success then
+            setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
+        else
+            setDebug("Failed to send: " .. response)
+        end
+    end)
 end
 
 function online.fetchPlayers()
@@ -194,34 +202,35 @@ function online.fetchPlayers()
         setDebug("Not connected")
         return
     end
-    local response = sendRequest("GET", PATH, nil)
-    if response and response:match("error") then
-        setDebug("Failed to fetch: " .. response)
-        return
-    end
-    local ok, data = pcall(love.data.decode, "string", "json", response)
-    if ok and data then
-        local newPlayers = {}
-        for uid, info in pairs(data) do
-            if uid ~= myUid and info.x and info.y then
-                newPlayers[uid] = {
-                    x = info.x,
-                    y = info.y,
-                    nickname = info.nickname or "???",
-                    skin = info.skin or "NONE",
-                    targetX = info.x,
-                    targetY = info.y,
-                    lerpTimer = 0
-                }
+    sendRequestWithRetry("GET", PATH, nil, function(success, response)
+        if success then
+            local ok, data = pcall(love.data.decode, "string", "json", response)
+            if ok and data then
+                local newPlayers = {}
+                for uid, info in pairs(data) do
+                    if uid ~= myUid and info.x and info.y then
+                        newPlayers[uid] = {
+                            x = info.x,
+                            y = info.y,
+                            nickname = info.nickname or "???",
+                            skin = info.skin or "NONE",
+                            targetX = info.x,
+                            targetY = info.y,
+                            lerpTimer = 0
+                        }
+                    end
+                end
+                players = newPlayers
+                local count = 0
+                for _ in pairs(players) do count = count + 1 end
+                setDebug("Players: " .. count)
+            else
+                setDebug("Invalid JSON")
             end
+        else
+            setDebug("Failed to fetch: " .. response)
         end
-        players = newPlayers
-        local count = 0
-        for _ in pairs(players) do count = count + 1 end
-        setDebug("Players: " .. count)
-    else
-        setDebug("Invalid JSON")
-    end
+    end)
 end
 
 function online.getPlayers()
@@ -236,12 +245,13 @@ function online.updateSkin(skin)
     mySkin = skin
     local path = PATH .. myUid .. "/skin"
     local data = '"' .. skin .. '"'
-    local response = sendRequest("PUT", path, data)
-    if response and response:match("error") then
-        setDebug("Skin update failed: " .. response)
-    else
-        setDebug("Skin updated: " .. skin)
-    end
+    sendRequestWithRetry("PUT", path, data, function(success, response)
+        if success then
+            setDebug("Skin updated: " .. skin)
+        else
+            setDebug("Skin update failed: " .. response)
+        end
+    end)
 end
 
 function online.getMySkin()
@@ -251,12 +261,13 @@ end
 function online.leave()
     if not isConnected or not myUid then return end
     local path = PATH .. myUid
-    local response = sendRequest("DELETE", path, nil)
-    if response and response:match("error") then
-        setDebug("Leave failed: " .. response)
-    else
-        setDebug("Left room")
-    end
+    sendRequestWithRetry("DELETE", path, nil, function(success, response)
+        if success then
+            setDebug("Left room")
+        else
+            setDebug("Leave failed: " .. response)
+        end
+    end)
     isConnected = false
     players = {}
     myUid = nil
