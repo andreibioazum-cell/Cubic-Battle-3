@@ -64,9 +64,6 @@ jobs:
             git clone --recursive --depth 1 https://github.com/love2d/love-android.git
           fi
 
-      # ============================================================
-      #  СОЗДАНИЕ JAVA-КЛАССА
-      # ============================================================
       - name: Create Java Firebase class
         run: |
           mkdir -p love-android/app/src/main/java/com/CB3
@@ -110,7 +107,7 @@ jobs:
                       if (code >= 200 && code < 300) {
                           return response.toString();
                       } else {
-                          return "{\"error\":\"HTTP " + code + "\",\"body\":\"" + response.toString() + "\"}";
+                          return "{\"error\":\"HTTP " + code + "\"}";
                       }
                   } catch (Exception e) {
                       return "{\"error\":\"" + e.getMessage() + "\"}";
@@ -119,25 +116,10 @@ jobs:
           }
           EOF
 
-      # ============================================================
-      #  ВСТРАИВАЕМ JNI В СУЩЕСТВУЮЩИЙ CMakeLists.txt
-      # ============================================================
-      - name: Embed JNI into love-android CMake
+      - name: Create JNI bridge
         run: |
-          cd love-android
-          # Добавляем наш JNI-код в существующий CMakeLists.txt
-          cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
-
-          # Firebase JNI Bridge
-          add_library(firebase_bridge STATIC
-              firebase_jni.cpp
-          )
-          target_link_libraries(love firebase_bridge)
-          EOF
-
-          # Создаём JNI-файл в правильной папке
-          mkdir -p app/src/main/cpp
-          cat > app/src/main/cpp/firebase_jni.cpp << 'EOF'
+          mkdir -p love-android/app/src/main/cpp
+          cat > love-android/app/src/main/cpp/firebase_jni.cpp << 'EOF'
           #include <jni.h>
           #include <string>
           #include <android/log.h>
@@ -177,6 +159,18 @@ jobs:
           }
 
           }
+          EOF
+
+      - name: Embed JNI into love-android CMake
+        run: |
+          cd love-android
+          cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
+
+          # Firebase JNI Bridge
+          add_library(firebase_bridge STATIC
+              firebase_jni.cpp
+          )
+          target_link_libraries(love firebase_bridge)
           EOF
 
       - name: Set package name and app name
