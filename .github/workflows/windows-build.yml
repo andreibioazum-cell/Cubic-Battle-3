@@ -1,28 +1,76 @@
-name: Build_Cubic_Battle_Windows
+name: Build_Cubic_Battle_Android
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    timeout-minutes: 25
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Compile Java Firebase Bridge
+      - name: Setup Android SDK
         run: |
-          mkdir java_bridge
-          cd java_bridge
-          @"
+          mkdir -p /usr/local/lib/android/sdk
+          cd /usr/local/lib/android/sdk
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          export PATH=$PATH:/usr/local/lib/android/sdk/cmdline-tools/latest/bin
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-33" "build-tools;33.0.0"
+
+      - name: Set Android environment
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+          key: ndk-25.2.9519653-v5
+
+      - name: Install NDK
+        run: |
+          if [ ! -d "$ANDROID_HOME/ndk/25.2.9519653" ]; then
+            yes | sdkmanager "ndk;25.2.9519653"
+          fi
+
+      - name: Export NDK
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+
+      - name: Cache love-android
+        uses: actions/cache@v4
+        with:
+          path: love-android
+          key: love-android-src-v5
+
+      - name: Clone love-android
+        run: |
+          if [ ! -f "love-android/gradlew" ]; then
+            git clone --recursive --depth 1 https://github.com/love2d/love-android.git
+          fi
+
+      - name: Create Java Firebase class
+        run: |
+          mkdir -p love-android/app/src/main/java/com/CB3
+          cat > love-android/app/src/main/java/com/CB3/FirebaseBridge.java << 'EOF'
+          package com.CB3;
+
+          import android.util.Log;
           import java.io.*;
           import java.net.*;
           import java.nio.charset.StandardCharsets;
@@ -30,101 +78,169 @@ jobs:
           public class FirebaseBridge {
               private static final String DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/";
 
-              public static void main(String[] args) throws Exception {
-                  System.out.println("[FirebaseBridge] Ready");
-                  BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-                  String line;
-                  while ((line = reader.readLine()) != null) {
-                      line = line.trim();
-                      if (line.startsWith("PUT")) {
-                          String[] parts = line.split(" ", 3);
-                          if (parts.length == 3) {
-                              String url = DB_URL + parts[1] + ".json";
-                              String response = sendRequest("PUT", url, parts[2]);
-                              System.out.println(response.contains("error") ? "ERROR: " + response : "OK");
-                          }
-                      } else if (line.startsWith("GET")) {
-                          String[] parts = line.split(" ", 2);
-                          if (parts.length == 2) {
-                              String url = DB_URL + parts[1] + ".json";
-                              String response = sendRequest("GET", url, null);
-                              System.out.println(response);
-                          }
-                      } else if (line.startsWith("DELETE")) {
-                          String[] parts = line.split(" ", 2);
-                          if (parts.length == 2) {
-                              String url = DB_URL + parts[1] + ".json";
-                              String response = sendRequest("DELETE", url, null);
-                              System.out.println(response.contains("error") ? "ERROR: " + response : "OK");
-                          }
-                      } else if (line.equals("EXIT")) {
-                          break;
-                      }
-                  }
-                  System.exit(0);
-              }
+              public static String sendRequest(String method, String path, String body) {
+                  try {
+                      String url = DB_URL + path + ".json";
+                      HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                      conn.setRequestMethod(method);
+                      conn.setRequestProperty("Content-Type", "application/json");
+                      conn.setConnectTimeout(5000);
+                      conn.setReadTimeout(5000);
 
-              private static String sendRequest(String method, String urlString, String body) throws Exception {
-                  HttpURLConnection conn = (HttpURLConnection) new URL(urlString).openConnection();
-                  conn.setRequestMethod(method);
-                  conn.setRequestProperty("Content-Type", "application/json");
-                  conn.setConnectTimeout(5000);
-                  conn.setReadTimeout(5000);
-                  if (body != null) {
-                      conn.setDoOutput(true);
-                      try (OutputStream os = conn.getOutputStream()) {
-                          os.write(body.getBytes(StandardCharsets.UTF_8));
+                      if (body != null && !body.isEmpty()) {
+                          conn.setDoOutput(true);
+                          try (OutputStream os = conn.getOutputStream()) {
+                              os.write(body.getBytes(StandardCharsets.UTF_8));
+                          }
                       }
-                  }
-                  int code = conn.getResponseCode();
-                  InputStream is = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
-                  BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
-                  StringBuilder response = new StringBuilder();
-                  String line;
-                  while ((line = reader.readLine()) != null) {
-                      response.append(line);
-                  }
-                  conn.disconnect();
-                  if (code >= 200 && code < 300) {
-                      return response.toString();
-                  } else {
-                      return "{\"error\":\"HTTP " + code + "\"}";
+
+                      int code = conn.getResponseCode();
+                      InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+                      BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+                      StringBuilder response = new StringBuilder();
+                      String line;
+                      while ((line = reader.readLine()) != null) {
+                          response.append(line);
+                      }
+                      conn.disconnect();
+
+                      if (code >= 200 && code < 300) {
+                          return response.toString();
+                      } else {
+                          return "{\"error\":\"HTTP " + code + "\"}";
+                      }
+                  } catch (Exception e) {
+                      return "{\"error\":\"" + e.getMessage() + "\"}";
                   }
               }
           }
-          "@ | Out-File -Encoding utf8 FirebaseBridge.java
-          javac FirebaseBridge.java
-          jar cf firebase-bridge.jar FirebaseBridge.class
+          EOF
+
+      - name: Create JNI bridge
+        run: |
+          mkdir -p love-android/app/src/main/cpp
+          cat > love-android/app/src/main/cpp/firebase_jni.cpp << 'EOF'
+          #include <jni.h>
+          #include <string>
+          #include <android/log.h>
+
+          #define LOG_TAG "FirebaseJNI"
+          #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+
+          extern "C" {
+
+          static jclass firebaseClass = nullptr;
+          static jmethodID sendRequestMethod = nullptr;
+
+          JNIEXPORT jstring JNICALL
+          Java_com_CB3_FirebaseBridge_sendRequest(JNIEnv *env, jobject thiz,
+                                                   jstring method, jstring path, jstring body) {
+              if (firebaseClass == nullptr) {
+                  jclass cls = env->FindClass("com/CB3/FirebaseBridge");
+                  if (cls == nullptr) {
+                      LOGI("Failed to find FirebaseBridge class");
+                      return env->NewStringUTF("{\"error\":\"Class not found\"}");
+                  }
+                  firebaseClass = (jclass)env->NewGlobalRef(cls);
+                  sendRequestMethod = env->GetStaticMethodID(firebaseClass, "sendRequest",
+                      "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+                  if (sendRequestMethod == nullptr) {
+                      LOGI("Failed to find sendRequest method");
+                      return env->NewStringUTF("{\"error\":\"Method not found\"}");
+                  }
+              }
+
+              jstring result = (jstring)env->CallStaticObjectMethod(firebaseClass, sendRequestMethod, method, path, body);
+              if (result == nullptr) {
+                  return env->NewStringUTF("{\"error\":\"Java method returned null\"}");
+              }
+
+              return result;
+          }
+
+          }
+          EOF
+
+      - name: Embed JNI into love-android CMake
+        run: |
+          cd love-android
+          cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
+
+          # Firebase JNI Bridge
+          add_library(firebase_bridge STATIC
+              firebase_jni.cpp
+          )
+          target_link_libraries(love firebase_bridge)
+          EOF
+
+      - name: Set package name and app name
+        run: |
+          sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
+          mkdir -p love-android/app/src/main/res/values
+          cat > love-android/app/src/main/res/values/strings.xml << 'EOF'
+          <resources>
+              <string name="app_name">Cubic Battle 3</string>
+          </resources>
+          EOF
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-v5
+
+      - name: Cache native
+        uses: actions/cache@v4
+        with:
+          path: |
+            love-android/app/.cxx
+            love-android/app/build
+          key: native-v5
 
       - name: Package game.love
         run: |
-          powershell Compress-Archive -Path * -DestinationPath game.zip -Force
-          ren game.zip game.love
+          zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
 
-      - name: Download LÖVE Windows 64-bit
+      - name: Embed game
         run: |
-          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
-          Expand-Archive -Path love-windows.zip -DestinationPath love-windows
+          mkdir -p love-android/app/src/embed/assets
+          cp game.love love-android/app/src/embed/assets/game.love
 
-      - name: Create Portable EXE
+      - name: Force arm64 only
         run: |
-          New-Item -ItemType Directory -Force -Path dist\CubicBattle
-          Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
-          cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
-          Remove-Item dist\CubicBattle\love.exe
-          copy java_bridge\firebase-bridge.jar dist\CubicBattle\
+          sed -i '/abiFilters/d' love-android/app/build.gradle
+          sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a" }' love-android/app/build.gradle
 
-      - name: Create run.bat
+      - name: Optimize Gradle
         run: |
-          @"
-          @echo off
-          start /b java -jar firebase-bridge.jar
-          timeout /t 1 /nobreak >nul
-          CubicBattle.exe
-          "@ | Out-File -Encoding ascii dist\CubicBattle\run.bat
+          cat >> love-android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx6g
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.daemon=false
+          EOF
 
-      - name: Upload ZIP
+      - name: Build APK
+        working-directory: love-android
+        run: ./gradlew assembleEmbedNoRecordDebug --no-daemon --parallel --console=plain
+
+      - name: Rename APK to "Cubic Battle 3.apk"
+        run: |
+          APK_FILE=$(find love-android -name "*.apk" | head -1)
+          if [ -z "$APK_FILE" ]; then
+            echo "No APK found!"
+            exit 1
+          fi
+          NEW_NAME="Cubic Battle 3.apk"
+          cp "$APK_FILE" "$NEW_NAME"
+          echo "APK_NAME=$NEW_NAME" >> $GITHUB_ENV
+          echo "✅ APK created: $NEW_NAME"
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle_Windows
-          path: dist\CubicBattle
+          name: Cubic_Battle_3_APK
+          path: "Cubic Battle 3.apk"
+          compression-level: 0
