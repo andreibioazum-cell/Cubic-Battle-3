@@ -1,4 +1,4 @@
--- room.lua – room creation/joining UI
+-- room.lua – интерфейс комнат (без дублирования символов)
 local room = {}
 
 local online = require("online")
@@ -6,13 +6,15 @@ local fontTitle, fontBtn, fontInput
 local inputText = ""
 local inputActive = false
 local inputField = { x = 0, y = 0, w = 300, h = 50 }
-local btnCreate = { w = 220, h = 60, x = 0, y = 0 }
-local btnJoin = { w = 220, h = 60, x = 0, y = 0 }
+local btnRandom = { w = 60, h = 50, x = 0, y = 0 }
+local btnCreate = { w = 180, h = 60, x = 0, y = 0 }
+local btnJoin = { w = 180, h = 60, x = 0, y = 0 }
 local btnBack = { w = 140, h = 55, x = 0, y = 0 }
 
 local mode = "create"
 local statusMessage = ""
 local statusType = "idle"
+local processingText = false  -- флаг для защиты от дублирования
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
@@ -49,14 +51,19 @@ function room.load()
     inputField.x = (w - inputField.w) / 2
     inputField.y = h/2 - 20 * scale
 
-    btnCreate.w = 220 * scale
+    btnRandom.w = 60 * scale
+    btnRandom.h = 50 * scale
+    btnRandom.x = inputField.x + inputField.w + 10 * scale
+    btnRandom.y = inputField.y
+
+    btnCreate.w = 180 * scale
     btnCreate.h = 60 * scale
-    btnCreate.x = (w - btnCreate.w) / 2 - 120 * scale
+    btnCreate.x = (w - btnCreate.w) / 2 - 100 * scale
     btnCreate.y = h/2 + 80 * scale
 
-    btnJoin.w = 220 * scale
+    btnJoin.w = 180 * scale
     btnJoin.h = 60 * scale
-    btnJoin.x = (w - btnJoin.w) / 2 + 120 * scale
+    btnJoin.x = (w - btnJoin.w) / 2 + 100 * scale
     btnJoin.y = h/2 + 80 * scale
 
     btnBack.w = 140 * scale
@@ -109,10 +116,21 @@ function room.draw()
     local th = fontInput:getHeight()
     love.graphics.print(displayText, inputField.x + 15*scale, inputField.y + (inputField.h - th)/2)
 
-    local label = (mode == "create") and "Enter room code (or leave empty for auto)" or "Enter room code"
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
+    love.graphics.rectangle("fill", btnRandom.x + 3*scale, btnRandom.y + 3*scale, btnRandom.w, btnRandom.h, 8*scale, 8*scale)
+    love.graphics.setColor(0.9, 0.6, 0.1, 1)
+    love.graphics.rectangle("fill", btnRandom.x, btnRandom.y, btnRandom.w, btnRandom.h, 8*scale, 8*scale)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(2.4 * scale)
+    love.graphics.rectangle("line", btnRandom.x, btnRandom.y, btnRandom.w, btnRandom.h, 8*scale, 8*scale)
+    love.graphics.setFont(fontBtn)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("RND", btnRandom.x + 10*scale, btnRandom.y + 14*scale)
+
+    local label = (mode == "create") and "Enter room code or press RND" or "Enter room code"
     love.graphics.setFont(fontBtn)
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
-    love.graphics.printf(label, inputField.x, inputField.y - 35*scale, inputField.w, "center")
+    love.graphics.printf(label, inputField.x, inputField.y - 35*scale, inputField.w + btnRandom.w + 10*scale, "center")
 
     local colorCreate = (mode == "create") and {0.2, 0.7, 0.2} or {0.3, 0.3, 0.3}
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
@@ -170,12 +188,19 @@ function room.touchpressed(id, x, y)
         return
     end
 
+    if x >= btnRandom.x and x <= btnRandom.x + btnRandom.w and y >= btnRandom.y and y <= btnRandom.y + btnRandom.h then
+        playButtonSound()
+        inputText = online.generateRoomCode()
+        return
+    end
+
     if x >= btnCreate.x and x <= btnCreate.x + btnCreate.w and y >= btnCreate.y and y <= btnCreate.y + btnCreate.h then
         playButtonSound()
         mode = "create"
         local code = inputText
         if code == "" then
             code = online.generateRoomCode()
+            inputText = code
         end
         local nickname = SAVE_DATA.nickname or "Player"
         online.createRoom(code, nickname, function(success, msg)
@@ -222,24 +247,46 @@ function room.touchreleased() end
 
 function room.keypressed(key)
     if not inputActive then return end
+    
+    -- Обрабатываем только управляющие клавиши
     if key == "return" or key == "kpenter" then
         inputActive = false
         love.keyboard.setTextInput(false)
         love.keyboard.setKeyRepeat(false)
+        processingText = false
         return
     end
+    
     if key == "backspace" then
         inputText = inputText:sub(1, -2)
         return
     end
-    if #inputText < 10 then
-        inputText = inputText .. key
-    end
+    
+    -- Все печатаемые символы обрабатываются в textinput
 end
 
 function room.textinput(t)
-    if inputActive and #inputText < 10 then
-        inputText = inputText .. t
+    if not inputActive then return end
+    
+    -- Защита от дублирования (если символ уже был обработан в keypressed)
+    if processingText then
+        processingText = false
+        return
+    end
+    
+    -- Фильтруем только латиницу и цифры
+    local filtered = ""
+    for i = 1, #t do
+        local b = t:byte(i)
+        if (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or (b >= 48 and b <= 57) then
+            filtered = filtered .. string.char(b)
+        end
+    end
+    
+    if filtered ~= "" then
+        inputText = inputText .. filtered
+        if #inputText > 10 then inputText = inputText:sub(1, 10) end
+        processingText = true
     end
 end
 
