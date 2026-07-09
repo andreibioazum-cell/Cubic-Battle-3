@@ -7,7 +7,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
               private static final String DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/";
 
               public static void main(String[] args) throws Exception {
-                  System.out.println("[FirebaseBridge] Ready (REST API)");
+                  System.out.println("[FirebaseBridge] Ready");
                   BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
                   String line;
                   while ((line = reader.readLine()) != null) {
@@ -88,7 +88,7 @@ jobs:
                   if (code >= 200 && code < 300) {
                       return response.toString();
                   } else {
-                      return "{\"error\":\"HTTP " + code + "\",\"body\":\"" + response.toString() + "\"}";
+                      return "{\"error\":\"HTTP " + code + "\"}";
                   }
               }
           }
@@ -106,7 +106,7 @@ jobs:
           curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
           Expand-Archive -Path love-windows.zip -DestinationPath love-windows
 
-      - name: Create Portable EXE (64-bit)
+      - name: Create Portable EXE
         run: |
           New-Item -ItemType Directory -Force -Path dist\CubicBattle
           Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
@@ -123,7 +123,7 @@ jobs:
           CubicBattle.exe
           "@ | Out-File -Encoding ascii dist\CubicBattle\run.bat
 
-      - name: Upload Portable ZIP
+      - name: Upload ZIP
         uses: actions/upload-artifact@v4
         with:
           name: CubicBattle_Windows
