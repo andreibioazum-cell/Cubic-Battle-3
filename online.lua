@@ -57,7 +57,9 @@ local function sendRequest(method, path, body)
             timeout = 5,
         }
         
-        if code and code >= 200 and code < 300 then
+        -- code может быть строкой или числом, приводим к числу
+        local codeNum = tonumber(code)
+        if codeNum and codeNum >= 200 and codeNum < 300 then
             return table.concat(response_table)
         else
             return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
