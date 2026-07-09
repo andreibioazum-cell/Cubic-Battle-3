@@ -120,12 +120,24 @@ jobs:
           EOF
 
       # ============================================================
-      #  СОЗДАНИЕ JNI-МОСТА (C++)
+      #  ВСТРАИВАЕМ JNI В СУЩЕСТВУЮЩИЙ CMakeLists.txt
       # ============================================================
-      - name: Create JNI bridge
+      - name: Embed JNI into love-android CMake
         run: |
-          mkdir -p love-android/app/src/main/cpp
-          cat > love-android/app/src/main/cpp/firebase_jni.cpp << 'EOF'
+          cd love-android
+          # Добавляем наш JNI-код в существующий CMakeLists.txt
+          cat >> app/src/main/cpp/CMakeLists.txt << 'EOF'
+
+          # Firebase JNI Bridge
+          add_library(firebase_bridge STATIC
+              firebase_jni.cpp
+          )
+          target_link_libraries(love firebase_bridge)
+          EOF
+
+          # Создаём JNI-файл в правильной папке
+          mkdir -p app/src/main/cpp
+          cat > app/src/main/cpp/firebase_jni.cpp << 'EOF'
           #include <jni.h>
           #include <string>
           #include <android/log.h>
@@ -135,14 +147,12 @@ jobs:
 
           extern "C" {
 
-          // Глобальная ссылка на класс и метод (кешируем)
           static jclass firebaseClass = nullptr;
           static jmethodID sendRequestMethod = nullptr;
 
           JNIEXPORT jstring JNICALL
           Java_com_CB3_FirebaseBridge_sendRequest(JNIEnv *env, jobject thiz,
                                                    jstring method, jstring path, jstring body) {
-              // Кешируем класс и метод при первом вызове
               if (firebaseClass == nullptr) {
                   jclass cls = env->FindClass("com/CB3/FirebaseBridge");
                   if (cls == nullptr) {
@@ -158,7 +168,6 @@ jobs:
                   }
               }
 
-              // Вызываем Java-метод
               jstring result = (jstring)env->CallStaticObjectMethod(firebaseClass, sendRequestMethod, method, path, body);
               if (result == nullptr) {
                   return env->NewStringUTF("{\"error\":\"Java method returned null\"}");
@@ -170,44 +179,6 @@ jobs:
           }
           EOF
 
-      # ============================================================
-      #  НАСТРОЙКА GRADLE ДЛЯ JNI
-      # ============================================================
-      - name: Configure Gradle for JNI
-        run: |
-          cat >> love-android/app/build.gradle << 'EOF'
-
-          android {
-              defaultConfig {
-                  externalNativeBuild {
-                      cmake {
-                          cppFlags "-std=c++17"
-                      }
-                  }
-              }
-              externalNativeBuild {
-                  cmake {
-                      path "CMakeLists.txt"
-                  }
-              }
-          }
-          EOF
-
-          cat > love-android/app/CMakeLists.txt << 'EOF'
-          cmake_minimum_required(VERSION 3.4.1)
-          project(firebase_bridge)
-
-          add_library(firebase_bridge SHARED
-              src/main/cpp/firebase_jni.cpp
-          )
-
-          find_library(log-lib log)
-          target_link_libraries(firebase_bridge ${log-lib})
-          EOF
-
-      # ============================================================
-      #  НАСТРОЙКА ПАКЕТА И НАЗВАНИЯ
-      # ============================================================
       - name: Set package name and app name
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
