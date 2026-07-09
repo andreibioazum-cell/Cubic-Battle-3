@@ -1,4 +1,4 @@
--- online.lua – работает на ПК (без JNI) и на Android (с JNI)
+-- online.lua – работает на ПК (socket.http) и Android (JNI)
 local online = {}
 
 local PATH = "players/"
@@ -16,49 +16,42 @@ local FETCH_INTERVAL = 0.2
 local isConnected = false
 local debugText = "Waiting..."
 
--- ============================================================
---  ОПРЕДЕЛЕНИЕ ПЛАТФОРМЫ
--- ============================================================
 local isAndroid = (love.system.getOS() == "Android")
 local ffi = nil
 
 if isAndroid then
-    -- На Android используем JNI
     local ok, result = pcall(require, "ffi")
     if ok then
         ffi = result
         ffi.cdef[[
             const char* Java_com_CB3_FirebaseBridge_sendRequest(const char* method, const char* path, const char* body);
         ]]
-    else
-        print("FFI not available on Android")
     end
 end
 
--- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (JNI на Android, HTTP на ПК)
--- ============================================================
 local function sendRequest(method, path, body)
     if isAndroid and ffi then
-        -- Android: JNI
         local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
         return ffi.string(result)
     else
-        -- ПК: HTTP напрямую (без JNI)
-        local https = require("https")
+        local http = require("socket.http")
+        local ltn12 = require("ltn12")
         local url = DB_URL .. path .. ".json"
-        local options = {
+        
+        local response_table = {}
+        local res, code, headers = http.request{
+            url = url,
             method = method,
-            headers = { ["Content-Type"] = "application/json" },
+            headers = {
+                ["Content-Type"] = "application/json",
+            },
+            source = body and ltn12.source.string(body) or nil,
+            sink = ltn12.sink.table(response_table),
             timeout = 5,
-            verify = false,
         }
-        if body then
-            options.data = body
-        end
-        local success, code, response = pcall(https.request, url, options)
-        if success and code and code >= 200 and code < 300 then
-            return response
+        
+        if code and code >= 200 and code < 300 then
+            return table.concat(response_table)
         else
             return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
         end
@@ -92,7 +85,7 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online module ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (HTTP)") .. ", skin: " .. mySkin)
+    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (HTTP)"))
 end
 
 function online.createRoom(roomCode, nickname, callback)
@@ -114,11 +107,11 @@ function online.createRoom(roomCode, nickname, callback)
     local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
     local response = sendRequest("PUT", path, data)
     if response and response:match("error") then
-        setDebug("Failed to create room: " .. response)
+        setDebug("Failed: " .. response)
         if callback then callback(false, response) end
     else
         isConnected = true
-        setDebug("Room created: " .. roomCode .. " with skin " .. mySkin)
+        setDebug("Room created: " .. roomCode)
         if callback then callback(true) end
     end
 end
@@ -144,38 +137,32 @@ function online.joinRoom(roomCode, nickname, callback)
     local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
     local response = sendRequest("PUT", path, data)
     if response and response:match("error") then
-        setDebug("Failed to join room: " .. response)
+        setDebug("Failed: " .. response)
         if callback then callback(false, response) end
     else
         isConnected = true
-        setDebug("Joined room: " .. roomCode .. " with skin " .. mySkin)
+        setDebug("Joined room: " .. roomCode)
         if callback then callback(true) end
     end
 end
 
 function online.sendPosition(x, y)
-    if not isConnected or not myUid then
-        setDebug("Not connected or no UID")
-        return
-    end
+    if not isConnected or not myUid then return
     local path = PATH .. myUid
-    local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. ',"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
+    local data = '{"x":'..math.floor(x)..',"y":'..math.floor(y)..',"nickname":"'..myNickname..'","skin":"'..mySkin..'"}'
     local response = sendRequest("PUT", path, data)
     if response and response:match("error") then
-        setDebug("Failed to send position: " .. response)
+        setDebug("Send failed: " .. response)
     else
-        setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
+        setDebug("Sent: "..math.floor(x)..","..math.floor(y))
     end
 end
 
 function online.fetchPlayers()
-    if not isConnected then
-        setDebug("Not connected")
-        return
-    end
+    if not isConnected then return
     local response = sendRequest("GET", PATH, nil)
     if response and response:match("error") then
-        setDebug("Failed to fetch players: " .. response)
+        setDebug("Fetch failed: " .. response)
         return
     end
     local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -195,44 +182,32 @@ function online.fetchPlayers()
             end
         end
         players = newPlayers
-        local count = 0
-        for _ in pairs(players) do count = count + 1 end
-        setDebug("Players loaded: " .. count)
+        setDebug("Players: "..#players)
     else
-        setDebug("Invalid JSON response: " .. tostring(response))
+        setDebug("Invalid JSON")
     end
 end
 
-function online.getPlayers()
-    return players
-end
+function online.getPlayers() return players end
 
 function online.updateSkin(skin)
-    if not isConnected or not myUid then
-        setDebug("Not connected, skin not saved")
-        return
-    end
+    if not isConnected or not myUid then return
     mySkin = skin
-    local path = PATH .. myUid .. "/skin"
-    local data = '"' .. skin .. '"'
-    local response = sendRequest("PUT", path, data)
+    local response = sendRequest("PUT", PATH .. myUid .. "/skin", '"'..skin..'"')
     if response and response:match("error") then
-        setDebug("Failed to update skin: " .. response)
+        setDebug("Skin update failed: " .. response)
     else
         setDebug("Skin updated: " .. skin)
     end
 end
 
-function online.getMySkin()
-    return mySkin
-end
+function online.getMySkin() return mySkin end
 
 function online.leave()
-    if not isConnected or not myUid then return end
-    local path = PATH .. myUid
-    local response = sendRequest("DELETE", path, nil)
+    if not isConnected or not myUid then return
+    local response = sendRequest("DELETE", PATH .. myUid, nil)
     if response and response:match("error") then
-        setDebug("Failed to leave: " .. response)
+        setDebug("Leave failed: " .. response)
     else
         setDebug("Left room")
     end
@@ -244,15 +219,11 @@ function online.leave()
 end
 
 function online.update(dt)
-    if not isConnected then
-        return
-    end
+    if not isConnected then return
 
-    -- Интерполяция
-    local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
-            p.lerpTimer = math.min(1, (p.lerpTimer or 0) + dt * lerpSpeed)
+            p.lerpTimer = math.min(1, (p.lerpTimer or 0) + dt * 4.5)
             local t = p.lerpTimer
             local smooth = t * t * (3 - 2 * t)
             p.x = p.x + (p.targetX - p.x) * smooth
@@ -265,9 +236,7 @@ function online.update(dt)
         sendTimer = 0
         if online.onSendPosition then
             local x, y = online.onSendPosition()
-            if x and y then
-                online.sendPosition(x, y)
-            end
+            if x and y then online.sendPosition(x, y) end
         end
     end
 
@@ -278,12 +247,7 @@ function online.update(dt)
     end
 end
 
-function online.getDebugText()
-    return debugText
-end
-
-function online.isConnected()
-    return isConnected
-end
+function online.getDebugText() return debugText end
+function online.isConnected() return isConnected end
 
 return online
