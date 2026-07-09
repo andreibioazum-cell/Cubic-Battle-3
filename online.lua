@@ -15,38 +15,30 @@ local SEND_INTERVAL = 0.15
 local FETCH_INTERVAL = 0.2
 local isConnected = false
 local debugText = "Waiting..."
-local javaProcess = nil
 
--- Определяем платформу
 local isAndroid = (love.system.getOS() == "Android")
 local ffi = nil
-
-if isAndroid then
-    local ok, result = pcall(require, "ffi")
-    if ok then
-        ffi = result
-        ffi.cdef([[
-            const char* Java_com_CB3_FirebaseBridge_sendRequest(const char* method, const char* path, const char* body);
-        ]])
-    end
-end
+local javaProcess = nil
 
 -- ============================================================
 --  ЗАПУСК JAVA-МОСТА НА ПК
 -- ============================================================
 local function startJavaBridge()
     if not javaProcess and not isAndroid then
-        -- Проверяем, есть ли JAR
+        -- Ищем JAR в разных местах
         local jarPath = "firebase-bridge.jar"
+        if not love.filesystem.getInfo(jarPath) then
+            jarPath = "java_bridge/firebase-bridge.jar"
+        end
         if love.filesystem.getInfo(jarPath) then
+            print("[ONLINE] Starting Java bridge from: " .. jarPath)
             -- Запускаем Java в фоновом режиме
-            local cmd = "java -jar " .. jarPath .. " &"
+            local cmd = 'start /b java -jar "' .. jarPath .. '"'
             os.execute(cmd)
             javaProcess = true
             print("[ONLINE] Java bridge started on PC")
         else
-            -- Если JAR нет, используем HTTP fallback
-            print("[ONLINE] Java bridge not found, using HTTP fallback")
+            print("[ONLINE] Java bridge not found at: " .. jarPath)
         end
     end
 end
@@ -56,59 +48,40 @@ end
 -- ============================================================
 local function sendRequest(method, path, body)
     -- Android: JNI
-    if isAndroid and ffi then
-        local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
-        return ffi.string(result)
+    if isAndroid then
+        if not ffi then
+            local ok, result = pcall(require, "ffi")
+            if ok then
+                ffi = result
+                ffi.cdef([[
+                    const char* Java_com_CB3_FirebaseBridge_sendRequest(const char* method, const char* path, const char* body);
+                ]])
+            end
+        end
+        if ffi then
+            local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
+            return ffi.string(result)
+        else
+            return "{\"error\":\"JNI not available\"}"
+        end
     end
     
-    -- ПК: пытаемся использовать Java-мост (если есть)
-    -- Если Java-мост не запущен, запускаем его
+    -- ПК: Java-мост (через стандартный ввод/вывод)
     if not javaProcess then
         startJavaBridge()
     end
     
-    -- Отправляем команду в Java-мост через стандартный вывод
-    -- Внимание: это работает только если игра запущена из консоли
-    -- В портативной версии может не работать
-    local command = method .. " " .. path .. " " .. (body or "") .. "\n"
-    io.write(command)
+    -- Отправляем команду в Java-мост
+    local cmd = method .. " " .. path .. " " .. (body or "") .. "\n"
+    io.write(cmd)
     io.flush()
     
-    -- Читаем ответ (для простоты используем временный файл)
-    -- В реальности нужно использовать сокет или pipe
+    -- Читаем ответ (с таймаутом)
     local response = io.read("*l")
     if response then
         return response
     else
         return "{\"error\":\"No response from Java bridge\"}"
-    end
-end
-
--- ============================================================
---  HTTP FALLBACK (если Java не работает)
--- ============================================================
-local function sendRequestHTTP(method, path, body)
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
-    local url = DB_URL .. path .. ".json"
-    
-    local response_table = {}
-    local res, code, headers = http.request{
-        url = url,
-        method = method,
-        headers = {
-            ["Content-Type"] = "application/json",
-        },
-        source = body and ltn12.source.string(body) or nil,
-        sink = ltn12.sink.table(response_table),
-        timeout = 5,
-    }
-    
-    local codeNum = tonumber(code)
-    if codeNum and codeNum >= 200 and codeNum < 300 then
-        return table.concat(response_table)
-    else
-        return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
     end
 end
 
@@ -142,7 +115,7 @@ function online.init()
     if not isAndroid then
         startJavaBridge()
     end
-    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (Java/HTTP)"))
+    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (Java)"))
 end
 
 function online.createRoom(roomCode, nickname, callback)
