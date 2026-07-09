@@ -1,4 +1,4 @@
--- online.lua – работает на Windows (ssl.https) и Android (JNI)
+-- online.lua – работает на ПК (love.network) и Android (JNI)
 local online = {}
 
 local PATH = "players/"
@@ -31,7 +31,7 @@ if isAndroid then
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (JNI на Android, ssl.https на Windows)
+--  ОТПРАВКА ЗАПРОСОВ (JNI на Android, love.network на ПК)
 -- ============================================================
 local function sendRequest(method, path, body)
     -- Android: используем JNI
@@ -40,31 +40,25 @@ local function sendRequest(method, path, body)
         return ffi.string(result)
     end
     
-    -- Windows: используем ssl.https (есть в LÖVE 11.5)
-    local https = require("ssl.https")
-    local ltn12 = require("ltn12")
+    -- ПК: используем love.network (синхронный запрос)
     local url = DB_URL .. path .. ".json"
+    local req = love.network.newHTTPRequest(method, url, {
+        ["Content-Type"] = "application/json"
+    }, body or "")
     
-    local response_table = {}
-    local request_body = body or ""
-    
-    local res, code, headers = https.request{
-        url = url,
-        method = method,
-        headers = {
-            ["Content-Type"] = "application/json",
-            ["Host"] = "cubic-battle-3-default-rtdb.firebaseio.com",
-        },
-        source = body and ltn12.source.string(body) or nil,
-        sink = ltn12.sink.table(response_table),
-        timeout = 10,
-    }
-    
-    local codeNum = tonumber(code)
-    if codeNum and codeNum >= 200 and codeNum < 300 then
-        return table.concat(response_table)
+    -- Выполняем запрос синхронно (ждём ответ)
+    req:send()
+    local response = req:getResponse()
+    if response then
+        local status = response:getStatus()
+        local body = response:getBody()
+        if status >= 200 and status < 300 then
+            return body
+        else
+            return "{\"error\":\"HTTP " .. status .. "\"}"
+        end
     else
-        return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
+        return "{\"error\":\"No response\"}"
     end
 end
 
@@ -95,7 +89,7 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "Windows (ssl.https)"))
+    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (love.network)"))
 end
 
 function online.createRoom(roomCode, nickname, callback)
