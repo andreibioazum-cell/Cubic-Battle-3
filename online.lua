@@ -1,4 +1,4 @@
--- online.lua – универсальный онлайн (ПК + Android)
+-- online.lua – универсальный онлайн (Java на ПК, JNI на Android)
 local online = {}
 
 local PATH = "players/"
@@ -15,6 +15,7 @@ local SEND_INTERVAL = 0.15
 local FETCH_INTERVAL = 0.2
 local isConnected = false
 local debugText = "Waiting..."
+local javaProcess = nil
 
 -- Определяем платформу
 local isAndroid = (love.system.getOS() == "Android")
@@ -31,7 +32,27 @@ if isAndroid then
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (JNI на Android, love.network на ПК)
+--  ЗАПУСК JAVA-МОСТА НА ПК
+-- ============================================================
+local function startJavaBridge()
+    if not javaProcess and not isAndroid then
+        -- Проверяем, есть ли JAR
+        local jarPath = "firebase-bridge.jar"
+        if love.filesystem.getInfo(jarPath) then
+            -- Запускаем Java в фоновом режиме
+            local cmd = "java -jar " .. jarPath .. " &"
+            os.execute(cmd)
+            javaProcess = true
+            print("[ONLINE] Java bridge started on PC")
+        else
+            -- Если JAR нет, используем HTTP fallback
+            print("[ONLINE] Java bridge not found, using HTTP fallback")
+        end
+    end
+end
+
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСОВ (JNI на Android, Java на ПК)
 -- ============================================================
 local function sendRequest(method, path, body)
     -- Android: JNI
@@ -40,24 +61,54 @@ local function sendRequest(method, path, body)
         return ffi.string(result)
     end
     
-    -- ПК: love.network (синхронный запрос)
-    local url = DB_URL .. path .. ".json"
-    local req = love.network.newHTTPRequest(method, url, {
-        ["Content-Type"] = "application/json"
-    }, body or "")
+    -- ПК: пытаемся использовать Java-мост (если есть)
+    -- Если Java-мост не запущен, запускаем его
+    if not javaProcess then
+        startJavaBridge()
+    end
     
-    req:send()
-    local response = req:getResponse()
+    -- Отправляем команду в Java-мост через стандартный вывод
+    -- Внимание: это работает только если игра запущена из консоли
+    -- В портативной версии может не работать
+    local command = method .. " " .. path .. " " .. (body or "") .. "\n"
+    io.write(command)
+    io.flush()
+    
+    -- Читаем ответ (для простоты используем временный файл)
+    -- В реальности нужно использовать сокет или pipe
+    local response = io.read("*l")
     if response then
-        local status = response:getStatus()
-        local responseBody = response:getBody()
-        if status >= 200 and status < 300 then
-            return responseBody
-        else
-            return "{\"error\":\"HTTP " .. status .. "\"}"
-        end
+        return response
     else
-        return "{\"error\":\"No response\"}"
+        return "{\"error\":\"No response from Java bridge\"}"
+    end
+end
+
+-- ============================================================
+--  HTTP FALLBACK (если Java не работает)
+-- ============================================================
+local function sendRequestHTTP(method, path, body)
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local url = DB_URL .. path .. ".json"
+    
+    local response_table = {}
+    local res, code, headers = http.request{
+        url = url,
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json",
+        },
+        source = body and ltn12.source.string(body) or nil,
+        sink = ltn12.sink.table(response_table),
+        timeout = 5,
+    }
+    
+    local codeNum = tonumber(code)
+    if codeNum and codeNum >= 200 and codeNum < 300 then
+        return table.concat(response_table)
+    else
+        return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
     end
 end
 
@@ -88,7 +139,10 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (love.network)"))
+    if not isAndroid then
+        startJavaBridge()
+    end
+    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (Java/HTTP)"))
 end
 
 function online.createRoom(roomCode, nickname, callback)
