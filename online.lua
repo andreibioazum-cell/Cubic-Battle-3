@@ -1,7 +1,8 @@
--- online.lua – вызывает Java через JNI
+-- online.lua – работает на ПК (без JNI) и на Android (с JNI)
 local online = {}
 
 local PATH = "players/"
+local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 
 local myUid = nil
 local myNickname = nil
@@ -15,27 +16,59 @@ local FETCH_INTERVAL = 0.2
 local isConnected = false
 local debugText = "Waiting..."
 
+-- ============================================================
+--  ОПРЕДЕЛЕНИЕ ПЛАТФОРМЫ
+-- ============================================================
+local isAndroid = (love.system.getOS() == "Android")
+local ffi = nil
+
+if isAndroid then
+    -- На Android используем JNI
+    local ok, result = pcall(require, "ffi")
+    if ok then
+        ffi = result
+        ffi.cdef[[
+            const char* Java_com_CB3_FirebaseBridge_sendRequest(const char* method, const char* path, const char* body);
+        ]]
+    else
+        print("FFI not available on Android")
+    end
+end
+
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСОВ (JNI на Android, HTTP на ПК)
+-- ============================================================
+local function sendRequest(method, path, body)
+    if isAndroid and ffi then
+        -- Android: JNI
+        local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
+        return ffi.string(result)
+    else
+        -- ПК: HTTP напрямую (без JNI)
+        local https = require("https")
+        local url = DB_URL .. path .. ".json"
+        local options = {
+            method = method,
+            headers = { ["Content-Type"] = "application/json" },
+            timeout = 5,
+            verify = false,
+        }
+        if body then
+            options.data = body
+        end
+        local success, code, response = pcall(https.request, url, options)
+        if success and code and code >= 200 and code < 300 then
+            return response
+        else
+            return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
+        end
+    end
+end
+
 local function setDebug(text)
     debugText = text
     print("[DEBUG] " .. text)
 end
-
--- ============================================================
---  JNI (вызов Java из Lua)
--- ============================================================
-local ffi = require("ffi")
-ffi.cdef[[
-    const char* Java_com_CB3_FirebaseBridge_sendRequest(const char* method, const char* path, const char* body);
-]]
-
-local function callJava(method, path, body)
-    local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
-    return ffi.string(result)
-end
-
--- ============================================================
---  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
--- ============================================================
 
 local function generateUuid()
     local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
@@ -57,13 +90,9 @@ function online.generateRoomCode()
     return code
 end
 
--- ============================================================
---  ОСНОВНЫЕ ФУНКЦИИ
--- ============================================================
-
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online module ready, skin: " .. mySkin)
+    setDebug("Online module ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (HTTP)") .. ", skin: " .. mySkin)
 end
 
 function online.createRoom(roomCode, nickname, callback)
@@ -83,7 +112,7 @@ function online.createRoom(roomCode, nickname, callback)
 
     local path = PATH .. myUid
     local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local response = callJava("PUT", path, data)
+    local response = sendRequest("PUT", path, data)
     if response and response:match("error") then
         setDebug("Failed to create room: " .. response)
         if callback then callback(false, response) end
@@ -113,7 +142,7 @@ function online.joinRoom(roomCode, nickname, callback)
 
     local path = PATH .. myUid
     local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local response = callJava("PUT", path, data)
+    local response = sendRequest("PUT", path, data)
     if response and response:match("error") then
         setDebug("Failed to join room: " .. response)
         if callback then callback(false, response) end
@@ -131,7 +160,7 @@ function online.sendPosition(x, y)
     end
     local path = PATH .. myUid
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. ',"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
-    local response = callJava("PUT", path, data)
+    local response = sendRequest("PUT", path, data)
     if response and response:match("error") then
         setDebug("Failed to send position: " .. response)
     else
@@ -144,7 +173,7 @@ function online.fetchPlayers()
         setDebug("Not connected")
         return
     end
-    local response = callJava("GET", PATH, nil)
+    local response = sendRequest("GET", PATH, nil)
     if response and response:match("error") then
         setDebug("Failed to fetch players: " .. response)
         return
@@ -186,7 +215,7 @@ function online.updateSkin(skin)
     mySkin = skin
     local path = PATH .. myUid .. "/skin"
     local data = '"' .. skin .. '"'
-    local response = callJava("PUT", path, data)
+    local response = sendRequest("PUT", path, data)
     if response and response:match("error") then
         setDebug("Failed to update skin: " .. response)
     else
@@ -201,7 +230,7 @@ end
 function online.leave()
     if not isConnected or not myUid then return end
     local path = PATH .. myUid
-    local response = callJava("DELETE", path, nil)
+    local response = sendRequest("DELETE", path, nil)
     if response and response:match("error") then
         setDebug("Failed to leave: " .. response)
     else
