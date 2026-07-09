@@ -1,8 +1,8 @@
--- online.lua – работает на ПК (love.network) и Android (JNI)
+-- online.lua – работает на ПК (socket.http) и Android (JNI)
 local online = {}
 
 local PATH = "players/"
-local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
 
 local myUid = nil
 local myNickname = nil
@@ -31,7 +31,7 @@ if isAndroid then
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (JNI на Android, love.network на ПК)
+--  ОТПРАВКА ЗАПРОСОВ (JNI на Android, HTTP на ПК)
 -- ============================================================
 local function sendRequest(method, path, body)
     -- Android: используем JNI
@@ -40,25 +40,29 @@ local function sendRequest(method, path, body)
         return ffi.string(result)
     end
     
-    -- ПК: используем love.network (синхронный запрос)
+    -- ПК: используем socket.http (есть везде)
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
     local url = DB_URL .. path .. ".json"
-    local req = love.network.newHTTPRequest(method, url, {
-        ["Content-Type"] = "application/json"
-    }, body or "")
     
-    -- Выполняем запрос синхронно (ждём ответ)
-    req:send()
-    local response = req:getResponse()
-    if response then
-        local status = response:getStatus()
-        local body = response:getBody()
-        if status >= 200 and status < 300 then
-            return body
-        else
-            return "{\"error\":\"HTTP " .. status .. "\"}"
-        end
+    local response_table = {}
+    local res, code, headers = http.request{
+        url = url,
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json",
+            ["Host"] = "cubic-battle-3-default-rtdb.firebaseio.com",
+        },
+        source = body and ltn12.source.string(body) or nil,
+        sink = ltn12.sink.table(response_table),
+        timeout = 10,
+    }
+    
+    local codeNum = tonumber(code)
+    if codeNum and codeNum >= 200 and codeNum < 300 then
+        return table.concat(response_table)
     else
-        return "{\"error\":\"No response\"}"
+        return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
     end
 end
 
@@ -89,7 +93,7 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (love.network)"))
+    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (HTTP)"))
 end
 
 function online.createRoom(roomCode, nickname, callback)
