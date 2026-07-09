@@ -13,21 +13,15 @@ local aimDx, aimDy = 0, -1
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 local spaceJustPressed = false
 local abilityJustPressed = false
-
--- ========== ФЛАГ ДОСТУПНОСТИ СПОСОБНОСТИ ==========
 local abilityAvailable = false
 
--- ========== НОРМАЛЬНЫЙ РАСЧЕТ МАСШТАБА ==========
 local function getScale()
     local w, h = love.graphics.getDimensions()
-    local base = 1000        -- для ПК теперь 500
-    if isMobile then
-        base = 600
-    end
+    local base = 1000
+    if isMobile then base = 600 end
     return math.min(w, h) / base
 end
 
--- ========== ОТРИСОВКА ТЕКСТА С ТЕНЬЮ ==========
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
@@ -45,7 +39,6 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX, y)
 end
 
--- ========== РАЗМЕЩЕНИЕ ЭЛЕМЕНТОВ (АДАПТИВНО) ==========
 local function place()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
@@ -92,7 +85,6 @@ function controls.update(dt)
     ability.press = ability.press * 0.9
 end
 
--- ========== УПРАВЛЕНИЕ ДВИЖЕНИЕМ ==========
 function controls.getMove()
     local dx, dy = 0, 0
     if keys.w then dy = dy - 1 end
@@ -123,12 +115,8 @@ end
 
 function controls.isAiming() return atk.hold or keys.space end
 function controls.getAim() return aimDx, aimDy end
+function controls.setAbilityAvailable(available) abilityAvailable = available end
 
-function controls.setAbilityAvailable(available)
-    abilityAvailable = available
-end
-
--- ========== ОБРАБОТЧИКИ ТАЧ ==========
 function controls.touchpressed(id, x, y)
     if x >= back.x and x <= back.x + back.w and y >= back.y and y <= back.y + back.h then
         playButtonSound()
@@ -182,7 +170,6 @@ function controls.touchreleased(id)
     return false, aimDx, aimDy
 end
 
--- ========== КЛАВИАТУРА ==========
 function controls.keypressed(key)
     if key == "w" then keys.w = true end
     if key == "a" then keys.a = true end
@@ -221,7 +208,6 @@ function controls.getAbilityTrigger()
     return false
 end
 
--- ========== ОТРИСОВКА ==========
 function controls.draw()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
@@ -229,14 +215,12 @@ function controls.draw()
     if isMobile then
         love.graphics.setLineWidth(2.8 * scale)
 
-        -- Джойстик
         love.graphics.setColor(0, 0, 0, 0.25)
         love.graphics.circle("fill", joy.cx, joy.cy, joy.r)
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.circle("line", joy.cx, joy.cy, joy.r)
         love.graphics.circle("fill", joy.sx, joy.sy, joy.sr)
 
-        -- Кнопка Shot
         local press = atk.press
         local r = atk.r * (1 - press * 0.12)
         local textScale = 1 - press * 0.18
@@ -254,23 +238,19 @@ function controls.draw()
         drawSpacedText("A", -atk.r, -16 * scale, atk.r * 2, "center", font, nil, textAlpha)
         love.graphics.pop()
 
-        -- Кнопка способности (с тенью)
         if abilityAvailable then
             local abPress = ability.press
             local abR = ability.r * (1 - abPress * 0.12)
 
-            -- ★ ТЕНЬ КНОПКИ
             love.graphics.setColor(0, 0, 0, 0.3)
             love.graphics.circle("fill", ability.x + 4 * scale, ability.y + 6 * scale, abR)
 
-            -- Основная кнопка
             love.graphics.setColor(0.8, 0.2, 0.9, 1)
             love.graphics.circle("fill", ability.x, ability.y, abR)
             love.graphics.setColor(0, 0, 0, 1)
             love.graphics.setLineWidth(3.8 * scale)
             love.graphics.circle("line", ability.x, ability.y, abR)
 
-            -- Текст "C" с тенью
             love.graphics.setFont(font)
             local tw = font:getWidth("C")
             local th = font:getHeight()
@@ -283,10 +263,10 @@ function controls.draw()
         end
     end
 
-    -- Кнопка Back (общая для всех)
-    love.graphics.setColor(0, 0, 0, 0.5)
+    -- Кнопка Back (СИНЯЯ, как в лобби)
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", back.x + 4*scale, back.y + 5*scale, back.w, back.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.35, 0.15, 0.75, 1)
+    love.graphics.setColor(0.2, 0.5, 0.9, 1)
     love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setLineWidth(3.8 * scale)
