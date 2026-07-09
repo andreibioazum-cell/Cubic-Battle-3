@@ -1,3 +1,4 @@
+-- lobby.lua – с реальными снежинками (6 лучей)
 local lobby = {}
 
 local btns = {
@@ -59,17 +60,51 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX, y)
 end
 
--- Генерация синих снежинок (падают вниз с покачиванием)
+-- ============================================================
+--  РЕАЛЬНЫЕ СНЕЖИНКИ (6 лучей)
+-- ============================================================
+local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
+    size = size or 3
+    alpha = alpha or 1
+    rotation = rotation or 0
+    twinkle = twinkle or 1
+    
+    love.graphics.setColor(1, 1, 1, alpha * twinkle)
+    love.graphics.push()
+    love.graphics.translate(x, y)
+    love.graphics.rotate(rotation)
+    
+    for i = 0, 5 do
+        local angle = i * math.pi / 3
+        love.graphics.push()
+        love.graphics.rotate(angle)
+        love.graphics.setLineWidth(1)
+        love.graphics.line(0, 0, size * 3, 0)
+        for j = 1, 2 do
+            local pos = j * (size * 1.5)
+            love.graphics.line(pos, -size * 0.8, pos, size * 0.8)
+        end
+        love.graphics.circle("fill", size * 3, 0, size * 0.6)
+        love.graphics.pop()
+    end
+    
+    love.graphics.circle("fill", 0, 0, size * 0.8)
+    love.graphics.pop()
+end
+
 local function generateSnowflakes(w, h)
     snowflakes = {}
-    for i = 1, 120 do
+    for i = 1, 100 do
         table.insert(snowflakes, {
             x = math.random(w),
             y = math.random(h),
-            size = math.random(2, 5),
-            speed = 30 + math.random(70),
+            size = 2 + math.random(4),
+            speed = 20 + math.random(60),
             wobble = math.random() * 2 - 1,
-            phase = math.random() * 2 * math.pi
+            phase = math.random() * 2 * math.pi,
+            rotSpeed = (math.random() - 0.5) * 1.5,
+            rotation = math.random() * 2 * math.pi,
+            alpha = 0.6 + math.random() * 0.4,
         })
     end
 end
@@ -78,7 +113,6 @@ function lobby.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    -- Загружаем фоновую картинку
     backgroundImage = love.graphics.newImage("Lobby_Snow.png")
 
     local titleSize = math.max(36, 72 * scale)
@@ -110,26 +144,25 @@ function lobby.update(dt)
     for _, s in ipairs(snowflakes) do
         s.y = s.y + s.speed * dt
         s.x = s.x + math.sin(s.phase + love.timer.getTime() * 0.5) * 20 * dt
-        if s.y > h + 10 then
-            s.y = -10
+        s.rotation = s.rotation + s.rotSpeed * dt
+        if s.y > h + 20 then
+            s.y = -20
             s.x = math.random(w)
+            s.rotation = math.random() * 2 * math.pi
         end
     end
 end
 
 function lobby.draw()
-    -- Фон – картинка, растянутая на весь экран
     if backgroundImage then
         local w, h = love.graphics.getDimensions()
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.draw(backgroundImage, 0, 0, 0, w / backgroundImage:getWidth(), h / backgroundImage:getHeight())
     end
 
-    -- Синие снежинки (крупные, с прозрачностью)
     for _, s in ipairs(snowflakes) do
-        local alpha = 0.4 + 0.6 * (1 - s.y / love.graphics.getHeight())
-        love.graphics.setColor(0.5, 0.8, 1.0, alpha)
-        love.graphics.circle("fill", s.x, s.y, s.size)
+        local twinkle = 0.7 + 0.3 * math.sin(s.phase + love.timer.getTime() * 1.5)
+        drawRealSnowflake(s.x, s.y, s.size, s.alpha, s.rotation, twinkle)
     end
 
     local w = love.graphics.getWidth()
@@ -138,24 +171,16 @@ function lobby.draw()
     drawSpacedText("Cubic Battle", 0, love.graphics.getHeight()/2 - 180*scale, w, "center", fontTitle)
     drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 80*scale, w, "center", fontSub)
 
-    -- Кнопки (синие, с чёрной обводкой)
     for name, btn in pairs(btns) do
         local label = name:gsub("^%l", string.upper)
 
-        -- Тень
         love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
         love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
-
-        -- Заливка синяя
         love.graphics.setColor(0.2, 0.5, 0.9, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
-
-        -- ЧЁРНАЯ ОБВОДКА
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.setLineWidth(3.8 * scale)
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
-
-        -- Текст
         drawSpacedText(label, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn)
     end
 end
