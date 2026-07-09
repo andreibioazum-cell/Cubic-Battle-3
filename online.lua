@@ -1,4 +1,4 @@
--- online.lua – БЕЗ JAVA, только Lua (работает на ПК и Android)
+-- online.lua – финальная версия (ПК: socket.http, Android: https)
 local online = {}
 
 local PATH = "players/"
@@ -18,15 +18,40 @@ local debugText = "Waiting..."
 local retryCount = 0
 local maxRetries = 3
 
+local isAndroid = (love.system.getOS() == "Android")
+
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ ЧЕРЕЗ socket.http
+--  ОТПРАВКА ЗАПРОСОВ (Адаптивно)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json"
+    local request_body = body or ""
+    
+    -- На Android используем встроенный https
+    if isAndroid then
+        local https = require("https")
+        local options = {
+            method = method,
+            headers = { ["Content-Type"] = "application/json" },
+            data = request_body,
+            timeout = 5,
+            verify = false,
+        }
+        local success, code, response = pcall(https.request, url, options)
+        if success and code and code >= 200 and code < 300 then
+            if callback then callback(true, response) end
+            return response
+        else
+            if callback then callback(false, "HTTPS " .. tostring(code)) end
+            return nil
+        end
+    end
+    
+    -- На ПК используем socket.http (с fallback на HTTP)
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     
-    -- Пробуем HTTPS
-    local url = DB_URL .. path .. ".json"
+    -- Сначала пробуем HTTPS
     local response_table = {}
     local res, code, headers = http.request{
         url = url,
@@ -76,12 +101,12 @@ end
 -- ============================================================
 local function sendRequestWithRetry(method, path, body, callback, attempt)
     attempt = attempt or 0
-    local result = sendRequest(method, path, body, function(success, data)
+    sendRequest(method, path, body, function(success, data)
         if success then
             if callback then callback(true, data) end
         else
             if attempt < maxRetries then
-                setDebug("Retry " .. (attempt + 1) .. "/" .. maxRetries .. " for " .. path)
+                setDebug("Retry " .. (attempt + 1) .. "/" .. maxRetries)
                 love.timer.sleep(0.5)
                 sendRequestWithRetry(method, path, body, callback, attempt + 1)
             else
@@ -118,7 +143,7 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready (no Java)")
+    setDebug("Online ready, platform: " .. (isAndroid and "Android (https)" or "PC (socket.http)"))
 end
 
 function online.createRoom(roomCode, nickname, callback)
@@ -144,7 +169,7 @@ function online.createRoom(roomCode, nickname, callback)
             setDebug("Room created: " .. roomCode)
             if callback then callback(true) end
         else
-            setDebug("Failed to create room: " .. response)
+            setDebug("Failed: " .. response)
             if callback then callback(false, response) end
         end
     end)
@@ -175,7 +200,7 @@ function online.joinRoom(roomCode, nickname, callback)
             setDebug("Joined room: " .. roomCode)
             if callback then callback(true) end
         else
-            setDebug("Failed to join room: " .. response)
+            setDebug("Failed: " .. response)
             if callback then callback(false, response) end
         end
     end)
@@ -192,7 +217,7 @@ function online.sendPosition(x, y)
         if success then
             setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
         else
-            setDebug("Failed to send: " .. response)
+            setDebug("Send failed: " .. response)
         end
     end)
 end
@@ -228,7 +253,7 @@ function online.fetchPlayers()
                 setDebug("Invalid JSON")
             end
         else
-            setDebug("Failed to fetch: " .. response)
+            setDebug("Fetch failed: " .. response)
         end
     end)
 end
