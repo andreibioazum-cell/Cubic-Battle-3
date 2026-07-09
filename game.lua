@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль с поддержкой онлайна и скинов
+-- game.lua – полный игровой модуль с поддержкой онлайна, скинов и снегом
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -39,6 +39,82 @@ local DASH_DURATION = 0.2
 local DASH_SPEED_MULT = 4
 local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
+
+-- ============================================================
+--  РЕАЛЬНЫЕ СНЕЖИНКИ (6 лучей)
+-- ============================================================
+local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
+    size = size or 3
+    alpha = alpha or 1
+    rotation = rotation or 0
+    twinkle = twinkle or 1
+    
+    love.graphics.setColor(1, 1, 1, alpha * twinkle)
+    love.graphics.push()
+    love.graphics.translate(x, y)
+    love.graphics.rotate(rotation)
+    
+    for i = 0, 5 do
+        local angle = i * math.pi / 3
+        love.graphics.push()
+        love.graphics.rotate(angle)
+        love.graphics.setLineWidth(1)
+        love.graphics.line(0, 0, size * 3, 0)
+        for j = 1, 2 do
+            local pos = j * (size * 1.5)
+            love.graphics.line(pos, -size * 0.8, pos, size * 0.8)
+        end
+        love.graphics.circle("fill", size * 3, 0, size * 0.6)
+        love.graphics.pop()
+    end
+    
+    love.graphics.circle("fill", 0, 0, size * 0.8)
+    love.graphics.pop()
+end
+
+local snowflakes = {}
+local function initSnow()
+    local w, h = love.graphics.getDimensions()
+    snowflakes = {}
+    for i = 1, 150 do
+        table.insert(snowflakes, {
+            x = math.random(0, w),
+            y = math.random(-h, 0),
+            size = 2 + math.random(4),
+            speed = 20 + math.random(60),
+            wobble = math.random() * 2 - 1,
+            phase = math.random() * 2 * math.pi,
+            rotSpeed = (math.random() - 0.5) * 1.5,
+            rotation = math.random() * 2 * math.pi,
+            alpha = 0.6 + math.random() * 0.4,
+        })
+    end
+end
+
+local function updateSnow(dt)
+    local w, h = love.graphics.getDimensions()
+    for _, f in ipairs(snowflakes) do
+        f.y = f.y + f.speed * dt
+        f.x = f.x + math.sin(f.phase + love.timer.getTime() * 0.4 + f.wobble) * 25 * dt
+        f.rotation = f.rotation + f.rotSpeed * dt
+        if f.y > h + 20 then
+            f.y = -20
+            f.x = math.random(0, w)
+            f.rotation = math.random() * 2 * math.pi
+        end
+        if f.x > w + 20 then f.x = -20 end
+        if f.x < -20 then f.x = w + 20 end
+    end
+end
+
+local function drawSnow()
+    for _, f in ipairs(snowflakes) do
+        local twinkle = 0.7 + 0.3 * math.sin(f.phase + love.timer.getTime() * 1.2)
+        drawRealSnowflake(f.x, f.y, f.size, f.alpha, f.rotation, twinkle)
+    end
+end
+
+-- ============================================================
 
 local function spawnBullet(x, y, dx, dy)
     table.insert(bullets, {
@@ -160,7 +236,7 @@ function game.load()
     bullets = {}
     cam.x, cam.y = -love.graphics.getWidth() / 2, -love.graphics.getHeight() / 2
 
-    bg = bg or love.graphics.newImage("grass.png")
+    bg = bg or love.graphics.newImage("snow.png")
     bg:setWrap("repeat", "repeat")
     playerImg = playerImg or love.graphics.newImage("player.png")
     playerImg:setFilter("nearest", "nearest")
@@ -174,10 +250,12 @@ function game.load()
 
     controls.load()
     enemy.load()
+    initSnow()
 end
 
 function game.resize()
     controls.resize()
+    initSnow()
 end
 
 function game.update(dt)
@@ -301,6 +379,8 @@ function game.update(dt)
             end
         end
     end
+
+    updateSnow(dt)
 end
 
 function game.draw()
@@ -317,6 +397,8 @@ function game.draw()
             love.graphics.draw(bg, x, y)
         end
     end
+
+    drawSnow()
 
     for _, b in ipairs(bullets) do
         if b.isDash then
@@ -471,9 +553,7 @@ function game.draw()
     end
 
     controls.draw()
-end
-
-function game.touchpressed(id, x, y)
+endfunction game.touchpressed(id, x, y)
     controls.touchpressed(id, x, y)
 end
 
