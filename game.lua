@@ -1,4 +1,4 @@
--- game.lua – полный (снег идёт за камерой, клонируется)
+-- game.lua – полный игровой модуль с поддержкой онлайна, скинов и снегом
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -76,7 +76,7 @@ local snowflakes = {}
 local function initSnow()
     local w, h = love.graphics.getDimensions()
     snowflakes = {}
-    for i = 1, 250 do
+    for i = 1, 200 do
         table.insert(snowflakes, {
             x = math.random(-w/2, w/2),
             y = math.random(-h/2, h/2),
@@ -235,7 +235,10 @@ function game.load()
     dashTimer = 0
     isDashing = false
 
-    cube.x, cube.y = 0, 0
+    -- Игрок в центре экрана
+    local w, h = love.graphics.getDimensions()
+    cube.x = w / 2
+    cube.y = h / 2
     cube.angle = 0
     cube.hp = PLAYER_HP_MAX
     cube.hit = 0
