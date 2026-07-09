@@ -553,7 +553,9 @@ function game.draw()
     end
 
     controls.draw()
-endfunction game.touchpressed(id, x, y)
+end
+
+function game.touchpressed(id, x, y)
     controls.touchpressed(id, x, y)
 end
 
