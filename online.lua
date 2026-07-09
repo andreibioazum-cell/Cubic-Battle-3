@@ -1,8 +1,8 @@
--- online.lua – работает на ПК и Android
+-- online.lua – работает на ПК (HTTP) и Android (JNI)
 local online = {}
 
 local PATH = "players/"
-local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
 
 local myUid = nil
 local myNickname = nil
@@ -31,62 +31,35 @@ if isAndroid then
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (HTTPS → socket.http fallback)
+--  ОТПРАВКА ЗАПРОСОВ (JNI на Android, HTTP на ПК)
 -- ============================================================
 local function sendRequest(method, path, body)
-    -- На Android используем JNI
     if isAndroid and ffi then
         local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
         return ffi.string(result)
-    end
-    
-    -- На ПК пробуем https
-    local url = DB_URL .. path .. ".json"
-    local request_body = body or ""
-    
-    -- Пробуем модуль https (если есть)
-    local hasHttps, https = pcall(require, "https")
-    if hasHttps then
-        local options = {
+    else
+        local http = require("socket.http")
+        local ltn12 = require("ltn12")
+        local url = DB_URL .. path .. ".json"
+        
+        local response_table = {}
+        local res, code, headers = http.request{
+            url = url,
             method = method,
             headers = {
                 ["Content-Type"] = "application/json",
             },
-            data = request_body,
+            source = body and ltn12.source.string(body) or nil,
+            sink = ltn12.sink.table(response_table),
             timeout = 10,
-            verify = false,
         }
-        local success, code, response = pcall(https.request, url, options)
-        if success and code and code >= 200 and code < 300 then
-            return response
+        
+        local codeNum = tonumber(code)
+        if codeNum and codeNum >= 200 and codeNum < 300 then
+            return table.concat(response_table)
         else
-            return "{\"error\":\"HTTPS failed: " .. tostring(code) .. "\"}"
+            return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
         end
-    end
-    
-    -- Fallback на socket.http (с SSL)
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
-    local ssl = require("ssl.https")
-    
-    local response_table = {}
-    local res, code, headers = ssl.request{
-        url = url,
-        method = method,
-        headers = {
-            ["Content-Type"] = "application/json",
-            ["Host"] = "cubic-battle-3-default-rtdb.firebaseio.com",
-        },
-        source = body and ltn12.source.string(body) or nil,
-        sink = ltn12.sink.table(response_table),
-        timeout = 10,
-    }
-    
-    local codeNum = tonumber(code)
-    if codeNum and codeNum >= 200 and codeNum < 300 then
-        return table.concat(response_table)
-    else
-        return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
     end
 end
 
