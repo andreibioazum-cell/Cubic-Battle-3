@@ -1,8 +1,8 @@
--- online.lua – работает на ПК (HTTP) и Android (JNI)
+-- online.lua – работает на Windows (ssl.https) и Android (JNI)
 local online = {}
 
 local PATH = "players/"
-local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 
 local myUid = nil
 local myNickname = nil
@@ -31,35 +31,40 @@ if isAndroid then
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (JNI на Android, HTTP на ПК)
+--  ОТПРАВКА ЗАПРОСОВ (JNI на Android, ssl.https на Windows)
 -- ============================================================
 local function sendRequest(method, path, body)
+    -- Android: используем JNI
     if isAndroid and ffi then
         local result = ffi.C.Java_com_CB3_FirebaseBridge_sendRequest(method, path, body or "")
         return ffi.string(result)
+    end
+    
+    -- Windows: используем ssl.https (есть в LÖVE 11.5)
+    local https = require("ssl.https")
+    local ltn12 = require("ltn12")
+    local url = DB_URL .. path .. ".json"
+    
+    local response_table = {}
+    local request_body = body or ""
+    
+    local res, code, headers = https.request{
+        url = url,
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json",
+            ["Host"] = "cubic-battle-3-default-rtdb.firebaseio.com",
+        },
+        source = body and ltn12.source.string(body) or nil,
+        sink = ltn12.sink.table(response_table),
+        timeout = 10,
+    }
+    
+    local codeNum = tonumber(code)
+    if codeNum and codeNum >= 200 and codeNum < 300 then
+        return table.concat(response_table)
     else
-        local http = require("socket.http")
-        local ltn12 = require("ltn12")
-        local url = DB_URL .. path .. ".json"
-        
-        local response_table = {}
-        local res, code, headers = http.request{
-            url = url,
-            method = method,
-            headers = {
-                ["Content-Type"] = "application/json",
-            },
-            source = body and ltn12.source.string(body) or nil,
-            sink = ltn12.sink.table(response_table),
-            timeout = 10,
-        }
-        
-        local codeNum = tonumber(code)
-        if codeNum and codeNum >= 200 and codeNum < 300 then
-            return table.concat(response_table)
-        else
-            return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
-        end
+        return "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
     end
 end
 
@@ -90,7 +95,7 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "PC (HTTP)"))
+    setDebug("Online ready, platform: " .. (isAndroid and "Android (JNI)" or "Windows (ssl.https)"))
 end
 
 function online.createRoom(roomCode, nickname, callback)
