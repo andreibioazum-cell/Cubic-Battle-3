@@ -1,4 +1,4 @@
--- online.lua – ПК: ssl.https, Android: https
+-- online.lua – с таймаутом и асинхронными запросами
 local online = {}
 
 local PATH = "players/"
@@ -14,14 +14,15 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.2
-local FETCH_INTERVAL = 0.3
+local SEND_INTERVAL = 0.3
+local FETCH_INTERVAL = 0.4
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
 
 local isAndroid = (love.system.getOS() == "Android")
+local pendingRequests = {}  -- храним активные запросы
 
 local function setDebug(text)
     debugText = text
@@ -58,56 +59,61 @@ function online.init()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: ssl.https, Android: https)
+--  АСИНХРОННАЯ ОТПРАВКА ЗАПРОСОВ (с таймаутом)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json"
+    local options = {
+        method = method,
+        headers = { ["Content-Type"] = "application/json" },
+        data = body or "",
+        timeout = 3,  -- таймаут 3 секунды!
+        verify = false,
+    }
+    
     if isAndroid then
         local https = require("https")
-        local url = DB_URL .. path .. ".json"
-        local options = {
-            method = method,
-            headers = { ["Content-Type"] = "application/json" },
-            data = body or "",
-            timeout = 5,
-            verify = false,
-        }
         local success, code, response = pcall(https.request, url, options)
         if success and code and code >= 200 and code < 300 then
             if callback then callback(true, response) end
-            return response
         else
             local err = "{\"error\":\"HTTPS " .. tostring(code) .. "\"}"
             if callback then callback(false, err) end
-            return err
         end
     else
-        -- ПК: ssl.https (быстро!)
+        -- ПК: ssl.https
         local ssl = require("ssl.https")
         local ltn12 = require("ltn12")
-        local url = DB_URL .. path .. ".json"
-        
         local response_table = {}
-        local res, code, headers = ssl.request{
-            url = url,
-            method = method,
-            headers = {
-                ["Content-Type"] = "application/json",
-            },
-            source = body and ltn12.source.string(body) or nil,
-            sink = ltn12.sink.table(response_table),
-            timeout = 10,
-        }
         
-        local codeNum = tonumber(code)
-        if codeNum and codeNum >= 200 and codeNum < 300 then
-            local result = table.concat(response_table)
-            if callback then callback(true, result) end
-            return result
-        else
-            local err = "{\"error\":\"SSL " .. tostring(code) .. "\"}"
-            if callback then callback(false, err) end
-            return err
-        end
+        -- Запускаем запрос в корутине, чтобы не блокировать игру
+        local co = coroutine.create(function()
+            local res, code, headers = ssl.request{
+                url = url,
+                method = method,
+                headers = {
+                    ["Content-Type"] = "application/json",
+                },
+                source = body and ltn12.source.string(body) or nil,
+                sink = ltn12.sink.table(response_table),
+                timeout = 3,  -- таймаут 3 секунды!
+            }
+            
+            local codeNum = tonumber(code)
+            if codeNum and codeNum >= 200 and codeNum < 300 then
+                local result = table.concat(response_table)
+                if callback then callback(true, result) end
+            else
+                local err = "{\"error\":\"SSL " .. tostring(code) .. "\"}"
+                if callback then callback(false, err) end
+            end
+        end)
+        
+        -- Запускаем корутину (не блокирует игру)
+        coroutine.resume(co)
+        
+        -- Сохраняем корутину для проверки (на случай, если зависнет)
+        table.insert(pendingRequests, co)
     end
 end
 
@@ -240,7 +246,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ (БЕЗ СВОИХ)
+--  ПОЛУЧЕНИЕ ДАННЫХ
 -- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then
@@ -361,6 +367,14 @@ end
 function online.update(dt)
     if not isConnected then
         return
+    end
+
+    -- Очищаем зависшие корутины (если таймаут не сработал)
+    for i = #pendingRequests, 1, -1 do
+        local co = pendingRequests[i]
+        if coroutine.status(co) == "dead" then
+            table.remove(pendingRequests, i)
+        end
     end
 
     local lerpSpeed = 4.5
