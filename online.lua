@@ -129,10 +129,10 @@ local function checkRoomPlayers(roomCode, callback)
     setDebug("Checking players in: " .. path)
     sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" then
-            setDebug("Room players response: " .. response)
+            setDebug("Room players response received")
             if callback then callback(true, response) end
         else
-            setDebug("No players in room: " .. (response or "empty"))
+            setDebug("No players in room")
             if callback then callback(false, response) end
         end
     end)
@@ -335,10 +335,9 @@ function online.fetchPlayers()
     
     sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" then
-            setDebug("Response: " .. response)
             local newPlayers = parsePlayersFromJSON(response)
             local count = 0
-            for uid, info in pairs(newPlayers) do
+            for uid, _ in pairs(newPlayers) do
                 if uid ~= myUid then
                     count = count + 1
                 end
