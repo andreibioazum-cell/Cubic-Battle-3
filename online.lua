@@ -1,4 +1,4 @@
--- online.lua – ПК: socket.http, Android: https
+-- online.lua – ПК: HTTP (без SSL), Android: HTTPS
 local online = {}
 
 local PATH = "players/"
@@ -51,19 +51,21 @@ end
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
     if isAndroid then
-        setDebug("Online ready: Android (https)")
+        setDebug("Online ready: Android (HTTPS)")
     else
-        setDebug("Online ready: PC (socket.http)")
+        setDebug("Online ready: PC (HTTP)")
     end
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
+--  ОТПРАВКА ЗАПРОСОВ
 -- ============================================================
 local function sendRequest(method, path, body, callback)
+    local url
     if isAndroid then
+        -- Android: HTTPS
         local https = require("https")
-        local url = DB_URL .. path .. ".json"
+        url = DB_URL .. path .. ".json"
         local options = {
             method = method,
             headers = { ["Content-Type"] = "application/json" },
@@ -81,34 +83,11 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: socket.http (с SSL)
+        -- ПК: HTTP (без SSL)
         local http = require("socket.http")
         local ltn12 = require("ltn12")
-        local url = DB_URL .. path .. ".json"
+        url = "http://cubic-battle-3-default-rtdb.firebaseio.com/" .. path .. ".json"
         
-        -- Пробуем через ssl.https (если есть)
-        local hasSsl, ssl = pcall(require, "ssl.https")
-        if hasSsl then
-            local response_table = {}
-            local res, code, headers = ssl.request{
-                url = url,
-                method = method,
-                headers = {
-                    ["Content-Type"] = "application/json",
-                },
-                source = body and ltn12.source.string(body) or nil,
-                sink = ltn12.sink.table(response_table),
-                timeout = 10,
-            }
-            local codeNum = tonumber(code)
-            if codeNum and codeNum >= 200 and codeNum < 300 then
-                local result = table.concat(response_table)
-                if callback then callback(true, result) end
-                return result
-            end
-        end
-        
-        -- Fallback на socket.http (без SSL)
         local response_table = {}
         local res, code, headers = http.request{
             url = url,
@@ -120,6 +99,7 @@ local function sendRequest(method, path, body, callback)
             sink = ltn12.sink.table(response_table),
             timeout = 10,
         }
+        
         local codeNum = tonumber(code)
         if codeNum and codeNum >= 200 and codeNum < 300 then
             local result = table.concat(response_table)
