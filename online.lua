@@ -1,4 +1,4 @@
--- online.lua – ПК: curl (оптимизированный), Android: https
+-- online.lua – полный онлайн-модуль (ПК: curl, Android: https)
 local online = {}
 
 local PATH = "players/"
@@ -67,10 +67,8 @@ local function parsePlayersFromJSON(jsonStr)
     end
     
     -- Ищем все вхождения "UID":{"x":число,"y":число,"nickname":"текст","skin":"текст"}
-    -- или просто "UID":{"x":число,"y":число}
     local pattern = '"([%w_%-]+)"%s*:%s*({[^}]*})'
     for uid, data in string.gmatch(jsonStr, pattern) do
-        -- Парсим x и y
         local x = data:match('"x"%s*:%s*([%d%.%-]+)')
         local y = data:match('"y"%s*:%s*([%d%.%-]+)')
         local nickname = data:match('"nickname"%s*:%s*"([^"]*)"')
@@ -113,11 +111,12 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(false, err) end
         end
     else
+        -- ПК: curl
         local url = DB_URL .. path .. ".json"
         local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
             local escapedBody = body:gsub('"', '\\"')
-            curlCmd = curlCmd .. ' -H "Content-Type": "application/json" -d "' .. escapedBody .. '"'
+            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
         end
         curlCmd = curlCmd .. ' 2>&1'
         
@@ -300,8 +299,7 @@ function online.fetchPlayers()
                 players = newPlayers
                 setDebug("Players in room (standard): " .. count)
             else
-                -- Если стандартный парсинг не удался, используем ручной
-                setDebug("Standard parsing failed, using manual parsing...")
+                -- Ручной парсинг
                 local newPlayers = parsePlayersFromJSON(response)
                 local count = 0
                 for uid, info in pairs(newPlayers) do
@@ -309,7 +307,6 @@ function online.fetchPlayers()
                         count = count + 1
                     end
                 end
-                -- Убираем себя из списка
                 if newPlayers[myUid] then
                     newPlayers[myUid] = nil
                 end
@@ -323,7 +320,7 @@ function online.fetchPlayers()
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ (всех)
+--  ПОЛУЧЕНИЕ ВСЕХ ДАННЫХ
 -- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then
