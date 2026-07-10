@@ -1,4 +1,4 @@
--- online.lua – упрощенная работа с Firebase
+-- online.lua – работа с Firebase Realtime Database
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -48,45 +48,42 @@ function online.getMyUid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ
+--  ОТПРАВКА ЗАПРОСОВ (ПРАВИЛЬНАЯ)
 -- ============================================================
 function sendRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json"
+    
+    -- Экранируем кавычки для JSON
+    if body then
+        body = body:gsub('"', '\\"')
+    end
+    
+    local cmd
     if isAndroid then
-        -- Для Android
-        local url = DB_URL .. path .. ".json"
-        local cmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
+        cmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
-            cmd = cmd .. ' -H "Content-Type: application/json" -d \'' .. body .. '\''
-        end
-        cmd = cmd .. ' 2>&1'
-        
-        local handle = io.popen(cmd)
-        local result = handle:read("*a")
-        handle:close()
-        
-        if result and result ~= "" then
-            if callback then callback(true, result) end
-        else
-            if callback then callback(false, "Error") end
+            cmd = cmd .. ' -H "Content-Type: application/json" -d "' .. body .. '"'
         end
     else
-        -- Для PC
-        local url = DB_URL .. path .. ".json"
-        local cmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
+        cmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
-            cmd = cmd .. ' -H "Content-Type: application/json" -d \'' .. body .. '\''
+            cmd = cmd .. ' -H "Content-Type: application/json" -d "' .. body .. '"'
         end
-        cmd = cmd .. ' 2>&1'
-        
-        local handle = io.popen(cmd)
-        local result = handle:read("*a")
-        handle:close()
-        
-        if result and result ~= "" and not result:match("error") then
-            if callback then callback(true, result) end
-        else
-            if callback then callback(false, result or "Error") end
-        end
+    end
+    cmd = cmd .. ' 2>&1'
+    
+    print("[CURL] " .. cmd)
+    
+    local handle = io.popen(cmd)
+    local result = handle:read("*a")
+    handle:close()
+    
+    print("[RESPONSE] " .. tostring(result))
+    
+    if result and result ~= "" and not result:match("error") and not result:match("curl") then
+        if callback then callback(true, result) end
+    else
+        if callback then callback(false, result or "Error") end
     end
 end
 
@@ -115,7 +112,7 @@ function online.writePlayer(callback)
 end
 
 -- ============================================================
---  СОЗДАНИЕ КОМНАТЫ
+--  СОЗДАНИЕ КОМНАТЫ (ИСПРАВЛЕННОЕ)
 -- ============================================================
 function online.createRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
@@ -135,23 +132,26 @@ function online.createRoom(roomCode, nickname, callback)
     
     setDebug("Creating room: " .. roomCode .. " with UID: " .. myUid)
     
-    -- Создаем комнату
+    -- Сначала создаем папку info
     local path = ROOMS_PATH .. roomCode .. "/info"
     local data = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
     
     sendRequest("PUT", path, data, function(success, response)
         if not success then
-            setDebug("Failed to create room")
-            if callback then callback(false, "Failed to create room") end
+            setDebug("Failed to create room info")
+            if callback then callback(false, "Failed to create room: " .. tostring(response)) end
             return
         end
         
-        -- Записываем игрока
+        setDebug("Room info created: " .. roomCode)
+        
+        -- Теперь записываем игрока
         online.writePlayer(function(success2)
             if success2 then
                 setDebug("Room created successfully: " .. roomCode)
                 if callback then callback(true, roomCode) end
             else
+                setDebug("Failed to write player after room creation")
                 if callback then callback(false, "Failed to write player") end
             end
         end)
@@ -159,7 +159,7 @@ function online.createRoom(roomCode, nickname, callback)
 end
 
 -- ============================================================
---  ВХОД В КОМНАТУ
+--  ВХОД В КОМНАТУ (ИСПРАВЛЕННЫЙ)
 -- ============================================================
 function online.joinRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
@@ -184,11 +184,13 @@ function online.joinRoom(roomCode, nickname, callback)
     -- Проверяем существование комнаты
     local path = ROOMS_PATH .. roomCode .. "/info"
     sendRequest("GET", path, nil, function(success, response)
-        if not success or response == "null" then
-            setDebug("Room does not exist")
+        if not success or response == "null" or response == "" then
+            setDebug("Room does not exist: " .. tostring(response))
             if callback then callback(false, "Room not found") end
             return
         end
+        
+        setDebug("Room exists, joining...")
         
         -- Записываем игрока
         online.writePlayer(function(success2)
@@ -196,6 +198,7 @@ function online.joinRoom(roomCode, nickname, callback)
                 setDebug("Joined room successfully: " .. roomCode)
                 if callback then callback(true, roomCode) end
             else
+                setDebug("Failed to write player when joining")
                 if callback then callback(false, "Failed to write player") end
             end
         end)
@@ -235,7 +238,7 @@ function online.fetchPlayers()
     local path = ROOMS_PATH .. myRoomCode .. "/players"
     
     sendRequest("GET", path, nil, function(success, response)
-        if success and response and response ~= "null" then
+        if success and response and response ~= "null" and response ~= "" then
             -- Парсим JSON
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
@@ -264,9 +267,11 @@ function online.fetchPlayers()
                 end
                 
                 setDebug("Players (" .. count .. "): " .. table.concat(names, ", "))
+            else
+                setDebug("Failed to parse JSON: " .. tostring(response))
             end
         else
-            setDebug("No players in room")
+            setDebug("No players in room: " .. tostring(response))
         end
     end)
 end
