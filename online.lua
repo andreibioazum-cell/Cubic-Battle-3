@@ -137,7 +137,7 @@ local function checkRoomPlayers(roomCode, callback)
 end
 
 -- ============================================================
---  ПАРСИНГ JSON
+--  ПАРСИНГ JSON (УЛУЧШЕННЫЙ)
 -- ============================================================
 local function parsePlayersFromJSON(jsonStr)
     local result = {}
@@ -147,7 +147,8 @@ local function parsePlayersFromJSON(jsonStr)
     
     -- Пробуем распарсить через love.data.decode
     local ok, data = pcall(love.data.decode, "string", "json", jsonStr)
-    if ok and data then
+    if ok and type(data) == "table" then
+        print("Successfully parsed JSON with love.data.decode")
         for uid, info in pairs(data) do
             if type(info) == "table" then
                 result[uid] = {
@@ -159,12 +160,14 @@ local function parsePlayersFromJSON(jsonStr)
                     targetY = info.y or 0,
                     lerpTimer = 0
                 }
+                print("Parsed player: " .. uid .. " -> " .. info.nickname)
             end
         end
         return result
     end
     
     -- Если love.data.decode не сработал, парсим вручную
+    print("love.data.decode failed, trying manual parse")
     local pattern = '"([%w_%-]+)"%s*:%s*({[^}]*})'
     for uid, data in string.gmatch(jsonStr, pattern) do
         local x = data:match('"x"%s*:%s*([%d%.%-]+)')
@@ -182,6 +185,7 @@ local function parsePlayersFromJSON(jsonStr)
                 targetY = tonumber(y) or 0,
                 lerpTimer = 0
             }
+            print("Manual parse: " .. uid .. " -> " .. (nickname or "???"))
         end
     end
     return result
@@ -343,7 +347,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ИГРОКОВ
+--  ПОЛУЧЕНИЕ ИГРОКОВ (ОСНОВНАЯ ФУНКЦИЯ)
 -- ============================================================
 function online.fetchPlayers()
     if not isConnected or not myRoomCode then
@@ -355,14 +359,24 @@ function online.fetchPlayers()
     setDebug("Fetching players from: " .. path)
     
     sendRequest("GET", path, nil, function(success, response)
+        print("=========================================")
+        print("RAW RESPONSE FROM FIREBASE:")
+        print(tostring(response))
+        print("RESPONSE TYPE: " .. type(response))
+        print("=========================================")
+        
         if success and response and response ~= "null" then
-            -- Выводим сырой ответ для отладки
-            print("RAW RESPONSE: " .. tostring(response))
-            
+            -- Парсим JSON
             local newPlayers = parsePlayersFromJSON(response)
-            local count = 0
+            
+            -- Выводим всех игроков
+            print("PARSED PLAYERS:")
+            for uid, info in pairs(newPlayers) do
+                print("  " .. uid .. " -> " .. info.nickname .. " (x=" .. info.x .. ", y=" .. info.y .. ")")
+            end
             
             -- Считаем игроков (исключая себя)
+            local count = 0
             for uid, _ in pairs(newPlayers) do
                 if uid ~= myUid then
                     count = count + 1
@@ -371,20 +385,16 @@ function online.fetchPlayers()
             
             -- Удаляем себя из списка
             if newPlayers[myUid] then
+                print("Removing self: " .. myUid)
                 newPlayers[myUid] = nil
             end
             
             players = newPlayers
-            
-            -- Выводим всех игроков для отладки
-            for uid, info in pairs(players) do
-                print("Player: " .. uid .. " -> x=" .. info.x .. ", y=" .. info.y .. ", nick=" .. info.nickname)
-            end
-            
             setDebug("Players in room: " .. count)
         else
             setDebug("Failed to fetch players: " .. tostring(response))
         end
+        print("=========================================")
     end)
 end
 
