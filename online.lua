@@ -81,11 +81,13 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: используем curl (есть на всех Windows)
+        -- ПК: используем curl
         local url = DB_URL .. path .. ".json"
         local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
-            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d \'' .. body .. '\''
+            -- Экранируем кавычки для curl
+            local escapedBody = body:gsub('"', '\\"')
+            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
         end
         curlCmd = curlCmd .. ' 2>&1'
         
@@ -94,7 +96,7 @@ local function sendRequest(method, path, body, callback)
         handle:close()
         
         -- Проверяем, есть ли ошибка
-        if result and not result:match("error") then
+        if result and result ~= "" and not result:match("error") and not result:match("curl") then
             if callback then callback(true, result) end
             return result
         else
