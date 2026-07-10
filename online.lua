@@ -1,4 +1,4 @@
--- online.lua – полный онлайн-модуль (ПК: curl, Android: https)
+-- online.lua – финальный (с принудительной отладкой)
 local online = {}
 
 local PATH = "players/"
@@ -58,35 +58,37 @@ function online.init()
 end
 
 -- ============================================================
---  РУЧНОЙ ПАРСИНГ ИГРОКОВ ИЗ JSON
+--  ПРИНУДИТЕЛЬНАЯ ЗАПИСЬ ИГРОКА (с отладкой)
 -- ============================================================
-local function parsePlayersFromJSON(jsonStr)
-    local result = {}
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then
-        return result
-    end
-    
-    -- Ищем все вхождения "UID":{"x":число,"y":число,"nickname":"текст","skin":"текст"}
-    local pattern = '"([%w_%-]+)"%s*:%s*({[^}]*})'
-    for uid, data in string.gmatch(jsonStr, pattern) do
-        local x = data:match('"x"%s*:%s*([%d%.%-]+)')
-        local y = data:match('"y"%s*:%s*([%d%.%-]+)')
-        local nickname = data:match('"nickname"%s*:%s*"([^"]*)"')
-        local skin = data:match('"skin"%s*:%s*"([^"]*)"')
-        
-        if x and y then
-            result[uid] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                nickname = nickname or "???",
-                skin = skin or "NONE",
-                targetX = tonumber(x) or 0,
-                targetY = tonumber(y) or 0,
-                lerpTimer = 0
-            }
+local function writePlayerToRoom(roomCode, uid, nickname, skin, callback)
+    local path = ROOMS_PATH .. roomCode .. "/players/" .. uid
+    local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. skin .. '"}'
+    setDebug("Writing player to: " .. path)
+    sendRequest("PUT", path, data, function(success, response)
+        if success then
+            setDebug("✅ Player written successfully")
+        else
+            setDebug("❌ Failed to write player: " .. response)
         end
-    end
-    return result
+        if callback then callback(success, response) end
+    end)
+end
+
+-- ============================================================
+--  ПРОВЕРКА, ЕСТЬ ЛИ ИГРОК В КОМНАТЕ
+-- ============================================================
+local function checkRoomPlayers(roomCode, callback)
+    local path = ROOMS_PATH .. roomCode .. "/players"
+    setDebug("Checking players in: " .. path)
+    sendRequest("GET", path, nil, function(success, response)
+        if success and response and response ~= "null" then
+            setDebug("✅ Room players response: " .. response)
+            if callback then callback(true, response) end
+        else
+            setDebug("❌ No players in room: " .. (response or "empty"))
+            if callback then callback(false, response) end
+        end
+    end)
 end
 
 -- ============================================================
@@ -111,7 +113,6 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(false, err) end
         end
     else
-        -- ПК: curl
         local url = DB_URL .. path .. ".json"
         local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
@@ -134,7 +135,38 @@ local function sendRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  КОМНАТЫ
+--  РУЧНОЙ ПАРСИНГ ИГРОКОВ
+-- ============================================================
+local function parsePlayersFromJSON(jsonStr)
+    local result = {}
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then
+        return result
+    end
+    
+    local pattern = '"([%w_%-]+)"%s*:%s*({[^}]*})'
+    for uid, data in string.gmatch(jsonStr, pattern) do
+        local x = data:match('"x"%s*:%s*([%d%.%-]+)')
+        local y = data:match('"y"%s*:%s*([%d%.%-]+)')
+        local nickname = data:match('"nickname"%s*:%s*"([^"]*)"')
+        local skin = data:match('"skin"%s*:%s*"([^"]*)"')
+        
+        if x and y then
+            result[uid] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                nickname = nickname or "???",
+                skin = skin or "NONE",
+                targetX = tonumber(x) or 0,
+                targetY = tonumber(y) or 0,
+                lerpTimer = 0
+            }
+        end
+    end
+    return result
+end
+
+-- ============================================================
+--  КОМНАТЫ С ПРОВЕРКОЙ
 -- ============================================================
 function online.createRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
@@ -151,6 +183,7 @@ function online.createRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
+    -- 1. Создаём комнату
     local roomPath = ROOMS_PATH .. roomCode .. "/info"
     local roomData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
     sendRequest("PUT", roomPath, roomData, function(success, response)
@@ -159,17 +192,27 @@ function online.createRoom(roomCode, nickname, callback)
             if callback then callback(false, response) end
             return
         end
-        local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
-        local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-        sendRequest("PUT", playerPath, playerData, function(success2, response2)
+        
+        -- 2. Записываем игрока
+        writePlayerToRoom(roomCode, myUid, nickname, mySkin, function(success2)
             if success2 then
                 isConnected = true
-                setDebug("Room created: " .. roomCode)
-                online.fetchPlayers()
+                setDebug("✅ Room created: " .. roomCode)
+                -- 3. Проверяем, есть ли игроки в комнате
+                checkRoomPlayers(roomCode, function(ok, data)
+                    if ok and data then
+                        local parsed = parsePlayersFromJSON(data)
+                        local count = 0
+                        for uid, _ in pairs(parsed) do
+                            if uid ~= myUid then count = count + 1 end
+                        end
+                        setDebug("👥 Players in room: " .. count)
+                    end
+                end)
                 if callback then callback(true) end
             else
-                setDebug("Failed to add player: " .. response2)
-                if callback then callback(false, response2) end
+                setDebug("❌ Failed to write player")
+                if callback then callback(false) end
             end
         end)
     end)
@@ -192,24 +235,35 @@ function online.joinRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
+    -- 1. Проверяем, существует ли комната
     local checkPath = ROOMS_PATH .. roomCode .. "/info"
     sendRequest("GET", checkPath, nil, function(success, response)
         if not success or response == "null" then
-            setDebug("Room does not exist")
+            setDebug("❌ Room does not exist")
             if callback then callback(false, "Room not found") end
             return
         end
-        local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
-        local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-        sendRequest("PUT", playerPath, playerData, function(success2, response2)
+        
+        -- 2. Записываем игрока
+        writePlayerToRoom(roomCode, myUid, nickname, mySkin, function(success2)
             if success2 then
                 isConnected = true
-                setDebug("Joined room: " .. roomCode)
-                online.fetchPlayers()
+                setDebug("✅ Joined room: " .. roomCode)
+                -- 3. Проверяем, есть ли игроки в комнате
+                checkRoomPlayers(roomCode, function(ok, data)
+                    if ok and data then
+                        local parsed = parsePlayersFromJSON(data)
+                        local count = 0
+                        for uid, _ in pairs(parsed) do
+                            if uid ~= myUid then count = count + 1 end
+                        end
+                        setDebug("👥 Players in room: " .. count)
+                    end
+                end)
                 if callback then callback(true) end
             else
-                setDebug("Failed to join: " .. response2)
-                if callback then callback(false, response2) end
+                setDebug("❌ Failed to write player")
+                if callback then callback(false) end
             end
         end)
     end)
@@ -273,48 +327,25 @@ function online.fetchPlayers()
     end
     
     local path = ROOMS_PATH .. myRoomCode .. "/players"
-    setDebug("Fetching players from: " .. path)
+    setDebug("📡 Fetching players from: " .. path)
     
     sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" then
-            -- Пробуем стандартный парсинг
-            local ok, data = pcall(love.data.decode, "string", "json", response)
-            if ok and data then
-                local newPlayers = {}
-                local count = 0
-                for uid, info in pairs(data) do
-                    if uid ~= myUid and info.x and info.y then
-                        newPlayers[uid] = {
-                            x = info.x,
-                            y = info.y,
-                            nickname = info.nickname or "???",
-                            skin = info.skin or "NONE",
-                            targetX = info.x,
-                            targetY = info.y,
-                            lerpTimer = 0
-                        }
-                        count = count + 1
-                    end
+            setDebug("📥 Response: " .. response)
+            local newPlayers = parsePlayersFromJSON(response)
+            local count = 0
+            for uid, info in pairs(newPlayers) do
+                if uid ~= myUid then
+                    count = count + 1
                 end
-                players = newPlayers
-                setDebug("Players in room (standard): " .. count)
-            else
-                -- Ручной парсинг
-                local newPlayers = parsePlayersFromJSON(response)
-                local count = 0
-                for uid, info in pairs(newPlayers) do
-                    if uid ~= myUid then
-                        count = count + 1
-                    end
-                end
-                if newPlayers[myUid] then
-                    newPlayers[myUid] = nil
-                end
-                players = newPlayers
-                setDebug("Players in room (manual): " .. count)
             end
+            if newPlayers[myUid] then
+                newPlayers[myUid] = nil
+            end
+            players = newPlayers
+            setDebug("👥 Players in room: " .. count)
         else
-            setDebug("Failed to fetch players: " .. (response or "no response"))
+            setDebug("❌ Failed to fetch players")
         end
     end)
 end
@@ -422,10 +453,9 @@ function online.update(dt)
         return
     end
 
-    local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
-            p.lerpTimer = math.min(1, (p.lerpTimer or 0) + dt * lerpSpeed)
+            p.lerpTimer = math.min(1, (p.lerpTimer or 0) + dt * 4.5)
             local t = p.lerpTimer
             local smooth = t * t * (3 - 2 * t)
             p.x = p.x + (p.targetX - p.x) * smooth
