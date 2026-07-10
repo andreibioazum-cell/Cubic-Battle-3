@@ -15,11 +15,13 @@ local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
 local SEND_INTERVAL = 0.5
-local FETCH_INTERVAL = 0.6
+local FETCH_INTERVAL = 0.5
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
+local initialSpawnX = 400
+local initialSpawnY = 300
 
 local isAndroid = (love.system.getOS() == "Android")
 
@@ -101,17 +103,16 @@ function sendRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  ЗАПИСЬ ИГРОКА В КОМНАТУ
+--  ЗАПИСЬ ИГРОКА В КОМНАТУ (СПАВН В ЦЕНТРЕ)
 -- ============================================================
 local function writePlayerToRoom(roomCode, uid, nickname, skin, callback)
     local path = ROOMS_PATH .. roomCode .. "/players/" .. uid
-    local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. skin .. '"}'
+    -- Все игроки спавнятся в центре
+    local data = '{"x":' .. initialSpawnX .. ',"y":' .. initialSpawnY .. ',"nickname":"' .. nickname .. '","skin":"' .. skin .. '"}'
     setDebug("Writing player to: " .. path)
-    setDebug("Data: " .. data)
     sendRequest("PUT", path, data, function(success, response)
         if success then
             setDebug("Player written successfully")
-            setDebug("Response: " .. tostring(response))
         else
             setDebug("Failed to write player: " .. tostring(response))
         end
@@ -120,24 +121,7 @@ local function writePlayerToRoom(roomCode, uid, nickname, skin, callback)
 end
 
 -- ============================================================
---  ПРОВЕРКА ИГРОКОВ В КОМНАТЕ
--- ============================================================
-local function checkRoomPlayers(roomCode, callback)
-    local path = ROOMS_PATH .. roomCode .. "/players"
-    setDebug("Checking players in: " .. path)
-    sendRequest("GET", path, nil, function(success, response)
-        if success and response and response ~= "null" then
-            setDebug("Room players response: " .. tostring(response))
-            if callback then callback(true, response) end
-        else
-            setDebug("No players in room: " .. tostring(response))
-            if callback then callback(false, response) end
-        end
-    end)
-end
-
--- ============================================================
---  ПАРСИНГ JSON (УЛУЧШЕННЫЙ)
+--  ПАРСИНГ JSON
 -- ============================================================
 local function parsePlayersFromJSON(jsonStr)
     local result = {}
@@ -145,10 +129,8 @@ local function parsePlayersFromJSON(jsonStr)
         return result
     end
     
-    -- Пробуем распарсить через love.data.decode
     local ok, data = pcall(love.data.decode, "string", "json", jsonStr)
     if ok and type(data) == "table" then
-        print("Successfully parsed JSON with love.data.decode")
         for uid, info in pairs(data) do
             if type(info) == "table" then
                 result[uid] = {
@@ -160,14 +142,12 @@ local function parsePlayersFromJSON(jsonStr)
                     targetY = info.y or 0,
                     lerpTimer = 0
                 }
-                print("Parsed player: " .. uid .. " -> " .. info.nickname)
             end
         end
         return result
     end
     
-    -- Если love.data.decode не сработал, парсим вручную
-    print("love.data.decode failed, trying manual parse")
+    -- Ручной парсинг если love.data.decode не сработал
     local pattern = '"([%w_%-]+)"%s*:%s*({[^}]*})'
     for uid, data in string.gmatch(jsonStr, pattern) do
         local x = data:match('"x"%s*:%s*([%d%.%-]+)')
@@ -185,7 +165,6 @@ local function parsePlayersFromJSON(jsonStr)
                 targetY = tonumber(y) or 0,
                 lerpTimer = 0
             }
-            print("Manual parse: " .. uid .. " -> " .. (nickname or "???"))
         end
     end
     return result
@@ -224,17 +203,6 @@ function online.createRoom(roomCode, nickname, callback)
             if success2 then
                 isConnected = true
                 setDebug("Room created: " .. roomCode)
-                -- Проверяем игроков
-                checkRoomPlayers(roomCode, function(ok, data)
-                    if ok and data then
-                        local parsed = parsePlayersFromJSON(data)
-                        local count = 0
-                        for uid, _ in pairs(parsed) do
-                            if uid ~= myUid then count = count + 1 end
-                        end
-                        setDebug("Players in room: " .. count)
-                    end
-                end)
                 if callback then callback(true) end
             else
                 setDebug("Failed to write player")
@@ -278,17 +246,6 @@ function online.joinRoom(roomCode, nickname, callback)
             if success2 then
                 isConnected = true
                 setDebug("Joined room: " .. roomCode)
-                -- Проверяем игроков
-                checkRoomPlayers(roomCode, function(ok, data)
-                    if ok and data then
-                        local parsed = parsePlayersFromJSON(data)
-                        local count = 0
-                        for uid, _ in pairs(parsed) do
-                            if uid ~= myUid then count = count + 1 end
-                        end
-                        setDebug("Players in room: " .. count)
-                    end
-                end)
                 if callback then callback(true) end
             else
                 setDebug("Failed to write player")
@@ -347,54 +304,39 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ИГРОКОВ (ОСНОВНАЯ ФУНКЦИЯ)
+--  ПОЛУЧЕНИЕ ИГРОКОВ (ПОСТОЯННАЯ ПРОВЕРКА КАЖДЫЕ 0.5 СЕК)
 -- ============================================================
 function online.fetchPlayers()
     if not isConnected or not myRoomCode then
-        setDebug("Cannot fetch: not connected or no room")
         return
     end
     
     local path = ROOMS_PATH .. myRoomCode .. "/players"
-    setDebug("Fetching players from: " .. path)
     
     sendRequest("GET", path, nil, function(success, response)
-        print("=========================================")
-        print("RAW RESPONSE FROM FIREBASE:")
-        print(tostring(response))
-        print("RESPONSE TYPE: " .. type(response))
-        print("=========================================")
-        
         if success and response and response ~= "null" then
-            -- Парсим JSON
             local newPlayers = parsePlayersFromJSON(response)
             
-            -- Выводим всех игроков
-            print("PARSED PLAYERS:")
-            for uid, info in pairs(newPlayers) do
-                print("  " .. uid .. " -> " .. info.nickname .. " (x=" .. info.x .. ", y=" .. info.y .. ")")
+            -- НЕ УДАЛЯЕМ СЕБЯ! Сохраняем всех игроков
+            players = newPlayers
+            
+            -- Выводим количество игроков (включая себя)
+            local count = 0
+            for _ in pairs(players) do
+                count = count + 1
             end
             
-            -- Считаем игроков (исключая себя)
-            local count = 0
-            for uid, _ in pairs(newPlayers) do
-                if uid ~= myUid then
-                    count = count + 1
+            -- Показываем всех игроков в отладке
+            local names = {}
+            for uid, info in pairs(players) do
+                if uid == myUid then
+                    table.insert(names, info.nickname .. " (me)")
+                else
+                    table.insert(names, info.nickname)
                 end
             end
-            
-            -- Удаляем себя из списка
-            if newPlayers[myUid] then
-                print("Removing self: " .. myUid)
-                newPlayers[myUid] = nil
-            end
-            
-            players = newPlayers
-            setDebug("Players in room: " .. count)
-        else
-            setDebug("Failed to fetch players: " .. tostring(response))
+            setDebug("Players in room (" .. count .. "): " .. table.concat(names, ", "))
         end
-        print("=========================================")
     end)
 end
 
@@ -514,7 +456,7 @@ function online.update(dt)
         end
     end
 
-    -- Отправка позиции
+    -- Отправка позиции (каждые 0.5 сек)
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -526,7 +468,7 @@ function online.update(dt)
         end
     end
 
-    -- Получение данных
+    -- Получение данных (каждые 0.5 сек)
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
