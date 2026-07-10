@@ -228,7 +228,7 @@ function game.load()
         cube.speed = 260
     else
         enemy.reset()
-        cube.speed = 420  -- ⬆ скорость в онлайне (260 + 160)
+        cube.speed = 420
     end
 
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
