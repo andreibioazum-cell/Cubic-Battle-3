@@ -1,4 +1,4 @@
--- online.lua – ПК: curl, Android: https
+-- online.lua – ПК: love.network, Android: https
 local online = {}
 
 local PATH = "players/"
@@ -53,12 +53,12 @@ function online.init()
     if isAndroid then
         setDebug("Online ready: Android (https)")
     else
-        setDebug("Online ready: PC (curl)")
+        setDebug("Online ready: PC (love.network)")
     end
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (Android: https, ПК: curl)
+--  ОТПРАВКА ЗАПРОСОВ (Android: https, ПК: love.network)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     if isAndroid then
@@ -81,26 +81,27 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: используем curl
+        -- ПК: love.network (асинхронный, быстрый)
         local url = DB_URL .. path .. ".json"
-        local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
-        if body and body ~= "" then
-            -- Экранируем кавычки для curl
-            local escapedBody = body:gsub('"', '\\"')
-            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
-        end
-        curlCmd = curlCmd .. ' 2>&1'
+        local req = love.network.newHTTPRequest(method, url, {
+            ["Content-Type"] = "application/json"
+        }, body or "")
         
-        local handle = io.popen(curlCmd)
-        local result = handle:read("*a")
-        handle:close()
-        
-        -- Проверяем, есть ли ошибка
-        if result and result ~= "" and not result:match("error") and not result:match("curl") then
-            if callback then callback(true, result) end
-            return result
+        req:send()
+        local response = req:getResponse()
+        if response then
+            local status = response:getStatus()
+            local responseBody = response:getBody()
+            if status >= 200 and status < 300 then
+                if callback then callback(true, responseBody) end
+                return responseBody
+            else
+                local err = "{\"error\":\"HTTP " .. status .. "\"}"
+                if callback then callback(false, err) end
+                return err
+            end
         else
-            local err = "{\"error\":\"curl " .. (result or "failed") .. "\"}"
+            local err = "{\"error\":\"No response\"}"
             if callback then callback(false, err) end
             return err
         end
