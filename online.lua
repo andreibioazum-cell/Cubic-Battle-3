@@ -1,7 +1,8 @@
--- online.lua – полный онлайн (ПК + Android)
+-- online.lua – исправленная (комнаты + позиция)
 local online = {}
 
 local PATH = "players/"
+local ROOMS_PATH = "rooms/"
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 
 local myUid = nil
@@ -48,6 +49,9 @@ function online.init()
     setDebug("Online ready")
 end
 
+-- ============================================================
+--  СОЗДАНИЕ КОМНАТЫ
+-- ============================================================
 function online.createRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
         setDebug("Nickname required")
@@ -63,27 +67,47 @@ function online.createRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    local url = DB_URL .. PATH .. myUid .. ".json"
-    local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local options = {
+    -- 1. Создаём комнату
+    local roomUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/info.json"
+    local roomData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
+    local roomOptions = {
         method = "PUT",
         headers = { ["Content-Type"] = "application/json" },
-        data = data,
+        data = roomData,
         timeout = 5,
         verify = false,
     }
-    
-    local success, code, body = pcall(https.request, url, options)
-    if success and code and code >= 200 and code < 300 then
+    local success, code, body = pcall(https.request, roomUrl, roomOptions)
+    if not (success and code and code >= 200 and code < 300) then
+        setDebug("Failed to create room: " .. tostring(code))
+        if callback then callback(false, tostring(code)) end
+        return
+    end
+
+    -- 2. Добавляем игрока в комнату
+    local playerUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/players/" .. myUid .. ".json"
+    local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
+    local playerOptions = {
+        method = "PUT",
+        headers = { ["Content-Type"] = "application/json" },
+        data = playerData,
+        timeout = 5,
+        verify = false,
+    }
+    local success2, code2, body2 = pcall(https.request, playerUrl, playerOptions)
+    if success2 and code2 and code2 >= 200 and code2 < 300 then
         isConnected = true
         setDebug("Room created: " .. roomCode)
         if callback then callback(true) end
     else
-        setDebug("Failed to create room: " .. tostring(code) .. " " .. tostring(body))
-        if callback then callback(false, tostring(code)) end
+        setDebug("Failed to add player to room: " .. tostring(code2))
+        if callback then callback(false, tostring(code2)) end
     end
 end
 
+-- ============================================================
+--  ПРИСОЕДИНЕНИЕ К КОМНАТЕ
+-- ============================================================
 function online.joinRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
         setDebug("Nickname required")
@@ -101,33 +125,50 @@ function online.joinRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    local url = DB_URL .. PATH .. myUid .. ".json"
-    local data = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local options = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = data,
+    -- Проверяем, существует ли комната
+    local checkUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/info.json"
+    local checkOptions = {
+        method = "GET",
         timeout = 5,
         verify = false,
     }
-    
-    local success, code, body = pcall(https.request, url, options)
-    if success and code and code >= 200 and code < 300 then
+    local success, code, body = pcall(https.request, checkUrl, checkOptions)
+    if not (success and code and code == 200) then
+        setDebug("Room does not exist: " .. roomCode)
+        if callback then callback(false, "Room not found") end
+        return
+    end
+
+    -- Добавляем игрока в комнату
+    local playerUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/players/" .. myUid .. ".json"
+    local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
+    local playerOptions = {
+        method = "PUT",
+        headers = { ["Content-Type"] = "application/json" },
+        data = playerData,
+        timeout = 5,
+        verify = false,
+    }
+    local success2, code2, body2 = pcall(https.request, playerUrl, playerOptions)
+    if success2 and code2 and code2 >= 200 and code2 < 300 then
         isConnected = true
         setDebug("Joined room: " .. roomCode)
         if callback then callback(true) end
     else
-        setDebug("Failed to join room: " .. tostring(code) .. " " .. tostring(body))
-        if callback then callback(false, tostring(code)) end
+        setDebug("Failed to join room: " .. tostring(code2))
+        if callback then callback(false, tostring(code2)) end
     end
 end
 
+-- ============================================================
+--  ОТПРАВКА ПОЗИЦИИ
+-- ============================================================
 function online.sendPosition(x, y)
-    if not isConnected or not myUid then
-        setDebug("Not connected or no UID")
+    if not isConnected or not myUid or not myRoomCode then
+        setDebug("Not connected or no room")
         return
     end
-    local url = DB_URL .. PATH .. myUid .. ".json"
+    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. ".json"
     local data = '{"x":' .. math.floor(x) .. ',"y":' .. math.floor(y) .. ',"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
     local options = {
         method = "PUT",
@@ -136,27 +177,28 @@ function online.sendPosition(x, y)
         timeout = 5,
         verify = false,
     }
-    
     local success, code, body = pcall(https.request, url, options)
     if success and code and code >= 200 and code < 300 then
         setDebug("Sent: " .. math.floor(x) .. "," .. math.floor(y))
     else
-        setDebug("Failed to send: " .. tostring(code) .. " " .. tostring(body))
+        setDebug("Failed to send: " .. tostring(code))
     end
 end
 
+-- ============================================================
+--  ПОЛУЧЕНИЕ ИГРОКОВ В КОМНАТЕ
+-- ============================================================
 function online.fetchPlayers()
-    if not isConnected then
-        setDebug("Not connected")
+    if not isConnected or not myRoomCode then
+        setDebug("Not connected or no room")
         return
     end
-    local url = DB_URL .. PATH .. ".json"
+    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players.json"
     local options = {
         method = "GET",
         timeout = 5,
         verify = false,
     }
-    
     local success, code, body = pcall(https.request, url, options)
     if success and code and code >= 200 and code < 300 then
         local ok, data = pcall(love.data.decode, "string", "json", body)
@@ -183,7 +225,7 @@ function online.fetchPlayers()
             setDebug("Invalid JSON")
         end
     else
-        setDebug("Failed to fetch: " .. tostring(code) .. " " .. tostring(body))
+        setDebug("Failed to fetch: " .. tostring(code))
     end
 end
 
@@ -192,12 +234,12 @@ function online.getPlayers()
 end
 
 function online.updateSkin(skin)
-    if not isConnected or not myUid then
+    if not isConnected or not myUid or not myRoomCode then
         setDebug("Not connected")
         return
     end
     mySkin = skin
-    local url = DB_URL .. PATH .. myUid .. "/skin.json"
+    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. "/skin.json"
     local data = '"' .. skin .. '"'
     local options = {
         method = "PUT",
@@ -206,12 +248,11 @@ function online.updateSkin(skin)
         timeout = 5,
         verify = false,
     }
-    
     local success, code, body = pcall(https.request, url, options)
     if success and code and code >= 200 and code < 300 then
         setDebug("Skin updated: " .. skin)
     else
-        setDebug("Skin update failed: " .. tostring(code) .. " " .. tostring(body))
+        setDebug("Skin update failed: " .. tostring(code))
     end
 end
 
@@ -220,19 +261,18 @@ function online.getMySkin()
 end
 
 function online.leave()
-    if not isConnected or not myUid then return end
-    local url = DB_URL .. PATH .. myUid .. ".json"
+    if not isConnected or not myUid or not myRoomCode then return end
+    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. ".json"
     local options = {
         method = "DELETE",
         timeout = 5,
         verify = false,
     }
-    
     local success, code, body = pcall(https.request, url, options)
     if success and code and code >= 200 and code < 300 then
         setDebug("Left room")
     else
-        setDebug("Leave failed: " .. tostring(code) .. " " .. tostring(body))
+        setDebug("Leave failed: " .. tostring(code))
     end
     isConnected = false
     players = {}
@@ -246,6 +286,7 @@ function online.update(dt)
         return
     end
 
+    -- Интерполяция
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
