@@ -58,6 +58,53 @@ function online.init()
 end
 
 -- ============================================================
+--  ОТПРАВКА ЗАПРОСОВ (ПК: curl, Android: https)
+--  ВАЖНО: функция объявлена как ГЛОБАЛЬНАЯ (без local)
+-- ============================================================
+function sendRequest(method, path, body, callback)
+    if isAndroid then
+        -- Android: используем HTTPS
+        local https = require("https")
+        local url = DB_URL .. path .. ".json"
+        local options = {
+            method = method,
+            headers = { ["Content-Type"] = "application/json" },
+            data = body or "",
+            timeout = 5,
+            verify = false,
+        }
+        local success, code, response = pcall(https.request, url, options)
+        if success and code and code >= 200 and code < 300 then
+            if callback then callback(true, response) end
+        else
+            local err = "{\"error\":\"HTTPS " .. tostring(code) .. "\"}"
+            if callback then callback(false, err) end
+        end
+    else
+        -- PC: используем curl
+        local url = DB_URL .. path .. ".json"
+        local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
+        if body and body ~= "" then
+            -- Экранируем кавычки для curl
+            local escapedBody = body:gsub('"', '\\"')
+            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
+        end
+        curlCmd = curlCmd .. ' 2>&1'
+        
+        local handle = io.popen(curlCmd)
+        local result = handle:read("*a")
+        handle:close()
+        
+        if result and result ~= "" and not result:match("error") and not result:match("curl") then
+            if callback then callback(true, result) end
+        else
+            local err = "{\"error\":\"curl " .. (result or "failed") .. "\"}"
+            if callback then callback(false, err) end
+        end
+    end
+end
+
+-- ============================================================
 --  ПРИНУДИТЕЛЬНАЯ ЗАПИСЬ ИГРОКА (с отладкой)
 -- ============================================================
 local function writePlayerToRoom(roomCode, uid, nickname, skin, callback)
@@ -89,49 +136,6 @@ local function checkRoomPlayers(roomCode, callback)
             if callback then callback(false, response) end
         end
     end)
-end
-
--- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: curl, Android: https)
--- ============================================================
-local function sendRequest(method, path, body, callback)
-    if isAndroid then
-        local https = require("https")
-        local url = DB_URL .. path .. ".json"
-        local options = {
-            method = method,
-            headers = { ["Content-Type"] = "application/json" },
-            data = body or "",
-            timeout = 3,
-            verify = false,
-        }
-        local success, code, response = pcall(https.request, url, options)
-        if success and code and code >= 200 and code < 300 then
-            if callback then callback(true, response) end
-        else
-            local err = "{\"error\":\"HTTPS " .. tostring(code) .. "\"}"
-            if callback then callback(false, err) end
-        end
-    else
-        local url = DB_URL .. path .. ".json"
-        local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
-        if body and body ~= "" then
-            local escapedBody = body:gsub('"', '\\"')
-            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
-        end
-        curlCmd = curlCmd .. ' 2>&1'
-        
-        local handle = io.popen(curlCmd)
-        local result = handle:read("*a")
-        handle:close()
-        
-        if result and result ~= "" and not result:match("error") and not result:match("curl") then
-            if callback then callback(true, result) end
-        else
-            local err = "{\"error\":\"curl " .. (result or "failed") .. "\"}"
-            if callback then callback(false, err) end
-        end
-    end
 end
 
 -- ============================================================
