@@ -1,4 +1,4 @@
--- main.lua – полный файл с поддержкой онлайна
+-- main.lua – с поддержкой онлайн-режима и сбросом roomCode
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -187,11 +187,11 @@ function love.update(dt)
         elseif GameState.current == "difficulty" then
             if difficulty.load then difficulty.load() end
         elseif GameState.current == "game" then
+            _G.roomCode = nil  -- <-- СБРАСЫВАЕМ ДЛЯ ОФЛАЙНА
             if game.load then game.load() end
         elseif GameState.current == "online" then
             if game.load then game.load() end
             local nickname = SAVE_DATA.nickname or "Player"
-            -- online.init уже вызван в love.load
         elseif GameState.current == "room" then
             if room.load then room.load() end
         elseif GameState.current == "shop" then
@@ -234,7 +234,7 @@ function love.update(dt)
             shotCooldown = SHOT_DELAY
         end
     elseif GameState.current == "room" then
-        -- nothing to update
+        -- nothing
     end
 end
 
@@ -282,10 +282,12 @@ function love.keypressed(key)
     if key == "escape" then
         if GameState.current == "game" then
             online.leave()
+            _G.roomCode = nil  -- <-- СБРАСЫВАЕМ
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "online" then
             online.leave()
+            _G.roomCode = nil  -- <-- СБРАСЫВАЕМ
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "room" then
@@ -320,7 +322,6 @@ function love.textinput(t)
     end
 end
 
--- DISPATCHER
 local function dispatch(fn, ...)
     local s = GameState.current
     if s == "lobby" and lobby[fn] then
