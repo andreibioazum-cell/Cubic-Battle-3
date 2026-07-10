@@ -1,4 +1,4 @@
--- online.lua – ПК: HTTP (без SSL), Android: HTTPS
+-- online.lua – оптимизированный curl (ПК) + https (Android)
 local online = {}
 
 local PATH = "players/"
@@ -14,8 +14,8 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.25
-local FETCH_INTERVAL = 0.35
+local SEND_INTERVAL = 0.5          -- ⬆ увеличено с 0.2 до 0.5
+local FETCH_INTERVAL = 0.6          -- ⬆ увеличено с 0.3 до 0.6
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
@@ -53,19 +53,17 @@ function online.init()
     if isAndroid then
         setDebug("Online ready: Android (HTTPS)")
     else
-        setDebug("Online ready: PC (HTTP)")
+        setDebug("Online ready: PC (curl)")
     end
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ
+--  ОТПРАВКА ЗАПРОСОВ (ПК: curl, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
-    local url
     if isAndroid then
-        -- Android: HTTPS
         local https = require("https")
-        url = DB_URL .. path .. ".json"
+        local url = DB_URL .. path .. ".json"
         local options = {
             method = method,
             headers = { ["Content-Type"] = "application/json" },
@@ -83,30 +81,24 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: HTTP (без SSL)
-        local http = require("socket.http")
-        local ltn12 = require("ltn12")
-        url = "http://cubic-battle-3-default-rtdb.firebaseio.com/" .. path .. ".json"
+        -- ПК: curl (быстрый, без лагов)
+        local url = DB_URL .. path .. ".json"
+        local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
+        if body and body ~= "" then
+            local escapedBody = body:gsub('"', '\\"')
+            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
+        end
+        curlCmd = curlCmd .. ' 2>&1'
         
-        local response_table = {}
-        local res, code, headers = http.request{
-            url = url,
-            method = method,
-            headers = {
-                ["Content-Type"] = "application/json",
-            },
-            source = body and ltn12.source.string(body) or nil,
-            sink = ltn12.sink.table(response_table),
-            timeout = 10,
-        }
+        local handle = io.popen(curlCmd)
+        local result = handle:read("*a")
+        handle:close()
         
-        local codeNum = tonumber(code)
-        if codeNum and codeNum >= 200 and codeNum < 300 then
-            local result = table.concat(response_table)
+        if result and result ~= "" and not result:match("error") and not result:match("curl") then
             if callback then callback(true, result) end
             return result
         else
-            local err = "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
+            local err = "{\"error\":\"curl " .. (result or "failed") .. "\"}"
             if callback then callback(false, err) end
             return err
         end
@@ -194,7 +186,7 @@ function online.joinRoom(roomCode, nickname, callback)
 end
 
 -- ============================================================
---  ОТПРАВКА ПОЗИЦИИ
+--  ОТПРАВКА ПОЗИЦИИ (только при изменении)
 -- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid or not myRoomCode then
@@ -216,7 +208,7 @@ function online.sendPosition(x, y)
 end
 
 -- ============================================================
---  ОТПРАВКА ПУЛИ
+--  ОТПРАВКА ПУЛИ (только при выстреле)
 -- ============================================================
 function online.sendBullet(x, y, dx, dy)
     if not isConnected or not myUid or not myRoomCode then
@@ -229,7 +221,7 @@ function online.sendBullet(x, y, dx, dy)
 end
 
 -- ============================================================
---  ОТПРАВКА СПОСОБНОСТИ
+--  ОТПРАВКА СПОСОБНОСТИ (только при активации)
 -- ============================================================
 function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
     if not isConnected or not myUid or not myRoomCode then
@@ -242,7 +234,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ
+--  ПОЛУЧЕНИЕ ДАННЫХ (реже)
 -- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then
@@ -365,6 +357,7 @@ function online.update(dt)
         return
     end
 
+    -- Интерполяция
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
