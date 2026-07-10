@@ -467,23 +467,45 @@ function game.draw()
     if not isOnlineMode then
         enemy.drawBullets()
         enemy.draw()
-    else
+    end
+
+    -- ============================================================
+    --  ОТРИСОВКА ДРУГИХ ИГРОКОВ (ОНЛАЙН РЕЖИМ)
+    -- ============================================================
+    if isOnlineMode then
         local others = online.getPlayers()
         for uid, pos in pairs(others) do
-            local imgToDraw
-            if pos.skin == "AZUM CUBE" then
-                imgToDraw = azumImg
-            elseif pos.skin == "NASTYA CUBE" then
-                imgToDraw = nastyaImg
-            elseif pos.skin == "BUK CUBE" then
-                imgToDraw = bukImg
-            else
-                imgToDraw = playerImg
+            -- Пропускаем себя
+            if uid ~= online.getMyUid() then
+                local imgToDraw
+                if pos.skin == "AZUM CUBE" then
+                    imgToDraw = azumImg
+                elseif pos.skin == "NASTYA CUBE" then
+                    imgToDraw = nastyaImg
+                elseif pos.skin == "BUK CUBE" then
+                    imgToDraw = bukImg
+                else
+                    imgToDraw = playerImg
+                end
+                
+                -- Тень игрока
+                love.graphics.setColor(0, 0, 0, 0.3)
+                love.graphics.draw(imgToDraw, pos.x - PLAYER_SIZE/2 + 4, pos.y - PLAYER_SIZE/2 + 6, 0, 1, 1)
+                
+                -- Сам игрок
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.draw(imgToDraw, pos.x - PLAYER_SIZE/2, pos.y - PLAYER_SIZE/2, 0, 1, 1)
+                
+                -- Никнейм игрока
+                love.graphics.setColor(0, 0, 0, 0.7)
+                love.graphics.setFont(font)
+                local nick = pos.nickname or "???"
+                local nickW = font:getWidth(nick)
+                love.graphics.rectangle("fill", pos.x - nickW/2 - 4, pos.y - 40, nickW + 8, 22, 4, 4)
+                
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.print(nick, pos.x - nickW/2, pos.y - 38)
             end
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.draw(imgToDraw, pos.x - PLAYER_SIZE/2, pos.y - PLAYER_SIZE/2, 0, 1, 1)
-            love.graphics.setColor(1, 1, 1, 0.7)
-            love.graphics.print(pos.nickname or "???", pos.x - 20, pos.y - 30)
         end
     end
 
@@ -559,28 +581,33 @@ function game.draw()
         love.graphics.printf("DIFFICULTY: " .. diffText, px, py + 44, 200, "left")
     else
         love.graphics.printf("ONLINE PVP", px, py + 44, 200, "left")
+        local playerCount = 0
+        for _ in pairs(online.getPlayers()) do
+            playerCount = playerCount + 1
+        end
+        love.graphics.printf("Players: " .. playerCount, px, py + 66, 200, "left")
     end
 
     if equippedSkin == "BUK CUBE" then
         local cd = math.max(0, dashCooldown)
         if isDashing then
             love.graphics.setColor(1, 1, 1, 0.8)
-            love.graphics.printf("DASH!", px, py + 66, 200, "left")
+            love.graphics.printf("DASH!", px, py + 88, 200, "left")
         elseif cd > 0 then
             love.graphics.setColor(0.8, 0.8, 0.8, 0.8)
-            love.graphics.printf("DASH CD: " .. math.ceil(cd) .. "s", px, py + 66, 200, "left")
+            love.graphics.printf("DASH CD: " .. math.ceil(cd) .. "s", px, py + 88, 200, "left")
         else
             love.graphics.setColor(1, 1, 1, 0.8)
-            love.graphics.printf("DASH READY", px, py + 66, 200, "left")
+            love.graphics.printf("DASH READY", px, py + 88, 200, "left")
         end
     elseif equippedSkin == "NASTYA CUBE" then
         local cd = math.max(0, laserCooldown)
         if cd > 0 then
             love.graphics.setColor(0.8, 0.8, 0.8, 0.8)
-            love.graphics.printf("LASER CD: " .. math.ceil(cd) .. "s", px, py + 66, 200, "left")
+            love.graphics.printf("LASER CD: " .. math.ceil(cd) .. "s", px, py + 88, 200, "left")
         else
             love.graphics.setColor(1, 0.2, 0.2, 0.8)
-            love.graphics.printf("LASER READY", px, py + 66, 200, "left")
+            love.graphics.printf("LASER READY", px, py + 88, 200, "left")
         end
     end
 
