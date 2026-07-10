@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль с онлайн-режимом, скинами, снегом по всей карте, пулями и способностями
+-- game.lua – полный игровой модуль с онлайн-режимом, скинами, снегом по всему экрану, пулями и способностями
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -41,7 +41,7 @@ local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
 -- ============================================================
---  РЕАЛЬНЫЕ СНЕЖИНКИ (6 лучей) ПО ВСЕЙ КАРТЕ
+--  РЕАЛЬНЫЕ СНЕЖИНКИ (6 лучей)
 -- ============================================================
 local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
     size = size or 3
@@ -73,16 +73,16 @@ local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
 end
 
 -- ============================================================
---  СНЕГ ПО ВСЕЙ КАРТЕ (бесконечный мир)
+--  СНЕГ ПО ВСЕМУ ЭКРАНУ (вокруг камеры)
 -- ============================================================
 local snowflakes = {}
 local function initSnow()
+    local w, h = love.graphics.getDimensions()
     snowflakes = {}
-    -- Генерируем снежинки по всей карте (от -2000 до 2000)
-    for i = 1, 400 do
+    for i = 1, 200 do
         table.insert(snowflakes, {
-            x = math.random(-2000, 2000),
-            y = math.random(-2000, 2000),
+            x = math.random(-w/2, w/2),
+            y = math.random(-h/2, h/2),
             size = 2 + math.random(4),
             speed = 20 + math.random(60),
             wobble = math.random() * 2 - 1,
@@ -95,36 +95,31 @@ local function initSnow()
 end
 
 local function updateSnow(dt)
+    local w, h = love.graphics.getDimensions()
     for _, f in ipairs(snowflakes) do
         f.y = f.y + f.speed * dt
         f.x = f.x + math.sin(f.phase + love.timer.getTime() * 0.4 + f.wobble) * 25 * dt
         f.rotation = f.rotation + f.rotSpeed * dt
         
-        -- Если снежинка ушла далеко за пределы карты — пересоздаём
-        if f.y > 2000 then
-            f.y = -2000
-            f.x = math.random(-2000, 2000)
+        if f.y > h/2 + 20 then
+            f.y = -h/2 - 20
+            f.x = math.random(-w/2, w/2)
             f.rotation = math.random() * 2 * math.pi
         end
-        if f.x > 2000 then
-            f.x = -2000
-        elseif f.x < -2000 then
-            f.x = 2000
+        if f.x > w/2 + 20 then
+            f.x = -w/2 - 20
+        elseif f.x < -w/2 - 20 then
+            f.x = w/2 + 20
         end
     end
 end
 
 local function drawSnow()
-    -- Рисуем снег в мире (независимо от камеры)
     love.graphics.push()
     love.graphics.translate(cam.x, cam.y)
     for _, f in ipairs(snowflakes) do
-        -- Проверяем, находится ли снежинка в видимой области
-        local w, h = love.graphics.getDimensions()
-        if math.abs(f.x - cam.x) < w/2 + 50 and math.abs(f.y - cam.y) < h/2 + 50 then
-            local twinkle = 0.7 + 0.3 * math.sin(f.phase + love.timer.getTime() * 1.2)
-            drawRealSnowflake(f.x, f.y, f.size, f.alpha, f.rotation, twinkle)
-        end
+        local twinkle = 0.7 + 0.3 * math.sin(f.phase + love.timer.getTime() * 1.2)
+        drawRealSnowflake(f.x, f.y, f.size, f.alpha, f.rotation, twinkle)
     end
     love.graphics.pop()
 end
@@ -230,8 +225,10 @@ function game.load()
         currentDifficulty = _G.difficulty or "normal"
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
+        cube.speed = 260
     else
         enemy.reset()
+        cube.speed = 420  -- ⬆ скорость в онлайне (260 + 160)
     end
 
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
