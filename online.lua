@@ -1,4 +1,4 @@
--- online.lua – финальный (без чтения своих данных)
+-- online.lua – ПК: socket.http, Android: https
 local online = {}
 
 local PATH = "players/"
@@ -14,8 +14,8 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.5
-local FETCH_INTERVAL = 0.6
+local SEND_INTERVAL = 0.3
+local FETCH_INTERVAL = 0.4
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
@@ -53,12 +53,12 @@ function online.init()
     if isAndroid then
         setDebug("Online ready: Android (HTTPS)")
     else
-        setDebug("Online ready: PC (curl)")
+        setDebug("Online ready: PC (socket.http)")
     end
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: curl, Android: https)
+--  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     if isAndroid then
@@ -81,24 +81,47 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: curl
+        -- ПК: socket.http (с SSL)
+        local http = require("socket.http")
+        local ltn12 = require("ltn12")
         local url = DB_URL .. path .. ".json"
-        local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
-        if body and body ~= "" then
-            local escapedBody = body:gsub('"', '\\"')
-            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
+        
+        -- Пробуем использовать ssl.https
+        local hasSsl, ssl = pcall(require, "ssl.https")
+        local response_table = {}
+        local res, code, headers
+        
+        if hasSsl then
+            res, code, headers = ssl.request{
+                url = url,
+                method = method,
+                headers = {
+                    ["Content-Type"] = "application/json",
+                },
+                source = body and ltn12.source.string(body) or nil,
+                sink = ltn12.sink.table(response_table),
+                timeout = 10,
+            }
+        else
+            res, code, headers = http.request{
+                url = url,
+                method = method,
+                headers = {
+                    ["Content-Type"] = "application/json",
+                },
+                source = body and ltn12.source.string(body) or nil,
+                sink = ltn12.sink.table(response_table),
+                timeout = 10,
+            }
         end
-        curlCmd = curlCmd .. ' 2>&1'
         
-        local handle = io.popen(curlCmd)
-        local result = handle:read("*a")
-        handle:close()
-        
-        if result and result ~= "" and not result:match("error") and not result:match("curl") then
+        local codeNum = tonumber(code)
+        if codeNum and codeNum >= 200 and codeNum < 300 then
+            local result = table.concat(response_table)
             if callback then callback(true, result) end
             return result
         else
-            local err = "{\"error\":\"curl " .. (result or "failed") .. "\"}"
+            local err = "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
             if callback then callback(false, err) end
             return err
         end
@@ -186,7 +209,7 @@ function online.joinRoom(roomCode, nickname, callback)
 end
 
 -- ============================================================
---  ОТПРАВКА ПОЗИЦИИ (только при изменении)
+--  ОТПРАВКА ПОЗИЦИИ
 -- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid or not myRoomCode then
@@ -243,7 +266,6 @@ function online.fetchData()
     
     local path = ROOMS_PATH .. myRoomCode
     
-    -- Получаем игроков (исключая себя)
     sendRequest("GET", path .. "/players.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -267,7 +289,6 @@ function online.fetchData()
         end
     end)
     
-    -- Получаем пули (исключая свои)
     sendRequest("GET", path .. "/bullets.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -289,7 +310,6 @@ function online.fetchData()
         end
     end)
     
-    -- Получаем способности (исключая свои)
     sendRequest("GET", path .. "/abilities.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -360,7 +380,6 @@ function online.update(dt)
         return
     end
 
-    -- Интерполяция других игроков
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
