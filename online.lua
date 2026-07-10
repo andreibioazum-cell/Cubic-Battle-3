@@ -1,4 +1,4 @@
--- online.lua – ПК: love.network, Android: https
+-- online.lua – ПК: socket.http, Android: https
 local online = {}
 
 local PATH = "players/"
@@ -14,8 +14,8 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.2
-local FETCH_INTERVAL = 0.3
+local SEND_INTERVAL = 0.25
+local FETCH_INTERVAL = 0.35
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
@@ -53,12 +53,12 @@ function online.init()
     if isAndroid then
         setDebug("Online ready: Android (https)")
     else
-        setDebug("Online ready: PC (love.network)")
+        setDebug("Online ready: PC (socket.http)")
     end
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (Android: https, ПК: love.network)
+--  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     if isAndroid then
@@ -81,27 +81,52 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: love.network (асинхронный, быстрый)
+        -- ПК: socket.http (с SSL)
+        local http = require("socket.http")
+        local ltn12 = require("ltn12")
         local url = DB_URL .. path .. ".json"
-        local req = love.network.newHTTPRequest(method, url, {
-            ["Content-Type"] = "application/json"
-        }, body or "")
         
-        req:send()
-        local response = req:getResponse()
-        if response then
-            local status = response:getStatus()
-            local responseBody = response:getBody()
-            if status >= 200 and status < 300 then
-                if callback then callback(true, responseBody) end
-                return responseBody
-            else
-                local err = "{\"error\":\"HTTP " .. status .. "\"}"
-                if callback then callback(false, err) end
-                return err
+        -- Пробуем через ssl.https (если есть)
+        local hasSsl, ssl = pcall(require, "ssl.https")
+        if hasSsl then
+            local response_table = {}
+            local res, code, headers = ssl.request{
+                url = url,
+                method = method,
+                headers = {
+                    ["Content-Type"] = "application/json",
+                },
+                source = body and ltn12.source.string(body) or nil,
+                sink = ltn12.sink.table(response_table),
+                timeout = 10,
+            }
+            local codeNum = tonumber(code)
+            if codeNum and codeNum >= 200 and codeNum < 300 then
+                local result = table.concat(response_table)
+                if callback then callback(true, result) end
+                return result
             end
+        end
+        
+        -- Fallback на socket.http (без SSL)
+        local response_table = {}
+        local res, code, headers = http.request{
+            url = url,
+            method = method,
+            headers = {
+                ["Content-Type"] = "application/json",
+            },
+            source = body and ltn12.source.string(body) or nil,
+            sink = ltn12.sink.table(response_table),
+            timeout = 10,
+        }
+        local codeNum = tonumber(code)
+        if codeNum and codeNum >= 200 and codeNum < 300 then
+            local result = table.concat(response_table)
+            if callback then callback(true, result) end
+            return result
         else
-            local err = "{\"error\":\"No response\"}"
+            local err = "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
             if callback then callback(false, err) end
             return err
         end
