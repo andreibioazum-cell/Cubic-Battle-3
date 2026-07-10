@@ -1,4 +1,4 @@
--- online.lua – ПК: socket.http, Android: https
+-- online.lua – ПК: ssl.https, Android: https
 local online = {}
 
 local PATH = "players/"
@@ -14,8 +14,8 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.3
-local FETCH_INTERVAL = 0.4
+local SEND_INTERVAL = 0.2
+local FETCH_INTERVAL = 0.3
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
@@ -53,12 +53,12 @@ function online.init()
     if isAndroid then
         setDebug("Online ready: Android (HTTPS)")
     else
-        setDebug("Online ready: PC (socket.http)")
+        setDebug("Online ready: PC (ssl.https)")
     end
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
+--  ОТПРАВКА ЗАПРОСОВ (ПК: ssl.https, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     if isAndroid then
@@ -81,39 +81,22 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: socket.http (с SSL)
-        local http = require("socket.http")
+        -- ПК: ssl.https (быстро!)
+        local ssl = require("ssl.https")
         local ltn12 = require("ltn12")
         local url = DB_URL .. path .. ".json"
         
-        -- Пробуем использовать ssl.https
-        local hasSsl, ssl = pcall(require, "ssl.https")
         local response_table = {}
-        local res, code, headers
-        
-        if hasSsl then
-            res, code, headers = ssl.request{
-                url = url,
-                method = method,
-                headers = {
-                    ["Content-Type"] = "application/json",
-                },
-                source = body and ltn12.source.string(body) or nil,
-                sink = ltn12.sink.table(response_table),
-                timeout = 10,
-            }
-        else
-            res, code, headers = http.request{
-                url = url,
-                method = method,
-                headers = {
-                    ["Content-Type"] = "application/json",
-                },
-                source = body and ltn12.source.string(body) or nil,
-                sink = ltn12.sink.table(response_table),
-                timeout = 10,
-            }
-        end
+        local res, code, headers = ssl.request{
+            url = url,
+            method = method,
+            headers = {
+                ["Content-Type"] = "application/json",
+            },
+            source = body and ltn12.source.string(body) or nil,
+            sink = ltn12.sink.table(response_table),
+            timeout = 10,
+        }
         
         local codeNum = tonumber(code)
         if codeNum and codeNum >= 200 and codeNum < 300 then
@@ -121,7 +104,7 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(true, result) end
             return result
         else
-            local err = "{\"error\":\"HTTP " .. tostring(code) .. "\"}"
+            local err = "{\"error\":\"SSL " .. tostring(code) .. "\"}"
             if callback then callback(false, err) end
             return err
         end
