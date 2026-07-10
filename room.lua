@@ -1,4 +1,4 @@
--- room.lua – интерфейс комнат (без дублирования символов)
+-- room.lua – интерфейс комнат (исправленный)
 local room = {}
 
 local online = require("online")
@@ -14,7 +14,7 @@ local btnBack = { w = 140, h = 55, x = 0, y = 0 }
 local mode = "create"
 local statusMessage = ""
 local statusType = "idle"
-local processingText = false  -- флаг для защиты от дублирования
+local processingText = false
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
@@ -207,7 +207,7 @@ function room.touchpressed(id, x, y)
             if success then
                 statusMessage = "Room created! Code: " .. code
                 statusType = "success"
-                _G.roomCode = code
+                _G.roomCode = code  -- <-- УСТАНАВЛИВАЕМ КОД
                 GameState.current = "game"
             else
                 statusMessage = "Failed: " .. (msg or "unknown error")
@@ -231,7 +231,7 @@ function room.touchpressed(id, x, y)
             if success then
                 statusMessage = "Joined room " .. code
                 statusType = "success"
-                _G.roomCode = code
+                _G.roomCode = code  -- <-- УСТАНАВЛИВАЕМ КОД
                 GameState.current = "game"
             else
                 statusMessage = "Failed: " .. (msg or "unknown error")
@@ -248,7 +248,6 @@ function room.touchreleased() end
 function room.keypressed(key)
     if not inputActive then return end
     
-    -- Обрабатываем только управляющие клавиши
     if key == "return" or key == "kpenter" then
         inputActive = false
         love.keyboard.setTextInput(false)
@@ -261,20 +260,16 @@ function room.keypressed(key)
         inputText = inputText:sub(1, -2)
         return
     end
-    
-    -- Все печатаемые символы обрабатываются в textinput
 end
 
 function room.textinput(t)
     if not inputActive then return end
     
-    -- Защита от дублирования (если символ уже был обработан в keypressed)
     if processingText then
         processingText = false
         return
     end
     
-    -- Фильтруем только латиницу и цифры
     local filtered = ""
     for i = 1, #t do
         local b = t:byte(i)
