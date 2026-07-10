@@ -7,7 +7,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -21,16 +21,6 @@ jobs:
         run: |
           curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
           Expand-Archive -Path love-windows.zip -DestinationPath love-windows
-
-      # Добавляем LuaSec (ssl.https) в сборку
-      - name: Add LuaSec (ssl.https) to build
-        run: |
-          mkdir -p dist\CubicBattle\ssl
-          # Скачиваем готовый ssl.https для Windows (Lua 5.1 / LÖVE 11.5)
-          curl -L -o ssl.zip https://github.com/brunoos/luasec/raw/master/win32/ssl.dll
-          curl -L -o https.zip https://github.com/brunoos/luasec/raw/master/win32/https.dll
-          copy ssl.zip dist\CubicBattle\ssl.dll
-          copy https.zip dist\CubicBattle\ssl\https.dll
 
       - name: Create Portable EXE (64-bit)
         run: |
