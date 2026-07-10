@@ -113,9 +113,9 @@ local function writePlayerToRoom(roomCode, uid, nickname, skin, callback)
     setDebug("Writing player to: " .. path)
     sendRequest("PUT", path, data, function(success, response)
         if success then
-            setDebug("✅ Player written successfully")
+            setDebug("Player written successfully")
         else
-            setDebug("❌ Failed to write player: " .. response)
+            setDebug("Failed to write player: " .. response)
         end
         if callback then callback(success, response) end
     end)
@@ -129,10 +129,10 @@ local function checkRoomPlayers(roomCode, callback)
     setDebug("Checking players in: " .. path)
     sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" then
-            setDebug("✅ Room players response: " .. response)
+            setDebug("Room players response: " .. response)
             if callback then callback(true, response) end
         else
-            setDebug("❌ No players in room: " .. (response or "empty"))
+            setDebug("No players in room: " .. (response or "empty"))
             if callback then callback(false, response) end
         end
     end)
@@ -201,7 +201,7 @@ function online.createRoom(roomCode, nickname, callback)
         writePlayerToRoom(roomCode, myUid, nickname, mySkin, function(success2)
             if success2 then
                 isConnected = true
-                setDebug("✅ Room created: " .. roomCode)
+                setDebug("Room created: " .. roomCode)
                 -- 3. Проверяем, есть ли игроки в комнате
                 checkRoomPlayers(roomCode, function(ok, data)
                     if ok and data then
@@ -210,12 +210,12 @@ function online.createRoom(roomCode, nickname, callback)
                         for uid, _ in pairs(parsed) do
                             if uid ~= myUid then count = count + 1 end
                         end
-                        setDebug("👥 Players in room: " .. count)
+                        setDebug("Players in room: " .. count)
                     end
                 end)
                 if callback then callback(true) end
             else
-                setDebug("❌ Failed to write player")
+                setDebug("Failed to write player")
                 if callback then callback(false) end
             end
         end)
@@ -243,7 +243,7 @@ function online.joinRoom(roomCode, nickname, callback)
     local checkPath = ROOMS_PATH .. roomCode .. "/info"
     sendRequest("GET", checkPath, nil, function(success, response)
         if not success or response == "null" then
-            setDebug("❌ Room does not exist")
+            setDebug("Room does not exist")
             if callback then callback(false, "Room not found") end
             return
         end
@@ -252,7 +252,7 @@ function online.joinRoom(roomCode, nickname, callback)
         writePlayerToRoom(roomCode, myUid, nickname, mySkin, function(success2)
             if success2 then
                 isConnected = true
-                setDebug("✅ Joined room: " .. roomCode)
+                setDebug("Joined room: " .. roomCode)
                 -- 3. Проверяем, есть ли игроки в комнате
                 checkRoomPlayers(roomCode, function(ok, data)
                     if ok and data then
@@ -261,12 +261,12 @@ function online.joinRoom(roomCode, nickname, callback)
                         for uid, _ in pairs(parsed) do
                             if uid ~= myUid then count = count + 1 end
                         end
-                        setDebug("👥 Players in room: " .. count)
+                        setDebug("Players in room: " .. count)
                     end
                 end)
                 if callback then callback(true) end
             else
-                setDebug("❌ Failed to write player")
+                setDebug("Failed to write player")
                 if callback then callback(false) end
             end
         end)
@@ -331,11 +331,11 @@ function online.fetchPlayers()
     end
     
     local path = ROOMS_PATH .. myRoomCode .. "/players"
-    setDebug("📡 Fetching players from: " .. path)
+    setDebug("Fetching players from: " .. path)
     
     sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" then
-            setDebug("📥 Response: " .. response)
+            setDebug("Response: " .. response)
             local newPlayers = parsePlayersFromJSON(response)
             local count = 0
             for uid, info in pairs(newPlayers) do
@@ -347,9 +347,9 @@ function online.fetchPlayers()
                 newPlayers[myUid] = nil
             end
             players = newPlayers
-            setDebug("👥 Players in room: " .. count)
+            setDebug("Players in room: " .. count)
         else
-            setDebug("❌ Failed to fetch players")
+            setDebug("Failed to fetch players")
         end
     end)
 end
