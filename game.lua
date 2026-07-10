@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль с онлайн-режимом, скинами и снегом
+-- game.lua – полный игровой модуль с онлайн-режимом, скинами, снегом, пулями и способностями
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -272,7 +272,7 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Проверяем, нужно ли отправлять позицию в онлайн
+    -- Отправляем позицию в онлайн
     if isOnlineMode and online.isConnected() then
         online.sendPosition(cube.x, cube.y)
     end
@@ -296,6 +296,10 @@ function game.update(dt)
             resurrectionUsed = true
             cube.hit = 0
             controls.setAbilityAvailable(false)
+            -- Отправляем воскрешение в онлайн
+            if isOnlineMode and online.isConnected() then
+                online.sendAbility("revive", cube.x, cube.y)
+            end
         elseif equippedSkin == "NASTYA CUBE" and laserCooldown <= 0 then
             local aimX, aimY = controls.getAim()
             fireLaser(cube.x, cube.y, aimX, aimY)
@@ -304,6 +308,10 @@ function game.update(dt)
             laserCooldown = LASER_COOLDOWN
             controls.setAbilityAvailable(false)
             if _G.playShootSound then _G.playShootSound() end
+            -- Отправляем лазер в онлайн
+            if isOnlineMode and online.isConnected() then
+                online.sendAbility("laser", cube.x, cube.y, aimX, aimY)
+            end
         elseif equippedSkin == "BUK CUBE" and not isDashing and dashCooldown <= 0 then
             local dx, dy = controls.getMove()
             if dx == 0 and dy == 0 then
@@ -324,6 +332,10 @@ function game.update(dt)
             dashCooldown = DASH_COOLDOWN
             controls.setAbilityAvailable(false)
             spawnDashBullet(cube.x, cube.y, dashDirX, dashDirY)
+            -- Отправляем рывок в онлайн
+            if isOnlineMode and online.isConnected() then
+                online.sendAbility("dash", cube.x, cube.y, dashDirX, dashDirY)
+            end
         end
     end
 
@@ -360,6 +372,7 @@ function game.update(dt)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
+    -- Обновляем локальные пули
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -368,6 +381,7 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
+    -- Обновляем врага (только в офлайне)
     if not isOnlineMode then
         local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
         if enemyKilled then
@@ -414,15 +428,43 @@ function game.draw()
 
     drawSnow()
 
+    -- Рисуем все пули (чёрные)
     for _, b in ipairs(bullets) do
         if b.isDash then
-            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.setColor(0, 0, 0, 1)
             love.graphics.circle("fill", b.x, b.y, 12)
             love.graphics.setColor(0, 0, 0, 0.3)
             love.graphics.circle("line", b.x, b.y, 12)
         else
             love.graphics.setColor(0, 0, 0, 1)
             love.graphics.circle("fill", b.x, b.y, 8)
+        end
+    end
+
+    -- Пули других игроков (тоже чёрные)
+    if isOnlineMode then
+        local onlineBullets = online.getBullets() or {}
+        for bid, b in pairs(onlineBullets) do
+            love.graphics.setColor(0, 0, 0, 1)
+            love.graphics.circle("fill", b.x, b.y, 6)
+        end
+    end
+
+    -- Способности других игроков
+    if isOnlineMode then
+        local onlineAbilities = online.getAbilities() or {}
+        for aid, ab in pairs(onlineAbilities) do
+            if ab.type == "laser" then
+                love.graphics.setColor(1, 0, 0, 0.6)
+                love.graphics.setLineWidth(5)
+                love.graphics.line(ab.x, ab.y, ab.x + ab.dirX * 800, ab.y + ab.dirY * 800)
+            elseif ab.type == "dash" then
+                love.graphics.setColor(1, 1, 1, 0.3)
+                love.graphics.circle("fill", ab.x, ab.y, 30)
+            elseif ab.type == "revive" then
+                love.graphics.setColor(0, 1, 0, 0.3)
+                love.graphics.circle("fill", ab.x, ab.y, 40)
+            end
         end
     end
 
@@ -581,12 +623,18 @@ function game.touchreleased(id, x, y)
     local shot, dx, dy = controls.touchreleased(id)
     if shot then
         spawnBullet(cube.x, cube.y, dx, dy)
+        if isOnlineMode and online.isConnected() then
+            online.sendBullet(cube.x, cube.y, dx, dy)
+        end
     end
 end
 
 function game.spawnPlayerBullet(dx, dy)
     if dead then return end
     spawnBullet(cube.x, cube.y, dx, dy)
+    if isOnlineMode and online.isConnected() then
+        online.sendBullet(cube.x, cube.y, dx, dy)
+    end
 end
 
 function game.getPlayerPosition()
