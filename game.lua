@@ -272,7 +272,6 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- Отправляем позицию в онлайн
     if isOnlineMode and online.isConnected() then
         online.sendPosition(cube.x, cube.y)
     end
@@ -296,7 +295,6 @@ function game.update(dt)
             resurrectionUsed = true
             cube.hit = 0
             controls.setAbilityAvailable(false)
-            -- Отправляем воскрешение в онлайн
             if isOnlineMode and online.isConnected() then
                 online.sendAbility("revive", cube.x, cube.y)
             end
@@ -308,7 +306,6 @@ function game.update(dt)
             laserCooldown = LASER_COOLDOWN
             controls.setAbilityAvailable(false)
             if _G.playShootSound then _G.playShootSound() end
-            -- Отправляем лазер в онлайн
             if isOnlineMode and online.isConnected() then
                 online.sendAbility("laser", cube.x, cube.y, aimX, aimY)
             end
@@ -332,7 +329,6 @@ function game.update(dt)
             dashCooldown = DASH_COOLDOWN
             controls.setAbilityAvailable(false)
             spawnDashBullet(cube.x, cube.y, dashDirX, dashDirY)
-            -- Отправляем рывок в онлайн
             if isOnlineMode and online.isConnected() then
                 online.sendAbility("dash", cube.x, cube.y, dashDirX, dashDirY)
             end
@@ -372,7 +368,6 @@ function game.update(dt)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- Обновляем локальные пули
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -381,7 +376,6 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
-    -- Обновляем врага (только в офлайне)
     if not isOnlineMode then
         local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
         if enemyKilled then
@@ -428,7 +422,6 @@ function game.draw()
 
     drawSnow()
 
-    -- Рисуем все пули (чёрные)
     for _, b in ipairs(bullets) do
         if b.isDash then
             love.graphics.setColor(0, 0, 0, 1)
@@ -441,7 +434,6 @@ function game.draw()
         end
     end
 
-    -- Пули других игроков (тоже чёрные)
     if isOnlineMode then
         local onlineBullets = online.getBullets() or {}
         for bid, b in pairs(onlineBullets) do
@@ -450,7 +442,6 @@ function game.draw()
         end
     end
 
-    -- Способности других игроков
     if isOnlineMode then
         local onlineAbilities = online.getAbilities() or {}
         for aid, ab in pairs(onlineAbilities) do
@@ -484,7 +475,8 @@ function game.draw()
             else
                 imgToDraw = playerImg
             end
-            love.graphics.setColor(1, 0.2, 0.2, 1)
+            -- БЕЛЫЙ ЦВЕТ ДЛЯ ВСЕХ ИГРОКОВ
+            love.graphics.setColor(1, 1, 1, 1)
             love.graphics.draw(imgToDraw, pos.x - PLAYER_SIZE/2, pos.y - PLAYER_SIZE/2, 0, 1, 1)
             love.graphics.setColor(1, 1, 1, 0.7)
             love.graphics.print(pos.nickname or "???", pos.x - 20, pos.y - 30)
