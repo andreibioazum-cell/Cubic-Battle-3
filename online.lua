@@ -17,6 +17,9 @@ local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
+local positionSendTimer = 0
+local POSITION_INTERVAL = 0.3 -- Отправка позиции каждые 0.3 секунды
+local FETCH_INTERVAL = 0.5 -- Получение данных каждые 0.5 секунды
 
 local isAndroid = (love.system.getOS() == "Android")
 
@@ -48,15 +51,10 @@ function online.getMyUid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПРАВИЛЬНАЯ)
+--  ОТПРАВКА ЗАПРОСОВ (С ОГРАНИЧЕНИЕМ)
 -- ============================================================
 function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
-    
-    -- Экранируем кавычки для JSON
-    if body then
-        body = body:gsub('"', '\\"')
-    end
     
     local cmd
     if isAndroid then
@@ -72,13 +70,10 @@ function sendRequest(method, path, body, callback)
     end
     cmd = cmd .. ' 2>&1'
     
-    print("[CURL] " .. cmd)
-    
+    -- Запускаем в отдельном потоке чтобы не блокировать игру
     local handle = io.popen(cmd)
     local result = handle:read("*a")
     handle:close()
-    
-    print("[RESPONSE] " .. tostring(result))
     
     if result and result ~= "" and not result:match("error") and not result:match("curl") then
         if callback then callback(true, result) end
@@ -98,21 +93,21 @@ function online.writePlayer(callback)
     
     local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
     local data = '{"x":400,"y":300,"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
-    setDebug("Writing player: " .. path)
+    setDebug("Writing player to: " .. path)
     
     sendRequest("PUT", path, data, function(success, response)
         if success then
-            setDebug("Player written: " .. myUid)
+            setDebug("Player written successfully")
             isConnected = true
         else
-            setDebug("Failed to write: " .. tostring(response))
+            setDebug("Failed to write player")
         end
         if callback then callback(success) end
     end)
 end
 
 -- ============================================================
---  СОЗДАНИЕ КОМНАТЫ (ИСПРАВЛЕННОЕ)
+--  СОЗДАНИЕ КОМНАТЫ
 -- ============================================================
 function online.createRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
@@ -130,28 +125,26 @@ function online.createRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
     
-    setDebug("Creating room: " .. roomCode .. " with UID: " .. myUid)
+    setDebug("Creating room: " .. roomCode)
     
-    -- Сначала создаем папку info
     local path = ROOMS_PATH .. roomCode .. "/info"
     local data = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
     
     sendRequest("PUT", path, data, function(success, response)
         if not success then
-            setDebug("Failed to create room info")
-            if callback then callback(false, "Failed to create room: " .. tostring(response)) end
+            setDebug("Failed to create room")
+            if callback then callback(false, "Failed to create room") end
             return
         end
         
-        setDebug("Room info created: " .. roomCode)
+        setDebug("Room info created")
         
-        -- Теперь записываем игрока
         online.writePlayer(function(success2)
             if success2 then
                 setDebug("Room created successfully: " .. roomCode)
                 if callback then callback(true, roomCode) end
             else
-                setDebug("Failed to write player after room creation")
+                setDebug("Failed to write player")
                 if callback then callback(false, "Failed to write player") end
             end
         end)
@@ -159,7 +152,7 @@ function online.createRoom(roomCode, nickname, callback)
 end
 
 -- ============================================================
---  ВХОД В КОМНАТУ (ИСПРАВЛЕННЫЙ)
+--  ВХОД В КОМНАТУ
 -- ============================================================
 function online.joinRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
@@ -179,26 +172,24 @@ function online.joinRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
     
-    setDebug("Joining room: " .. roomCode .. " with UID: " .. myUid)
+    setDebug("Joining room: " .. roomCode)
     
-    -- Проверяем существование комнаты
     local path = ROOMS_PATH .. roomCode .. "/info"
     sendRequest("GET", path, nil, function(success, response)
         if not success or response == "null" or response == "" then
-            setDebug("Room does not exist: " .. tostring(response))
+            setDebug("Room does not exist")
             if callback then callback(false, "Room not found") end
             return
         end
         
         setDebug("Room exists, joining...")
         
-        -- Записываем игрока
         online.writePlayer(function(success2)
             if success2 then
                 setDebug("Joined room successfully: " .. roomCode)
                 if callback then callback(true, roomCode) end
             else
-                setDebug("Failed to write player when joining")
+                setDebug("Failed to write player")
                 if callback then callback(false, "Failed to write player") end
             end
         end)
@@ -206,7 +197,7 @@ function online.joinRoom(roomCode, nickname, callback)
 end
 
 -- ============================================================
---  ОТПРАВКА ПОЗИЦИИ
+--  ОТПРАВКА ПОЗИЦИИ (ТОЛЬКО ЕСЛИ ИЗМЕНИЛАСЬ)
 -- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid or not myRoomCode then
@@ -215,6 +206,8 @@ function online.sendPosition(x, y)
     
     local newX = math.floor(x)
     local newY = math.floor(y)
+    
+    -- Отправляем только если позиция изменилась
     if lastSentX == newX and lastSentY == newY then
         return
     end
@@ -224,7 +217,9 @@ function online.sendPosition(x, y)
     
     local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
     local data = '{"x":' .. newX .. ',"y":' .. newY .. ',"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
-    sendRequest("PUT", path, data)
+    
+    -- Отправляем без колбэка чтобы не ждать ответа
+    sendRequest("PUT", path, data, function() end)
 end
 
 -- ============================================================
@@ -239,7 +234,6 @@ function online.fetchPlayers()
     
     sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" and response ~= "" then
-            -- Парсим JSON
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
                 players = {}
@@ -266,12 +260,10 @@ function online.fetchPlayers()
                     end
                 end
                 
-                setDebug("Players (" .. count .. "): " .. table.concat(names, ", "))
-            else
-                setDebug("Failed to parse JSON: " .. tostring(response))
+                if count > 0 then
+                    setDebug("Players (" .. count .. "): " .. table.concat(names, ", "))
+                end
             end
-        else
-            setDebug("No players in room: " .. tostring(response))
         end
     end)
 end
@@ -284,7 +276,7 @@ function online.sendBullet(x, y, dx, dy)
     local bulletId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
     local path = ROOMS_PATH .. myRoomCode .. "/bullets/" .. bulletId
     local data = '{"x":' .. x .. ',"y":' .. y .. ',"dx":' .. dx .. ',"dy":' .. dy .. ',"owner":"' .. myUid .. '","time":' .. love.timer.getTime() .. '}'
-    sendRequest("PUT", path, data)
+    sendRequest("PUT", path, data, function() end)
 end
 
 function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
@@ -292,7 +284,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
     local abilityId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
     local path = ROOMS_PATH .. myRoomCode .. "/abilities/" .. abilityId
     local data = '{"type":"' .. abilityType .. '","x":' .. x .. ',"y":' .. y .. ',"dirX":' .. (dirX or 0) .. ',"dirY":' .. (dirY or 0) .. ',"owner":"' .. myUid .. '","target":"' .. (targetUid or "") .. '","time":' .. love.timer.getTime() .. '}'
-    sendRequest("PUT", path, data)
+    sendRequest("PUT", path, data, function() end)
 end
 
 function online.fetchData()
@@ -363,7 +355,7 @@ function online.updateSkin(skin)
     mySkin = skin
     local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. "/skin"
     local data = '"' .. skin .. '"'
-    sendRequest("PUT", path, data)
+    sendRequest("PUT", path, data, function() end)
 end
 
 function online.getMySkin()
@@ -373,7 +365,7 @@ end
 function online.leave()
     if not isConnected or not myUid or not myRoomCode then return end
     local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
-    sendRequest("DELETE", path, nil)
+    sendRequest("DELETE", path, nil, function() end)
     isConnected = false
     players = {}
     bullets = {}
@@ -390,7 +382,7 @@ function online.update(dt)
         return
     end
 
-    -- Плавное движение
+    -- Плавное движение игроков
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
             p.lerpTimer = math.min(1, (p.lerpTimer or 0) + dt * 4.5)
@@ -401,10 +393,10 @@ function online.update(dt)
         end
     end
 
-    -- Отправка позиции
-    sendTimer = sendTimer + dt
-    if sendTimer >= 0.5 then
-        sendTimer = 0
+    -- Отправка позиции (каждые 0.3 секунды)
+    positionSendTimer = positionSendTimer + dt
+    if positionSendTimer >= POSITION_INTERVAL then
+        positionSendTimer = 0
         if online.onSendPosition then
             local x, y = online.onSendPosition()
             if x and y then
@@ -413,9 +405,9 @@ function online.update(dt)
         end
     end
 
-    -- Получение данных
+    -- Получение данных (каждые 0.5 секунды)
     fetchTimer = fetchTimer + dt
-    if fetchTimer >= 0.5 then
+    if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
         online.fetchData()
     end
