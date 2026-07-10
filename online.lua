@@ -79,7 +79,7 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(false, err) end
         end
     else
-        -- ПК: socket.http (HTTP без SSL) – работает всегда!
+        -- ПК: socket.http (HTTP без SSL)
         local http = require("socket.http")
         local ltn12 = require("ltn12")
         local url = "http://cubic-battle-3-default-rtdb.firebaseio.com/" .. path .. ".json"
