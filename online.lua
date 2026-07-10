@@ -20,7 +20,6 @@ local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
-local firstFetchDone = false
 
 local isAndroid = (love.system.getOS() == "Android")
 
@@ -59,6 +58,40 @@ function online.init()
 end
 
 -- ============================================================
+--  РУЧНОЙ ПАРСИНГ ИГРОКОВ ИЗ JSON
+-- ============================================================
+local function parsePlayersFromJSON(jsonStr)
+    local result = {}
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then
+        return result
+    end
+    
+    -- Ищем все вхождения "UID":{"x":число,"y":число,"nickname":"текст","skin":"текст"}
+    -- или просто "UID":{"x":число,"y":число}
+    local pattern = '"([%w_%-]+)"%s*:%s*({[^}]*})'
+    for uid, data in string.gmatch(jsonStr, pattern) do
+        -- Парсим x и y
+        local x = data:match('"x"%s*:%s*([%d%.%-]+)')
+        local y = data:match('"y"%s*:%s*([%d%.%-]+)')
+        local nickname = data:match('"nickname"%s*:%s*"([^"]*)"')
+        local skin = data:match('"skin"%s*:%s*"([^"]*)"')
+        
+        if x and y then
+            result[uid] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                nickname = nickname or "???",
+                skin = skin or "NONE",
+                targetX = tonumber(x) or 0,
+                targetY = tonumber(y) or 0,
+                lerpTimer = 0
+            }
+        end
+    end
+    return result
+end
+
+-- ============================================================
 --  ОТПРАВКА ЗАПРОСОВ (ПК: curl, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
@@ -80,12 +113,11 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(false, err) end
         end
     else
-        -- ПК: curl
         local url = DB_URL .. path .. ".json"
         local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
             local escapedBody = body:gsub('"', '\\"')
-            curlCmd = curlCmd .. ' -H "Content-Type: application/json" -d "' .. escapedBody .. '"'
+            curlCmd = curlCmd .. ' -H "Content-Type": "application/json" -d "' .. escapedBody .. '"'
         end
         curlCmd = curlCmd .. ' 2>&1'
         
@@ -241,12 +273,12 @@ function online.fetchPlayers()
         return
     end
     
-    -- Убираем лишние слеши — путь должен быть вида "rooms/CODE/players"
     local path = ROOMS_PATH .. myRoomCode .. "/players"
     setDebug("Fetching players from: " .. path)
     
     sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" then
+            -- Пробуем стандартный парсинг
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
                 local newPlayers = {}
@@ -266,10 +298,23 @@ function online.fetchPlayers()
                     end
                 end
                 players = newPlayers
-                setDebug("Players in room: " .. count)
-                firstFetchDone = true
+                setDebug("Players in room (standard): " .. count)
             else
-                setDebug("Failed to parse players JSON: " .. tostring(response))
+                -- Если стандартный парсинг не удался, используем ручной
+                setDebug("Standard parsing failed, using manual parsing...")
+                local newPlayers = parsePlayersFromJSON(response)
+                local count = 0
+                for uid, info in pairs(newPlayers) do
+                    if uid ~= myUid then
+                        count = count + 1
+                    end
+                end
+                -- Убираем себя из списка
+                if newPlayers[myUid] then
+                    newPlayers[myUid] = nil
+                end
+                players = newPlayers
+                setDebug("Players in room (manual): " .. count)
             end
         else
             setDebug("Failed to fetch players: " .. (response or "no response"))
@@ -373,7 +418,6 @@ function online.leave()
     myRoomCode = nil
     lastSentX = nil
     lastSentY = nil
-    firstFetchDone = false
 end
 
 function online.update(dt)
