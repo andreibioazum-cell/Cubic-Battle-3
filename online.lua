@@ -1,4 +1,4 @@
--- online.lua – ПК: socket.http, Android: https
+-- online.lua – полный (ПК: адаптивно; Android: https)
 local online = {}
 
 local PATH = "players/"
@@ -50,15 +50,14 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready: " .. (isAndroid and "Android (https)" or "PC (socket.http)"))
+    setDebug("Online ready: " .. (isAndroid and "Android (https)" or "PC (adaptive)"))
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
+--  ОТПРАВКА ЗАПРОСОВ (адаптивно)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     if isAndroid then
-        -- Android: используем https
         local https = require("https")
         local url = DB_URL .. path .. ".json"
         local options = {
@@ -77,18 +76,20 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(false, err) end
             return err
         end
-    else
-        -- ПК: используем socket.http
-        local http = require("socket.http")
+    end
+    
+    local url = DB_URL .. path .. ".json"
+    local request_body = body or ""
+    
+    -- 1. Пробуем ssl.https
+    local hasSsl, ssl = pcall(require, "ssl.https")
+    if hasSsl then
         local ltn12 = require("ltn12")
-        local url = DB_URL .. path .. ".json"
         local response_table = {}
-        local res, code, headers = http.request{
+        local res, code, headers = ssl.request{
             url = url,
             method = method,
-            headers = {
-                ["Content-Type"] = "application/json",
-            },
+            headers = { ["Content-Type"] = "application/json" },
             source = body and ltn12.source.string(body) or nil,
             sink = ltn12.sink.table(response_table),
             timeout = 5,
@@ -98,30 +99,68 @@ local function sendRequest(method, path, body, callback)
             local result = table.concat(response_table)
             if callback then callback(true, result) end
             return result
-        else
-            -- Пробуем HTTP (без SSL)
-            local httpUrl = "http://cubic-battle-3-default-rtdb.firebaseio.com/" .. path .. ".json"
-            local response_table2 = {}
-            local res2, code2, headers2 = http.request{
-                url = httpUrl,
-                method = method,
-                headers = {
-                    ["Content-Type"] = "application/json",
-                },
-                source = body and ltn12.source.string(body) or nil,
-                sink = ltn12.sink.table(response_table2),
-                timeout = 5,
-            }
-            local codeNum2 = tonumber(code2)
-            if codeNum2 and codeNum2 >= 200 and codeNum2 < 300 then
-                local result = table.concat(response_table2)
-                if callback then callback(true, result) end
-                return result
-            else
-                local err = "{\"error\":\"HTTP " .. tostring(code) .. " / " .. tostring(code2) .. "\"}"
-                if callback then callback(false, err) end
-                return err
+        end
+    end
+    
+    -- 2. Пробуем love.network
+    if love.network then
+        local req = love.network.newHTTPRequest(method, url, {
+            ["Content-Type"] = "application/json"
+        }, request_body)
+        req:send()
+        local response = req:getResponse()
+        if response then
+            local status = response:getStatus()
+            local responseBody = response:getBody()
+            if status >= 200 and status < 300 then
+                if callback then callback(true, responseBody) end
+                return responseBody
             end
+        end
+    end
+    
+    -- 3. Пробуем socket.http
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local response_table = {}
+    local res, code, headers = http.request{
+        url = url,
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json",
+        },
+        source = body and ltn12.source.string(body) or nil,
+        sink = ltn12.sink.table(response_table),
+        timeout = 5,
+    }
+    local codeNum = tonumber(code)
+    if codeNum and codeNum >= 200 and codeNum < 300 then
+        local result = table.concat(response_table)
+        if callback then callback(true, result) end
+        return result
+    else
+        -- 4. HTTP (без SSL)
+        local httpUrl = "http://cubic-battle-3-default-rtdb.firebaseio.com/" .. path .. ".json"
+        local response_table2 = {}
+        local res2, code2, headers2 = http.request{
+            url = httpUrl,
+            method = method,
+            headers = {
+                ["Content-Type"] = "application/json",
+            },
+            source = body and ltn12.source.string(body) or nil,
+            sink = ltn12.sink.table(response_table2),
+            timeout = 5,
+        }
+        local codeNum2 = tonumber(code2)
+        if codeNum2 and codeNum2 >= 200 and codeNum2 < 300 then
+            local result = table.concat(response_table2)
+            if callback then callback(true, result) end
+            return result
+        else
+            local err = "{\"error\":\"HTTP " .. tostring(code) .. " / " .. tostring(code2) .. "\"}"
+            if callback then callback(false, err) end
+            return err
         end
     end
 end
@@ -144,19 +183,17 @@ function online.createRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    -- Создаём комнату
-    local roomUrl = ROOMS_PATH .. roomCode .. "/info"
+    local roomPath = ROOMS_PATH .. roomCode .. "/info"
     local roomData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
-    sendRequest("PUT", roomUrl, roomData, function(success, response)
+    sendRequest("PUT", roomPath, roomData, function(success, response)
         if not success then
             setDebug("Failed to create room: " .. response)
             if callback then callback(false, response) end
             return
         end
-        -- Добавляем игрока в комнату
-        local playerUrl = ROOMS_PATH .. roomCode .. "/players/" .. myUid
+        local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
         local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-        sendRequest("PUT", playerUrl, playerData, function(success2, response2)
+        sendRequest("PUT", playerPath, playerData, function(success2, response2)
             if success2 then
                 isConnected = true
                 setDebug("Room created: " .. roomCode)
@@ -186,18 +223,16 @@ function online.joinRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    -- Проверяем, существует ли комната
-    local checkUrl = ROOMS_PATH .. roomCode .. "/info"
-    sendRequest("GET", checkUrl, nil, function(success, response)
+    local checkPath = ROOMS_PATH .. roomCode .. "/info"
+    sendRequest("GET", checkPath, nil, function(success, response)
         if not success or response == "null" then
             setDebug("Room does not exist")
             if callback then callback(false, "Room not found") end
             return
         end
-        -- Добавляем игрока
-        local playerUrl = ROOMS_PATH .. roomCode .. "/players/" .. myUid
+        local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
         local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-        sendRequest("PUT", playerUrl, playerData, function(success2, response2)
+        sendRequest("PUT", playerPath, playerData, function(success2, response2)
             if success2 then
                 isConnected = true
                 setDebug("Joined room: " .. roomCode)
@@ -229,11 +264,7 @@ function online.sendPosition(x, y)
     
     local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
     local data = '{"x":' .. newX .. ',"y":' .. newY .. ',"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
-    sendRequest("PUT", path, data, function(success, response)
-        if success then
-            setDebug("Sent: " .. newX .. "," .. newY)
-        end
-    end)
+    sendRequest("PUT", path, data)
 end
 
 -- ============================================================
@@ -271,6 +302,7 @@ function online.fetchData()
     end
     
     local path = ROOMS_PATH .. myRoomCode
+    
     sendRequest("GET", path .. "/players.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -385,7 +417,6 @@ function online.update(dt)
         return
     end
 
-    -- Интерполяция игроков
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
