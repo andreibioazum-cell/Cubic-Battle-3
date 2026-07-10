@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль с поддержкой онлайна, скинов и снегом
+-- game.lua – полный игровой модуль с онлайн-режимом, скинами и снегом
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -41,7 +41,7 @@ local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
 -- ============================================================
---  РЕАЛЬНЫЕ СНЕЖИНКИ (6 лучей)
+--  СНЕЖИНКИ
 -- ============================================================
 local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
     size = size or 3
@@ -72,17 +72,14 @@ local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
     love.graphics.pop()
 end
 
--- ============================================================
---  СНЕЖИНКИ В МИРЕ (привязаны к камере)
--- ============================================================
 local snowflakes = {}
 local function initSnow()
     local w, h = love.graphics.getDimensions()
     snowflakes = {}
-    for i = 1, 400 do
+    for i = 1, 200 do
         table.insert(snowflakes, {
-            x = math.random(-2000, 2000),
-            y = math.random(-2000, 2000),
+            x = math.random(-w/2, w/2),
+            y = math.random(-h/2, h/2),
             size = 2 + math.random(4),
             speed = 20 + math.random(60),
             wobble = math.random() * 2 - 1,
@@ -95,20 +92,21 @@ local function initSnow()
 end
 
 local function updateSnow(dt)
+    local w, h = love.graphics.getDimensions()
     for _, f in ipairs(snowflakes) do
         f.y = f.y + f.speed * dt
         f.x = f.x + math.sin(f.phase + love.timer.getTime() * 0.4 + f.wobble) * 25 * dt
         f.rotation = f.rotation + f.rotSpeed * dt
         
-        if f.y > 2000 then
-            f.y = -2000
-            f.x = math.random(-2000, 2000)
+        if f.y > h/2 + 20 then
+            f.y = -h/2 - 20
+            f.x = math.random(-w/2, w/2)
             f.rotation = math.random() * 2 * math.pi
         end
-        if f.x > 2000 then
-            f.x = -2000
-        elseif f.x < -2000 then
-            f.x = 2000
+        if f.x > w/2 + 20 then
+            f.x = -w/2 - 20
+        elseif f.x < -w/2 - 20 then
+            f.x = w/2 + 20
         end
     end
 end
@@ -273,6 +271,11 @@ function game.update(dt)
     if dead then return end
 
     controls.update(dt)
+
+    -- Проверяем, нужно ли отправлять позицию в онлайн
+    if isOnlineMode and online.isConnected() then
+        online.sendPosition(cube.x, cube.y)
+    end
 
     laserCooldown = math.max(0, laserCooldown - dt)
     if laserActive then
