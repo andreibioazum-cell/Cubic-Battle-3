@@ -134,7 +134,6 @@ function online.createRoom(roomCode, nickname, callback)
             if success2 then
                 isConnected = true
                 setDebug("Room created: " .. roomCode)
-                -- Принудительно загружаем игроков сразу после создания
                 online.fetchPlayers()
                 if callback then callback(true) end
             else
@@ -175,7 +174,6 @@ function online.joinRoom(roomCode, nickname, callback)
             if success2 then
                 isConnected = true
                 setDebug("Joined room: " .. roomCode)
-                -- Принудительно загружаем игроков сразу после входа
                 online.fetchPlayers()
                 if callback then callback(true) end
             else
@@ -235,7 +233,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ИГРОКОВ (ПРИНУДИТЕЛЬНО)
+--  ПОЛУЧЕНИЕ ИГРОКОВ
 -- ============================================================
 function online.fetchPlayers()
     if not isConnected or not myRoomCode then
@@ -243,10 +241,11 @@ function online.fetchPlayers()
         return
     end
     
-    local path = ROOMS_PATH .. myRoomCode
+    -- Убираем лишние слеши — путь должен быть вида "rooms/CODE/players"
+    local path = ROOMS_PATH .. myRoomCode .. "/players"
     setDebug("Fetching players from: " .. path)
     
-    sendRequest("GET", path .. "/players.json", nil, function(success, response)
+    sendRequest("GET", path, nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
@@ -270,7 +269,7 @@ function online.fetchPlayers()
                 setDebug("Players in room: " .. count)
                 firstFetchDone = true
             else
-                setDebug("Failed to parse players JSON")
+                setDebug("Failed to parse players JSON: " .. tostring(response))
             end
         else
             setDebug("Failed to fetch players: " .. (response or "no response"))
@@ -286,13 +285,11 @@ function online.fetchData()
         return
     end
     
-    -- Получаем игроков
     online.fetchPlayers()
     
     local path = ROOMS_PATH .. myRoomCode
     
-    -- Получаем пули
-    sendRequest("GET", path .. "/bullets.json", nil, function(success, response)
+    sendRequest("GET", path .. "/bullets", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
@@ -313,8 +310,7 @@ function online.fetchData()
         end
     end)
     
-    -- Получаем способности
-    sendRequest("GET", path .. "/abilities.json", nil, function(success, response)
+    sendRequest("GET", path .. "/abilities", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
@@ -385,7 +381,6 @@ function online.update(dt)
         return
     end
 
-    -- Интерполяция других игроков
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
