@@ -1,4 +1,4 @@
--- online.lua – с оптимизацией и пулями
+-- online.lua – с поддержкой способностей
 local online = {}
 
 local PATH = "players/"
@@ -11,10 +11,11 @@ local myRoomCode = nil
 local mySkin = "NONE"
 local players = {}
 local bullets = {}
+local abilities = {}  -- способности других игроков
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.2          -- отправка позиции раз в 0.2 сек
-local FETCH_INTERVAL = 0.3          -- получение игроков раз в 0.3 сек
+local SEND_INTERVAL = 0.2
+local FETCH_INTERVAL = 0.3
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
@@ -70,7 +71,6 @@ function online.createRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    -- Создаём комнату
     local roomUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/info.json"
     local roomData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
     local roomOptions = {
@@ -87,7 +87,6 @@ function online.createRoom(roomCode, nickname, callback)
         return
     end
 
-    -- Добавляем игрока
     local playerUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/players/" .. myUid .. ".json"
     local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
     local playerOptions = {
@@ -125,7 +124,6 @@ function online.joinRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    -- Проверяем комнату
     local checkUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/info.json"
     local checkOptions = {
         method = "GET",
@@ -139,7 +137,6 @@ function online.joinRoom(roomCode, nickname, callback)
         return
     end
 
-    -- Добавляем игрока
     local playerUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/players/" .. myUid .. ".json"
     local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
     local playerOptions = {
@@ -161,14 +158,13 @@ function online.joinRoom(roomCode, nickname, callback)
 end
 
 -- ============================================================
---  ОТПРАВКА ПОЗИЦИИ (только если изменилась)
+--  ОТПРАВКА ПОЗИЦИИ
 -- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid or not myRoomCode then
         return
     end
     
-    -- Отправляем только если позиция изменилась (экономия трафика)
     local newX = math.floor(x)
     local newY = math.floor(y)
     if lastSentX == newX and lastSentY == newY then
@@ -211,7 +207,27 @@ function online.sendBullet(x, y, dx, dy)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ИГРОКОВ И ПУЛЬ
+--  ОТПРАВКА СПОСОБНОСТИ
+-- ============================================================
+function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
+    if not isConnected or not myUid or not myRoomCode then
+        return
+    end
+    local abilityId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
+    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/abilities/" .. abilityId .. ".json"
+    local data = '{"type":"' .. abilityType .. '","x":' .. x .. ',"y":' .. y .. ',"dirX":' .. (dirX or 0) .. ',"dirY":' .. (dirY or 0) .. ',"owner":"' .. myUid .. '","target":"' .. (targetUid or "") .. '","time":' .. love.timer.getTime() .. '}'
+    local options = {
+        method = "PUT",
+        headers = { ["Content-Type"] = "application/json" },
+        data = data,
+        timeout = 2,
+        verify = false,
+    }
+    pcall(https.request, url, options)
+end
+
+-- ============================================================
+--  ПОЛУЧЕНИЕ ДАННЫХ (игроки, пули, способности)
 -- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then
@@ -273,6 +289,35 @@ function online.fetchData()
             end
         end
     end
+    
+    -- Получаем способности
+    local abilityUrl = DB_URL .. ROOMS_PATH .. myRoomCode .. "/abilities.json"
+    local abilityOptions = {
+        method = "GET",
+        timeout = 2,
+        verify = false,
+    }
+    local aSuccess, aCode, aBody = pcall(https.request, abilityUrl, abilityOptions)
+    if aSuccess and aCode and aCode >= 200 and aCode < 300 then
+        local ok, data = pcall(love.data.decode, "string", "json", aBody)
+        if ok and data then
+            abilities = {}
+            for aid, info in pairs(data) do
+                if info.owner ~= myUid then
+                    abilities[aid] = {
+                        type = info.type,
+                        x = info.x,
+                        y = info.y,
+                        dirX = info.dirX or 0,
+                        dirY = info.dirY or 0,
+                        owner = info.owner,
+                        target = info.target or "",
+                        time = info.time or 0,
+                    }
+                end
+            end
+        end
+    end
 end
 
 function online.getPlayers()
@@ -281,6 +326,10 @@ end
 
 function online.getBullets()
     return bullets
+end
+
+function online.getAbilities()
+    return abilities
 end
 
 function online.updateSkin(skin)
@@ -316,6 +365,7 @@ function online.leave()
     isConnected = false
     players = {}
     bullets = {}
+    abilities = {}
     myUid = nil
     myNickname = nil
     myRoomCode = nil
@@ -340,7 +390,6 @@ function online.update(dt)
         end
     end
 
-    -- Отправка позиции (только если изменилась)
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -352,7 +401,6 @@ function online.update(dt)
         end
     end
 
-    -- Получение данных
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
