@@ -1,4 +1,4 @@
--- room.lua – интерфейс комнат (исправленный)
+-- room.lua – интерфейс комнат
 local room = {}
 
 local online = require("online")
@@ -94,6 +94,7 @@ function room.draw()
 
     drawSpacedText("MULTIPLAYER ROOM", 0, 80*scale, w, "center", fontTitle)
 
+    -- Поле ввода
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", inputField.x + 3*scale, inputField.y + 3*scale, inputField.w, inputField.h, 8*scale, 8*scale)
     love.graphics.setColor(0.1, 0.1, 0.1, 1)
@@ -116,6 +117,7 @@ function room.draw()
     local th = fontInput:getHeight()
     love.graphics.print(displayText, inputField.x + 15*scale, inputField.y + (inputField.h - th)/2)
 
+    -- Кнопка RND
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnRandom.x + 3*scale, btnRandom.y + 3*scale, btnRandom.w, btnRandom.h, 8*scale, 8*scale)
     love.graphics.setColor(0.9, 0.6, 0.1, 1)
@@ -132,6 +134,7 @@ function room.draw()
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf(label, inputField.x, inputField.y - 35*scale, inputField.w + btnRandom.w + 10*scale, "center")
 
+    -- Кнопка CREATE
     local colorCreate = (mode == "create") and {0.2, 0.7, 0.2} or {0.3, 0.3, 0.3}
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnCreate.x + 5*scale, btnCreate.y + 6*scale, btnCreate.w, btnCreate.h, 16*scale, 16*scale)
@@ -142,6 +145,7 @@ function room.draw()
     love.graphics.rectangle("line", btnCreate.x, btnCreate.y, btnCreate.w, btnCreate.h, 16*scale, 16*scale)
     drawSpacedText("CREATE", btnCreate.x, btnCreate.y + 18*scale, btnCreate.w, "center", fontBtn, nil, 1)
 
+    -- Кнопка JOIN
     local colorJoin = (mode == "join") and {0.2, 0.5, 0.9} or {0.3, 0.3, 0.3}
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnJoin.x + 5*scale, btnJoin.y + 6*scale, btnJoin.w, btnJoin.h, 16*scale, 16*scale)
@@ -152,6 +156,7 @@ function room.draw()
     love.graphics.rectangle("line", btnJoin.x, btnJoin.y, btnJoin.w, btnJoin.h, 16*scale, 16*scale)
     drawSpacedText("JOIN", btnJoin.x, btnJoin.y + 18*scale, btnJoin.w, "center", fontBtn, nil, 1)
 
+    -- Статус сообщение
     if statusMessage ~= "" then
         local color = (statusType == "success") and {0.2, 0.8, 0.2} or {0.9, 0.2, 0.2}
         love.graphics.setColor(color[1], color[2], color[3], 1)
@@ -159,6 +164,7 @@ function room.draw()
         love.graphics.printf(statusMessage, 0, h/2 + 150*scale, w, "center")
     end
 
+    -- Кнопка BACK
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -170,12 +176,14 @@ function room.draw()
 end
 
 function room.touchpressed(id, x, y)
+    -- Кнопка BACK
     if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
         playButtonSound()
         GameState.current = "lobby"
         return
     end
 
+    -- Поле ввода
     if x >= inputField.x and x <= inputField.x + inputField.w and y >= inputField.y and y <= inputField.y + inputField.h then
         inputActive = not inputActive
         if inputActive then
@@ -188,12 +196,14 @@ function room.touchpressed(id, x, y)
         return
     end
 
+    -- Кнопка RND
     if x >= btnRandom.x and x <= btnRandom.x + btnRandom.w and y >= btnRandom.y and y <= btnRandom.y + btnRandom.h then
         playButtonSound()
         inputText = online.generateRoomCode()
         return
     end
 
+    -- Кнопка CREATE
     if x >= btnCreate.x and x <= btnCreate.x + btnCreate.w and y >= btnCreate.y and y <= btnCreate.y + btnCreate.h then
         playButtonSound()
         mode = "create"
@@ -203,11 +213,15 @@ function room.touchpressed(id, x, y)
             inputText = code
         end
         local nickname = SAVE_DATA.nickname or "Player"
+        statusMessage = "Creating room..."
+        statusType = "idle"
+        
         online.createRoom(code, nickname, function(success, msg)
             if success then
                 statusMessage = "Room created! Code: " .. code
                 statusType = "success"
-                _G.roomCode = code  -- <-- УСТАНАВЛИВАЕМ КОД
+                _G.roomCode = code
+                -- Переход в игру
                 GameState.current = "game"
             else
                 statusMessage = "Failed: " .. (msg or "unknown error")
@@ -217,6 +231,7 @@ function room.touchpressed(id, x, y)
         return
     end
 
+    -- Кнопка JOIN
     if x >= btnJoin.x and x <= btnJoin.x + btnJoin.w and y >= btnJoin.y and y <= btnJoin.y + btnJoin.h then
         playButtonSound()
         mode = "join"
@@ -227,11 +242,15 @@ function room.touchpressed(id, x, y)
             return
         end
         local nickname = SAVE_DATA.nickname or "Player"
+        statusMessage = "Joining room..."
+        statusType = "idle"
+        
         online.joinRoom(code, nickname, function(success, msg)
             if success then
                 statusMessage = "Joined room " .. code
                 statusType = "success"
-                _G.roomCode = code  -- <-- УСТАНАВЛИВАЕМ КОД
+                _G.roomCode = code
+                -- Переход в игру
                 GameState.current = "game"
             else
                 statusMessage = "Failed: " .. (msg or "unknown error")
