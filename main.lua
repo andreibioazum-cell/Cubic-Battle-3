@@ -187,11 +187,9 @@ function love.update(dt)
         elseif GameState.current == "difficulty" then
             if difficulty.load then difficulty.load() end
         elseif GameState.current == "game" then
-            _G.roomCode = nil  -- <-- СБРАСЫВАЕМ ДЛЯ ОФЛАЙНА
             if game.load then game.load() end
         elseif GameState.current == "online" then
             if game.load then game.load() end
-            local nickname = SAVE_DATA.nickname or "Player"
         elseif GameState.current == "room" then
             if room.load then room.load() end
         elseif GameState.current == "shop" then
@@ -281,13 +279,13 @@ function love.keypressed(key)
 
     if key == "escape" then
         if GameState.current == "game" then
+            _G.roomCode = nil
             online.leave()
-            _G.roomCode = nil  -- <-- СБРАСЫВАЕМ
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "online" then
+            _G.roomCode = nil
             online.leave()
-            _G.roomCode = nil  -- <-- СБРАСЫВАЕМ
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "room" then
