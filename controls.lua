@@ -263,7 +263,7 @@ function controls.draw()
         end
     end
 
-    -- Кнопка Back (СИНЯЯ, как в лобби)
+    -- Кнопка Back (синяя, как в лобби)
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", back.x + 4*scale, back.y + 5*scale, back.w, back.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
