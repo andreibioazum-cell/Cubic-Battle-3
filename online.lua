@@ -1,4 +1,4 @@
--- online.lua – оптимизированный curl (ПК) + https (Android)
+-- online.lua – финальный (без чтения своих данных)
 local online = {}
 
 local PATH = "players/"
@@ -14,8 +14,8 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.5          -- ⬆ увеличено с 0.2 до 0.5
-local FETCH_INTERVAL = 0.6          -- ⬆ увеличено с 0.3 до 0.6
+local SEND_INTERVAL = 0.5
+local FETCH_INTERVAL = 0.6
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
@@ -81,7 +81,7 @@ local function sendRequest(method, path, body, callback)
             return err
         end
     else
-        -- ПК: curl (быстрый, без лагов)
+        -- ПК: curl
         local url = DB_URL .. path .. ".json"
         local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
@@ -208,7 +208,7 @@ function online.sendPosition(x, y)
 end
 
 -- ============================================================
---  ОТПРАВКА ПУЛИ (только при выстреле)
+--  ОТПРАВКА ПУЛИ
 -- ============================================================
 function online.sendBullet(x, y, dx, dy)
     if not isConnected or not myUid or not myRoomCode then
@@ -221,7 +221,7 @@ function online.sendBullet(x, y, dx, dy)
 end
 
 -- ============================================================
---  ОТПРАВКА СПОСОБНОСТИ (только при активации)
+--  ОТПРАВКА СПОСОБНОСТИ
 -- ============================================================
 function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
     if not isConnected or not myUid or not myRoomCode then
@@ -234,7 +234,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ (реже)
+--  ПОЛУЧЕНИЕ ДАННЫХ (БЕЗ СВОИХ)
 -- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then
@@ -243,6 +243,7 @@ function online.fetchData()
     
     local path = ROOMS_PATH .. myRoomCode
     
+    -- Получаем игроков (исключая себя)
     sendRequest("GET", path .. "/players.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -266,6 +267,7 @@ function online.fetchData()
         end
     end)
     
+    -- Получаем пули (исключая свои)
     sendRequest("GET", path .. "/bullets.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -287,6 +289,7 @@ function online.fetchData()
         end
     end)
     
+    -- Получаем способности (исключая свои)
     sendRequest("GET", path .. "/abilities.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -357,7 +360,7 @@ function online.update(dt)
         return
     end
 
-    -- Интерполяция
+    -- Интерполяция других игроков
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
