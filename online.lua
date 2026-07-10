@@ -1,4 +1,4 @@
--- online.lua – с поддержкой способностей
+-- online.lua – ПК: socket.http, Android: https
 local online = {}
 
 local PATH = "players/"
@@ -11,7 +11,7 @@ local myRoomCode = nil
 local mySkin = "NONE"
 local players = {}
 local bullets = {}
-local abilities = {}  -- способности других игроков
+local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
 local SEND_INTERVAL = 0.2
@@ -21,7 +21,7 @@ local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
 
-local https = require("https")
+local isAndroid = (love.system.getOS() == "Android")
 
 local function setDebug(text)
     debugText = text
@@ -50,7 +50,80 @@ end
 
 function online.init()
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    setDebug("Online ready")
+    setDebug("Online ready: " .. (isAndroid and "Android (https)" or "PC (socket.http)"))
+end
+
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
+-- ============================================================
+local function sendRequest(method, path, body, callback)
+    if isAndroid then
+        -- Android: используем https
+        local https = require("https")
+        local url = DB_URL .. path .. ".json"
+        local options = {
+            method = method,
+            headers = { ["Content-Type"] = "application/json" },
+            data = body or "",
+            timeout = 5,
+            verify = false,
+        }
+        local success, code, response = pcall(https.request, url, options)
+        if success and code and code >= 200 and code < 300 then
+            if callback then callback(true, response) end
+            return response
+        else
+            local err = "{\"error\":\"HTTPS " .. tostring(code) .. "\"}"
+            if callback then callback(false, err) end
+            return err
+        end
+    else
+        -- ПК: используем socket.http
+        local http = require("socket.http")
+        local ltn12 = require("ltn12")
+        local url = DB_URL .. path .. ".json"
+        local response_table = {}
+        local res, code, headers = http.request{
+            url = url,
+            method = method,
+            headers = {
+                ["Content-Type"] = "application/json",
+            },
+            source = body and ltn12.source.string(body) or nil,
+            sink = ltn12.sink.table(response_table),
+            timeout = 5,
+        }
+        local codeNum = tonumber(code)
+        if codeNum and codeNum >= 200 and codeNum < 300 then
+            local result = table.concat(response_table)
+            if callback then callback(true, result) end
+            return result
+        else
+            -- Пробуем HTTP (без SSL)
+            local httpUrl = "http://cubic-battle-3-default-rtdb.firebaseio.com/" .. path .. ".json"
+            local response_table2 = {}
+            local res2, code2, headers2 = http.request{
+                url = httpUrl,
+                method = method,
+                headers = {
+                    ["Content-Type"] = "application/json",
+                },
+                source = body and ltn12.source.string(body) or nil,
+                sink = ltn12.sink.table(response_table2),
+                timeout = 5,
+            }
+            local codeNum2 = tonumber(code2)
+            if codeNum2 and codeNum2 >= 200 and codeNum2 < 300 then
+                local result = table.concat(response_table2)
+                if callback then callback(true, result) end
+                return result
+            else
+                local err = "{\"error\":\"HTTP " .. tostring(code) .. " / " .. tostring(code2) .. "\"}"
+                if callback then callback(false, err) end
+                return err
+            end
+        end
+    end
 end
 
 -- ============================================================
@@ -71,40 +144,29 @@ function online.createRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    local roomUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/info.json"
+    -- Создаём комнату
+    local roomUrl = ROOMS_PATH .. roomCode .. "/info"
     local roomData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
-    local roomOptions = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = roomData,
-        timeout = 3,
-        verify = false,
-    }
-    local success, code, body = pcall(https.request, roomUrl, roomOptions)
-    if not (success and code and code >= 200 and code < 300) then
-        setDebug("Failed to create room: " .. tostring(code))
-        if callback then callback(false, tostring(code)) end
-        return
-    end
-
-    local playerUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/players/" .. myUid .. ".json"
-    local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local playerOptions = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = playerData,
-        timeout = 3,
-        verify = false,
-    }
-    local success2, code2, body2 = pcall(https.request, playerUrl, playerOptions)
-    if success2 and code2 and code2 >= 200 and code2 < 300 then
-        isConnected = true
-        setDebug("Room created: " .. roomCode)
-        if callback then callback(true) end
-    else
-        setDebug("Failed to add player: " .. tostring(code2))
-        if callback then callback(false, tostring(code2)) end
-    end
+    sendRequest("PUT", roomUrl, roomData, function(success, response)
+        if not success then
+            setDebug("Failed to create room: " .. response)
+            if callback then callback(false, response) end
+            return
+        end
+        -- Добавляем игрока в комнату
+        local playerUrl = ROOMS_PATH .. roomCode .. "/players/" .. myUid
+        local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
+        sendRequest("PUT", playerUrl, playerData, function(success2, response2)
+            if success2 then
+                isConnected = true
+                setDebug("Room created: " .. roomCode)
+                if callback then callback(true) end
+            else
+                setDebug("Failed to add player: " .. response2)
+                if callback then callback(false, response2) end
+            end
+        end)
+    end)
 end
 
 function online.joinRoom(roomCode, nickname, callback)
@@ -124,37 +186,28 @@ function online.joinRoom(roomCode, nickname, callback)
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    local checkUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/info.json"
-    local checkOptions = {
-        method = "GET",
-        timeout = 3,
-        verify = false,
-    }
-    local success, code, body = pcall(https.request, checkUrl, checkOptions)
-    if not (success and code and code == 200) then
-        setDebug("Room does not exist")
-        if callback then callback(false, "Room not found") end
-        return
-    end
-
-    local playerUrl = DB_URL .. ROOMS_PATH .. roomCode .. "/players/" .. myUid .. ".json"
-    local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
-    local playerOptions = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = playerData,
-        timeout = 3,
-        verify = false,
-    }
-    local success2, code2, body2 = pcall(https.request, playerUrl, playerOptions)
-    if success2 and code2 and code2 >= 200 and code2 < 300 then
-        isConnected = true
-        setDebug("Joined room: " .. roomCode)
-        if callback then callback(true) end
-    else
-        setDebug("Failed to join: " .. tostring(code2))
-        if callback then callback(false, tostring(code2)) end
-    end
+    -- Проверяем, существует ли комната
+    local checkUrl = ROOMS_PATH .. roomCode .. "/info"
+    sendRequest("GET", checkUrl, nil, function(success, response)
+        if not success or response == "null" then
+            setDebug("Room does not exist")
+            if callback then callback(false, "Room not found") end
+            return
+        end
+        -- Добавляем игрока
+        local playerUrl = ROOMS_PATH .. roomCode .. "/players/" .. myUid
+        local playerData = '{"x":0,"y":0,"nickname":"' .. nickname .. '","skin":"' .. mySkin .. '"}'
+        sendRequest("PUT", playerUrl, playerData, function(success2, response2)
+            if success2 then
+                isConnected = true
+                setDebug("Joined room: " .. roomCode)
+                if callback then callback(true) end
+            else
+                setDebug("Failed to join: " .. response2)
+                if callback then callback(false, response2) end
+            end
+        end)
+    end)
 end
 
 -- ============================================================
@@ -174,16 +227,13 @@ function online.sendPosition(x, y)
     lastSentX = newX
     lastSentY = newY
     
-    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. ".json"
+    local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
     local data = '{"x":' .. newX .. ',"y":' .. newY .. ',"nickname":"' .. myNickname .. '","skin":"' .. mySkin .. '"}'
-    local options = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = data,
-        timeout = 3,
-        verify = false,
-    }
-    pcall(https.request, url, options)
+    sendRequest("PUT", path, data, function(success, response)
+        if success then
+            setDebug("Sent: " .. newX .. "," .. newY)
+        end
+    end)
 end
 
 -- ============================================================
@@ -194,16 +244,9 @@ function online.sendBullet(x, y, dx, dy)
         return
     end
     local bulletId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
-    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/bullets/" .. bulletId .. ".json"
+    local path = ROOMS_PATH .. myRoomCode .. "/bullets/" .. bulletId
     local data = '{"x":' .. x .. ',"y":' .. y .. ',"dx":' .. dx .. ',"dy":' .. dy .. ',"owner":"' .. myUid .. '","time":' .. love.timer.getTime() .. '}'
-    local options = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = data,
-        timeout = 2,
-        verify = false,
-    }
-    pcall(https.request, url, options)
+    sendRequest("PUT", path, data)
 end
 
 -- ============================================================
@@ -214,110 +257,86 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
         return
     end
     local abilityId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
-    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/abilities/" .. abilityId .. ".json"
+    local path = ROOMS_PATH .. myRoomCode .. "/abilities/" .. abilityId
     local data = '{"type":"' .. abilityType .. '","x":' .. x .. ',"y":' .. y .. ',"dirX":' .. (dirX or 0) .. ',"dirY":' .. (dirY or 0) .. ',"owner":"' .. myUid .. '","target":"' .. (targetUid or "") .. '","time":' .. love.timer.getTime() .. '}'
-    local options = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = data,
-        timeout = 2,
-        verify = false,
-    }
-    pcall(https.request, url, options)
+    sendRequest("PUT", path, data)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ (игроки, пули, способности)
+--  ПОЛУЧЕНИЕ ДАННЫХ
 -- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then
         return
     end
     
-    -- Получаем игроков
-    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players.json"
-    local options = {
-        method = "GET",
-        timeout = 3,
-        verify = false,
-    }
-    local success, code, body = pcall(https.request, url, options)
-    if success and code and code >= 200 and code < 300 then
-        local ok, data = pcall(love.data.decode, "string", "json", body)
-        if ok and data then
-            local newPlayers = {}
-            for uid, info in pairs(data) do
-                if uid ~= myUid and info.x and info.y then
-                    newPlayers[uid] = {
-                        x = info.x,
-                        y = info.y,
-                        nickname = info.nickname or "???",
-                        skin = info.skin or "NONE",
-                        targetX = info.x,
-                        targetY = info.y,
-                        lerpTimer = 0
-                    }
+    local path = ROOMS_PATH .. myRoomCode
+    sendRequest("GET", path .. "/players.json", nil, function(success, response)
+        if success and response and response ~= "null" then
+            local ok, data = pcall(love.data.decode, "string", "json", response)
+            if ok and data then
+                local newPlayers = {}
+                for uid, info in pairs(data) do
+                    if uid ~= myUid and info.x and info.y then
+                        newPlayers[uid] = {
+                            x = info.x,
+                            y = info.y,
+                            nickname = info.nickname or "???",
+                            skin = info.skin or "NONE",
+                            targetX = info.x,
+                            targetY = info.y,
+                            lerpTimer = 0
+                        }
+                    end
                 end
+                players = newPlayers
             end
-            players = newPlayers
         end
-    end
+    end)
     
-    -- Получаем пули
-    local bulletUrl = DB_URL .. ROOMS_PATH .. myRoomCode .. "/bullets.json"
-    local bulletOptions = {
-        method = "GET",
-        timeout = 2,
-        verify = false,
-    }
-    local bSuccess, bCode, bBody = pcall(https.request, bulletUrl, bulletOptions)
-    if bSuccess and bCode and bCode >= 200 and bCode < 300 then
-        local ok, data = pcall(love.data.decode, "string", "json", bBody)
-        if ok and data then
-            bullets = {}
-            for bid, info in pairs(data) do
-                if info.owner ~= myUid then
-                    bullets[bid] = {
-                        x = info.x,
-                        y = info.y,
-                        dx = info.dx,
-                        dy = info.dy,
-                        owner = info.owner,
-                        time = info.time or 0,
-                    }
+    sendRequest("GET", path .. "/bullets.json", nil, function(success, response)
+        if success and response and response ~= "null" then
+            local ok, data = pcall(love.data.decode, "string", "json", response)
+            if ok and data then
+                bullets = {}
+                for bid, info in pairs(data) do
+                    if info.owner ~= myUid then
+                        bullets[bid] = {
+                            x = info.x,
+                            y = info.y,
+                            dx = info.dx,
+                            dy = info.dy,
+                            owner = info.owner,
+                            time = info.time or 0,
+                        }
+                    end
                 end
             end
         end
-    end
+    end)
     
-    -- Получаем способности
-    local abilityUrl = DB_URL .. ROOMS_PATH .. myRoomCode .. "/abilities.json"
-    local abilityOptions = {
-        method = "GET",
-        timeout = 2,
-        verify = false,
-    }
-    local aSuccess, aCode, aBody = pcall(https.request, abilityUrl, abilityOptions)
-    if aSuccess and aCode and aCode >= 200 and aCode < 300 then
-        local ok, data = pcall(love.data.decode, "string", "json", aBody)
-        if ok and data then
-            abilities = {}
-            for aid, info in pairs(data) do
-                if info.owner ~= myUid then
-                    abilities[aid] = {
-                        type = info.type,
-                        x = info.x,
-                        y = info.y,
-                        dirX = info.dirX or 0,
-                        dirY = info.dirY or 0,
-                        owner = info.owner,
-                        target = info.target or "",
-                        time = info.time or 0,
-                    }
+    sendRequest("GET", path .. "/abilities.json", nil, function(success, response)
+        if success and response and response ~= "null" then
+            local ok, data = pcall(love.data.decode, "string", "json", response)
+            if ok and data then
+                abilities = {}
+                for aid, info in pairs(data) do
+                    if info.owner ~= myUid then
+                        abilities[aid] = {
+                            type = info.type,
+                            x = info.x,
+                            y = info.y,
+                            dirX = info.dirX or 0,
+                            dirY = info.dirY or 0,
+                            owner = info.owner,
+                            target = info.target or "",
+                            time = info.time or 0,
+                        }
+                    end
                 end
             end
         end
-    end
+    end)
 end
 
 function online.getPlayers()
@@ -337,16 +356,9 @@ function online.updateSkin(skin)
         return
     end
     mySkin = skin
-    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. "/skin.json"
+    local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. "/skin"
     local data = '"' .. skin .. '"'
-    local options = {
-        method = "PUT",
-        headers = { ["Content-Type"] = "application/json" },
-        data = data,
-        timeout = 3,
-        verify = false,
-    }
-    pcall(https.request, url, options)
+    sendRequest("PUT", path, data)
 end
 
 function online.getMySkin()
@@ -355,13 +367,8 @@ end
 
 function online.leave()
     if not isConnected or not myUid or not myRoomCode then return end
-    local url = DB_URL .. ROOMS_PATH .. myRoomCode .. "/players/" .. myUid .. ".json"
-    local options = {
-        method = "DELETE",
-        timeout = 3,
-        verify = false,
-    }
-    pcall(https.request, url, options)
+    local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
+    sendRequest("DELETE", path, nil)
     isConnected = false
     players = {}
     bullets = {}
