@@ -1,4 +1,5 @@
 -- online.lua – ПК: curl (оптимизированный), Android: https
+-- СВОИ КООРДИНАТЫ НЕ ЧИТАЮТСЯ!
 local online = {}
 
 local PATH = "players/"
@@ -14,8 +15,8 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.6          -- ⬆ реже
-local FETCH_INTERVAL = 0.8          -- ⬆ реже
+local SEND_INTERVAL = 0.6
+local FETCH_INTERVAL = 0.8
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
@@ -79,7 +80,7 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(false, err) end
         end
     else
-        -- ПК: curl (работает всегда)
+        -- ПК: curl
         local url = DB_URL .. path .. ".json"
         local curlCmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
         if body and body ~= "" then
@@ -230,7 +231,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ (реже)
+--  ПОЛУЧЕНИЕ ДАННЫХ (ИГНОРИРУЕМ СВОИ)
 -- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then
@@ -239,12 +240,14 @@ function online.fetchData()
     
     local path = ROOMS_PATH .. myRoomCode
     
+    -- Получаем игроков (исключая себя)
     sendRequest("GET", path .. "/players.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
                 local newPlayers = {}
                 for uid, info in pairs(data) do
+                    -- ⚡ ИГНОРИРУЕМ СВОЙ UID
                     if uid ~= myUid and info.x and info.y then
                         newPlayers[uid] = {
                             x = info.x,
@@ -262,6 +265,7 @@ function online.fetchData()
         end
     end)
     
+    -- Получаем пули (исключая свои)
     sendRequest("GET", path .. "/bullets.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -283,6 +287,7 @@ function online.fetchData()
         end
     end)
     
+    -- Получаем способности (исключая свои)
     sendRequest("GET", path .. "/abilities.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -353,6 +358,7 @@ function online.update(dt)
         return
     end
 
+    -- Интерполяция только других игроков
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
