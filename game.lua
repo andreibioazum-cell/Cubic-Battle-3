@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль с онлайн-режимом, скинами, снегом, пулями и способностями
+-- game.lua – полный игровой модуль с онлайн-режимом, скинами, снегом по всему экрану, пулями и способностями
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -41,7 +41,7 @@ local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
 -- ============================================================
---  СНЕЖИНКИ
+--  РЕАЛЬНЫЕ СНЕЖИНКИ (6 лучей)
 -- ============================================================
 local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
     size = size or 3
@@ -72,6 +72,9 @@ local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
     love.graphics.pop()
 end
 
+-- ============================================================
+--  СНЕГ ПО ВСЕМУ ЭКРАНУ (вокруг камеры)
+-- ============================================================
 local snowflakes = {}
 local function initSnow()
     local w, h = love.graphics.getDimensions()
@@ -475,7 +478,6 @@ function game.draw()
             else
                 imgToDraw = playerImg
             end
-            -- БЕЛЫЙ ЦВЕТ ДЛЯ ВСЕХ ИГРОКОВ
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.draw(imgToDraw, pos.x - PLAYER_SIZE/2, pos.y - PLAYER_SIZE/2, 0, 1, 1)
             love.graphics.setColor(1, 1, 1, 0.7)
