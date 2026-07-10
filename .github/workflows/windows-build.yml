@@ -7,7 +7,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -22,14 +22,14 @@ jobs:
           curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
           Expand-Archive -Path love-windows.zip -DestinationPath love-windows
 
-      - name: Create Portable EXE
+      - name: Create Portable EXE (64-bit)
         run: |
           New-Item -ItemType Directory -Force -Path dist\CubicBattle
           Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
           cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
           Remove-Item dist\CubicBattle\love.exe
 
-      - name: Upload ZIP
+      - name: Upload Portable ZIP
         uses: actions/upload-artifact@v4
         with:
           name: CubicBattle_Windows
