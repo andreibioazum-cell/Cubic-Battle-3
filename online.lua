@@ -1,5 +1,4 @@
 -- online.lua – ПК: curl (оптимизированный), Android: https
--- СВОИ КООРДИНАТЫ НЕ ЧИТАЮТСЯ!
 local online = {}
 
 local PATH = "players/"
@@ -15,12 +14,13 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.6
-local FETCH_INTERVAL = 0.8
+local SEND_INTERVAL = 0.5
+local FETCH_INTERVAL = 0.6
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
+local firstFetchDone = false
 
 local isAndroid = (love.system.getOS() == "Android")
 
@@ -134,6 +134,8 @@ function online.createRoom(roomCode, nickname, callback)
             if success2 then
                 isConnected = true
                 setDebug("Room created: " .. roomCode)
+                -- Принудительно загружаем игроков сразу после создания
+                online.fetchPlayers()
                 if callback then callback(true) end
             else
                 setDebug("Failed to add player: " .. response2)
@@ -173,6 +175,8 @@ function online.joinRoom(roomCode, nickname, callback)
             if success2 then
                 isConnected = true
                 setDebug("Joined room: " .. roomCode)
+                -- Принудительно загружаем игроков сразу после входа
+                online.fetchPlayers()
                 if callback then callback(true) end
             else
                 setDebug("Failed to join: " .. response2)
@@ -183,7 +187,7 @@ function online.joinRoom(roomCode, nickname, callback)
 end
 
 -- ============================================================
---  ОТПРАВКА ПОЗИЦИИ (только при изменении)
+--  ОТПРАВКА ПОЗИЦИИ
 -- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid or not myRoomCode then
@@ -231,23 +235,24 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ (ИГНОРИРУЕМ СВОИ)
+--  ПОЛУЧЕНИЕ ИГРОКОВ (ПРИНУДИТЕЛЬНО)
 -- ============================================================
-function online.fetchData()
+function online.fetchPlayers()
     if not isConnected or not myRoomCode then
+        setDebug("Cannot fetch: not connected or no room")
         return
     end
     
     local path = ROOMS_PATH .. myRoomCode
+    setDebug("Fetching players from: " .. path)
     
-    -- Получаем игроков (исключая себя)
     sendRequest("GET", path .. "/players.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
             if ok and data then
                 local newPlayers = {}
+                local count = 0
                 for uid, info in pairs(data) do
-                    -- ⚡ ИГНОРИРУЕМ СВОЙ UID
                     if uid ~= myUid and info.x and info.y then
                         newPlayers[uid] = {
                             x = info.x,
@@ -258,14 +263,35 @@ function online.fetchData()
                             targetY = info.y,
                             lerpTimer = 0
                         }
+                        count = count + 1
                     end
                 end
                 players = newPlayers
+                setDebug("Players in room: " .. count)
+                firstFetchDone = true
+            else
+                setDebug("Failed to parse players JSON")
             end
+        else
+            setDebug("Failed to fetch players: " .. (response or "no response"))
         end
     end)
+end
+
+-- ============================================================
+--  ПОЛУЧЕНИЕ ДАННЫХ (всех)
+-- ============================================================
+function online.fetchData()
+    if not isConnected or not myRoomCode then
+        return
+    end
     
-    -- Получаем пули (исключая свои)
+    -- Получаем игроков
+    online.fetchPlayers()
+    
+    local path = ROOMS_PATH .. myRoomCode
+    
+    -- Получаем пули
     sendRequest("GET", path .. "/bullets.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -287,7 +313,7 @@ function online.fetchData()
         end
     end)
     
-    -- Получаем способности (исключая свои)
+    -- Получаем способности
     sendRequest("GET", path .. "/abilities.json", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -351,6 +377,7 @@ function online.leave()
     myRoomCode = nil
     lastSentX = nil
     lastSentY = nil
+    firstFetchDone = false
 end
 
 function online.update(dt)
@@ -358,7 +385,7 @@ function online.update(dt)
         return
     end
 
-    -- Интерполяция только других игроков
+    -- Интерполяция других игроков
     local lerpSpeed = 4.5
     for uid, p in pairs(players) do
         if p.targetX and p.targetY then
