@@ -14,14 +14,15 @@ local bullets = {}
 local abilities = {}
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.5
-local FETCH_INTERVAL = 0.5
+local SEND_INTERVAL = 0.3
+local FETCH_INTERVAL = 0.3
 local isConnected = false
 local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
 local initialSpawnX = 400
 local initialSpawnY = 300
+local myUidPublic = nil
 
 local isAndroid = (love.system.getOS() == "Android")
 
@@ -57,6 +58,10 @@ function online.init()
     else
         setDebug("Online ready: PC (curl)")
     end
+end
+
+function online.getMyUid()
+    return myUid
 end
 
 -- ============================================================
@@ -103,13 +108,13 @@ function sendRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  ЗАПИСЬ ИГРОКА В КОМНАТУ (СПАВН В ЦЕНТРЕ)
+--  ЗАПИСЬ ИГРОКА В КОМНАТУ
 -- ============================================================
 local function writePlayerToRoom(roomCode, uid, nickname, skin, callback)
     local path = ROOMS_PATH .. roomCode .. "/players/" .. uid
-    -- Все игроки спавнятся в центре
     local data = '{"x":' .. initialSpawnX .. ',"y":' .. initialSpawnY .. ',"nickname":"' .. nickname .. '","skin":"' .. skin .. '"}'
     setDebug("Writing player to: " .. path)
+    setDebug("Data: " .. data)
     sendRequest("PUT", path, data, function(success, response)
         if success then
             setDebug("Player written successfully")
@@ -147,7 +152,7 @@ local function parsePlayersFromJSON(jsonStr)
         return result
     end
     
-    -- Ручной парсинг если love.data.decode не сработал
+    -- Ручной парсинг
     local pattern = '"([%w_%-]+)"%s*:%s*({[^}]*})'
     for uid, data in string.gmatch(jsonStr, pattern) do
         local x = data:match('"x"%s*:%s*([%d%.%-]+)')
@@ -185,10 +190,10 @@ function online.createRoom(roomCode, nickname, callback)
 
     myRoomCode = roomCode
     myUid = generateUuid()
+    myUidPublic = myUid
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    -- Создаём комнату
     local roomPath = ROOMS_PATH .. roomCode .. "/info"
     local roomData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
     sendRequest("PUT", roomPath, roomData, function(success, response)
@@ -198,7 +203,6 @@ function online.createRoom(roomCode, nickname, callback)
             return
         end
         
-        -- Записываем игрока
         writePlayerToRoom(roomCode, myUid, nickname, mySkin, function(success2)
             if success2 then
                 isConnected = true
@@ -229,10 +233,10 @@ function online.joinRoom(roomCode, nickname, callback)
 
     myRoomCode = roomCode
     myUid = generateUuid()
+    myUidPublic = myUid
     myNickname = nickname
     mySkin = SAVE_DATA.equippedSkin or "NONE"
 
-    -- Проверяем, существует ли комната
     local checkPath = ROOMS_PATH .. roomCode .. "/info"
     sendRequest("GET", checkPath, nil, function(success, response)
         if not success or response == "null" then
@@ -241,7 +245,6 @@ function online.joinRoom(roomCode, nickname, callback)
             return
         end
         
-        -- Записываем игрока
         writePlayerToRoom(roomCode, myUid, nickname, mySkin, function(success2)
             if success2 then
                 isConnected = true
@@ -304,7 +307,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY, targetUid)
 end
 
 -- ============================================================
---  ПОЛУЧЕНИЕ ИГРОКОВ (ПОСТОЯННАЯ ПРОВЕРКА КАЖДЫЕ 0.5 СЕК)
+--  ПОЛУЧЕНИЕ ИГРОКОВ (КАЖДЫЕ 0.3 СЕКУНДЫ)
 -- ============================================================
 function online.fetchPlayers()
     if not isConnected or not myRoomCode then
@@ -317,25 +320,28 @@ function online.fetchPlayers()
         if success and response and response ~= "null" then
             local newPlayers = parsePlayersFromJSON(response)
             
-            -- НЕ УДАЛЯЕМ СЕБЯ! Сохраняем всех игроков
+            -- Сохраняем всех игроков, включая себя
             players = newPlayers
             
-            -- Выводим количество игроков (включая себя)
+            -- Выводим информацию об игроках
             local count = 0
-            for _ in pairs(players) do
-                count = count + 1
-            end
-            
-            -- Показываем всех игроков в отладке
             local names = {}
             for uid, info in pairs(players) do
+                count = count + 1
                 if uid == myUid then
                     table.insert(names, info.nickname .. " (me)")
                 else
                     table.insert(names, info.nickname)
                 end
             end
-            setDebug("Players in room (" .. count .. "): " .. table.concat(names, ", "))
+            
+            if count > 0 then
+                setDebug("Players in room (" .. count .. "): " .. table.concat(names, ", "))
+            else
+                setDebug("No players in room")
+            end
+        else
+            setDebug("Failed to fetch players: " .. tostring(response))
         end
     end)
 end
@@ -352,7 +358,6 @@ function online.fetchData()
     
     local path = ROOMS_PATH .. myRoomCode
     
-    -- Получаем пули
     sendRequest("GET", path .. "/bullets", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -374,7 +379,6 @@ function online.fetchData()
         end
     end)
     
-    -- Получаем способности
     sendRequest("GET", path .. "/abilities", nil, function(success, response)
         if success and response and response ~= "null" then
             local ok, data = pcall(love.data.decode, "string", "json", response)
@@ -434,6 +438,7 @@ function online.leave()
     bullets = {}
     abilities = {}
     myUid = nil
+    myUidPublic = nil
     myNickname = nil
     myRoomCode = nil
     lastSentX = nil
@@ -456,7 +461,7 @@ function online.update(dt)
         end
     end
 
-    -- Отправка позиции (каждые 0.5 сек)
+    -- Отправка позиции (каждые 0.3 сек)
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -468,7 +473,7 @@ function online.update(dt)
         end
     end
 
-    -- Получение данных (каждые 0.5 сек)
+    -- Получение данных (каждые 0.3 сек)
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
