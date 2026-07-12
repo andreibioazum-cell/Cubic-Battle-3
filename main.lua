@@ -16,35 +16,24 @@ local SHOT_DELAY = 0.15
 local onlineTimer = 0
 local isMobile = love.system.getOS() == "Android" or love.system.getOS() == "iOS"
 
--- Настройки звука
+-- Данные игрока
+SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
 musicOn = true
 sfxOn = true
-SAVE_DATA = { coins = 0, ownedSkins = {}, equippedSkin = "NONE", nickname = "Player" }
 
 function playButtonSound()
     if not sfxOn then return end
-    pcall(function() 
-        local s = love.audio.newSource("cartoon-button-click-sound.mp3", "static")
-        s:setVolume(0.5)
-        s:play()
-    end)
+    pcall(function() love.audio.newSource("cartoon-button-click-sound.mp3", "static"):play() end)
 end
 
 function playShootSound()
     if not sfxOn then return end
-    pcall(function() 
-        local s = love.audio.newSource("The_Sound_Of_A_Gunshot.wav", "static")
-        s:play()
-    end)
+    pcall(function() love.audio.newSource("The_Sound_Of_A_Gunshot.wav", "static"):play() end)
 end
 
 function playHitSound()
     if not sfxOn then return end
-    pcall(function() 
-        local s = love.audio.newSource("hit.mp3", "static")
-        s:setVolume(0.4)
-        s:play()
-    end)
+    pcall(function() love.audio.newSource("hit.mp3", "static"):play() end)
 end
 
 _G.playShootSound = playShootSound
@@ -59,29 +48,21 @@ end
 function love.load()
     online.init()
     controls.load()
-    -- Вызываем ресайз один раз при старте, чтобы кнопки встали на места
+    -- Принудительный расчет координат кнопок при старте
     love.resize(love.graphics.getWidth(), love.graphics.getHeight())
 end
 
 function love.update(dt)
     if dt > 0.05 then dt = 0.05 end
 
-    -- Смена состояний (Load вызывается один раз при входе)
     if GameState.current ~= lastState then
         local s = GameState.current
-        if s == "lobby" then lobby.load()
-        elseif s == "mode_select" then mode_select.load()
-        elseif s == "difficulty" then difficulty.load()
-        elseif s == "game" then game.load()
-        elseif s == "shop" then shop.load(SAVE_DATA)
-        elseif s == "room" then room.load()
-        elseif s == "settings" then settings.load()
-        elseif s == "credits" then credits.load()
-        end
+        -- Вызываем load только если он есть в модуле
+        local modules = {lobby=lobby, game=game, shop=shop, room=room, settings=settings, credits=credits, mode_select=mode_select, difficulty=difficulty}
+        if modules[s] and modules[s].load then modules[s].load(SAVE_DATA) end
         lastState = s
     end
 
-    -- Логика обновления
     if GameState.current == "lobby" then
         lobby.update(dt)
     elseif GameState.current == "game" then
@@ -118,37 +99,30 @@ function love.draw()
     end
 end
 
--- УНИВЕРСАЛЬНЫЙ ОБРАБОТЧИК НАЖАТИЙ
+-- Обработка кликов
 local function handlePress(id, x, y)
     local s = GameState.current
-    if s == "game" then controls.touchpressed(id, x, y) end
+    if s == "game" then 
+        if controls.touchpressed then controls.touchpressed(id, x, y) end
+    end
     
-    if s == "lobby" then lobby.touchpressed(id, x, y)
-    elseif s == "mode_select" then mode_select.touchpressed(id, x, y)
-    elseif s == "difficulty" then difficulty.touchpressed(id, x, y)
-    elseif s == "room" then room.touchpressed(id, x, y)
-    elseif s == "settings" then settings.touchpressed(id, x, y)
-    elseif s == "credits" then credits.touchpressed(id, x, y)
-    elseif s == "shop" then 
-        local newCoins, changed = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
-        if changed then SAVE_DATA.coins = newCoins; SAVE_SAVE() end
+    local m = {lobby=lobby, mode_select=mode_select, difficulty=difficulty, room=room, settings=settings, credits=credits}
+    if m[s] and m[s].touchpressed then
+        m[s].touchpressed(id, x, y)
+    elseif s == "shop" then
+        local nc, ch = shop.touchpressed(id, x, y, SAVE_DATA.coins, SAVE_DATA)
+        if ch then SAVE_DATA.coins = nc; SAVE_SAVE() end
     end
 end
 
 function love.touchpressed(id, x, y) handlePress(id, x, y) end
-
-function love.mousepressed(x, y, button) 
-    if not isMobile and button == 1 then handlePress(1, x, y) end 
-end
+function love.mousepressed(x, y, btn) if not isMobile and btn == 1 then handlePress(1, x, y) end end
 
 function love.touchmoved(id, x, y)
-    if GameState.current == "game" then controls.touchmoved(id, x, y) end
+    if GameState.current == "game" and controls.touchmoved then controls.touchmoved(id, x, y) end
 end
-
 function love.mousemoved(x, y)
-    if not isMobile and love.mouse.isDown(1) then 
-        if GameState.current == "game" then controls.touchmoved(1, x, y) end
-    end
+    if not isMobile and love.mouse.isDown(1) and GameState.current == "game" then controls.touchmoved(1, x, y) end
 end
 
 function love.touchreleased(id, x, y)
@@ -157,29 +131,22 @@ function love.touchreleased(id, x, y)
         if shot then game.spawnPlayerBullet(dx, dy) end
     end
 end
-
-function love.mousereleased(x, y, button)
-    if not isMobile and button == 1 then
-        if GameState.current == "game" then
-            local shot, dx, dy = controls.touchreleased(1)
-            if shot then game.spawnPlayerBullet(dx, dy) end
-        end
+function love.mousereleased(x, y, btn)
+    if not isMobile and btn == 1 and GameState.current == "game" then
+        local shot, dx, dy = controls.touchreleased(1)
+        if shot then game.spawnPlayerBullet(dx, dy) end
     end
 end
 
+-- БЕЗОПАСНЫЙ РЕЗАЙЗ (Проверяет наличие функции)
 function love.resize(w, h)
-    lobby.resize(w, h)
-    mode_select.resize(w, h)
-    difficulty.resize(w, h)
-    game.resize(w, h)
-    shop.resize(w, h)
-    room.resize(w, h)
-    settings.resize(w, h)
-    credits.resize(w, h)
-    controls.resize()
+    local mods = {lobby, game, shop, room, settings, credits, mode_select, difficulty, controls}
+    for _, m in ipairs(mods) do
+        if m and m.resize then m.resize(w, h) end
+    end
 end
 
-function love.keypressed(key)
-    if key == "escape" then online.leave(); GameState.current = "lobby" end
-    if GameState.current == "game" then controls.keypressed(key) end
+function love.keypressed(k)
+    if k == "escape" then online.leave(); GameState.current = "lobby" end
+    if GameState.current == "game" then controls.keypressed(k) end
 end
