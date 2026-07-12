@@ -12,7 +12,7 @@ local isConnected = false
 local debugText = "Disconnected"
 
 local fetchTimer = 0
-local FETCH_INTERVAL = 0.4 
+local FETCH_INTERVAL = 0.45 
 local isAndroid = (love.system.getOS() == "Android")
 
 local function setDebug(text)
@@ -20,11 +20,10 @@ local function setDebug(text)
     print("[ONLINE] " .. text)
 end
 
--- Простейший парсер JSON для игроков
+-- Надежный парсер JSON для игроков
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return nil end
     local result = {}
-    -- Ищем структуру "ID": { "nickname": "...", "skin": "...", "x": ..., "y": ... }
     for id, content in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
         local x = content:match('"x":%s*([%d%.%-]+)')
         local y = content:match('"y":%s*([%d%.%-]+)')
@@ -33,10 +32,12 @@ local function parsePlayers(jsonStr)
         
         if x and y then
             result[id] = {
-                x = tonumber(x),
-                y = tonumber(y),
-                nickname = nick or "Unknown",
-                skin = skin or "NONE"
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                nickname = nick or "Player",
+                skin = skin or "NONE",
+                targetX = tonumber(x) or 0,
+                targetY = tonumber(y) or 0
             }
         end
     end
@@ -74,7 +75,7 @@ local function sendRequest(method, path, body, callback)
 end
 
 function online.init()
-    setDebug("Ready")
+    setDebug("Online Ready")
 end
 
 function online.createRoom(roomCode, nickname, callback)
@@ -89,10 +90,10 @@ function online.createRoom(roomCode, nickname, callback)
     sendRequest("PUT", path, data, function(ok)
         if ok then
             isConnected = true
-            setDebug("Created: " .. myRoomCode)
+            setDebug("Room Created: " .. myRoomCode)
             if callback then callback(true, myRoomCode) end
         else
-            if callback then callback(false, "Network Error") end
+            if callback then callback(false, "Server Error") end
         end
     end)
 end
@@ -110,14 +111,14 @@ function online.joinRoom(roomCode, nickname, callback)
             sendRequest("PUT", path, data, function(ok2)
                 if ok2 then
                     isConnected = true
-                    setDebug("Joined: " .. myRoomCode)
+                    setDebug("Joined Room")
                     if callback then callback(true, myRoomCode) end
                 else
-                    if callback then callback(false, "Join Error") end
+                    if callback then callback(false, "Join Failed") end
                 end
             end)
         else
-            if callback then callback(false, "Room 404") end
+            if callback then callback(false, "Room not found") end
         end
     end)
 end
@@ -147,7 +148,6 @@ function online.fetchData()
                         end
                     end
                 end
-                -- Удаляем тех, кто вышел
                 for id in pairs(players) do
                     if not newPlayers[id] then players[id] = nil end
                 end
@@ -158,17 +158,14 @@ end
 
 function online.update(dt)
     if not isConnected then return end
-    
-    -- Плавное движение (Lerp)
     for id, p in pairs(players) do
         if p.targetX then
             p.x = p.x or p.targetX
             p.y = p.y or p.targetY
-            p.x = p.x + (p.targetX - p.x) * dt * 8
-            p.y = p.y + (p.targetY - p.y) * dt * 8
+            p.x = p.x + (p.targetX - p.x) * dt * 10
+            p.y = p.y + (p.targetY - p.y) * dt * 10
         end
     end
-
     fetchTimer = fetchTimer + dt
     if fetchTimer > FETCH_INTERVAL then
         fetchTimer = 0
@@ -180,15 +177,22 @@ function online.getPlayers() return players end
 function online.isConnected() return isConnected end
 function online.getMyUid() return myUid end
 function online.getDebugText() return debugText end
-function online.updateSkin(skin) mySkin = skin end
-
 function online.leave() 
     if isConnected then
         sendRequest("DELETE", ROOMS_PATH .. myRoomCode .. "/players/" .. myUid)
     end
     isConnected = false 
     players = {}
-    myRoomCode = nil
 end
+function online.generateRoomCode()
+    local chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    local code = ""
+    for i = 1, 5 do
+        local idx = math.random(1, #chars)
+        code = code .. chars:sub(idx, idx)
+    end
+    return code
+end
+function online.updateSkin(skin) mySkin = skin end
 
 return online
