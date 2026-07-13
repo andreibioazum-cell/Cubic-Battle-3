@@ -1,4 +1,4 @@
--- online.lua – работа с Firebase через socket.http + SSL
+-- online.lua – работа с Firebase (ПК: LuaSocket, Android: HTTPS)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -20,6 +20,8 @@ local fetchTimer = 0
 local SEND_INTERVAL = 0.3
 local FETCH_INTERVAL = 0.4
 
+local isAndroid = (love.system.getOS() == "Android")
+
 local function setDebug(text)
     debugText = text
     print("[ONLINE] " .. text)
@@ -33,7 +35,8 @@ function online.generateRoomCode()
     local chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     local code = ""
     for i = 1, 5 do
-        code = code .. chars:sub(math.random(1, #chars), math.random(1, #chars))
+        local idx = math.random(1, #chars)
+        code = code .. chars:sub(idx, idx)
     end
     return code
 end
@@ -68,68 +71,72 @@ function online.getDebugText()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ ssl.https + socket.http)
+--  ОТПРАВКА ЗАПРОСОВ (ПК: LuaSocket, Android: HTTPS)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
-    local response_body = {}
-    local request_body = body or ""
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Content-Length"] = tostring(#request_body),
-    }
-    
-    local ok, code, response
-    
-    -- Пробуем использовать ssl.https (для HTTPS)
-    local hasSSL, ssl = pcall(require, "ssl.https")
-    if hasSSL then
+    if isAndroid then
+        -- Android: используем ssl.https (встроен в LOVE)
+        local https = require("ssl.https")
         local ltn12 = require("ltn12")
-        local res, code, headers = ssl.request{
+        local response_body = {}
+        
+        local request_body = body or ""
+        local headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = tostring(#request_body),
+        }
+        
+        local res, code = https.request{
             url = url,
             method = method,
             headers = headers,
             source = ltn12.source.string(request_body),
             sink = ltn12.sink.table(response_body),
-            timeout = 10,
-            verify = "none",
+            timeout = 5,
+            verify = false,
             protocol = "tlsv1_2",
         }
-        response = table.concat(response_body)
+        
+        local response = table.concat(response_body)
         code = tonumber(code) or 0
+        
         if code >= 200 and code < 300 then
             if callback then callback(true, response) end
         else
             if callback then callback(false, "SSL Error: " .. tostring(code)) end
         end
-        return
-    end
-    
-    -- Пробуем использовать socket.http (для HTTP без SSL)
-    local hasHTTP, http = pcall(require, "socket.http")
-    if hasHTTP then
+    else
+        -- ПК: используем LuaSocket (встроен в LOVE)
+        local http = require("socket.http")
         local ltn12 = require("ltn12")
-        local res, code, headers = http.request{
+        local response_body = {}
+        
+        local request_body = body or ""
+        local headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = tostring(#request_body),
+        }
+        
+        local res, code = http.request{
             url = url,
             method = method,
             headers = headers,
             source = ltn12.source.string(request_body),
             sink = ltn12.sink.table(response_body),
-            timeout = 10,
+            timeout = 5,
         }
-        response = table.concat(response_body)
+        
+        local response = table.concat(response_body)
         code = tonumber(code) or 0
+        
         if code >= 200 and code < 300 then
             if callback then callback(true, response) end
         else
             if callback then callback(false, "HTTP Error: " .. tostring(code)) end
         end
-        return
     end
-    
-    -- Если ничего не работает
-    if callback then callback(false, "No HTTP/SSL module available") end
 end
 
 -- ============================================================
