@@ -1,4 +1,4 @@
--- online.lua – работа с Firebase Realtime Database
+-- online.lua – работа с Firebase через socket.http (быстро)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -19,8 +19,6 @@ local sendTimer = 0
 local fetchTimer = 0
 local SEND_INTERVAL = 0.3
 local FETCH_INTERVAL = 0.4
-
-local isAndroid = (love.system.getOS() == "Android")
 
 local function setDebug(text)
     debugText = text
@@ -70,28 +68,36 @@ function online.getDebugText()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ
+--  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ socket.http)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
-    local cmd = 'curl -s -X ' .. method .. ' "' .. url .. '"'
-    if body and body ~= "" then
-        local escaped = body:gsub('"', '\\"')
-        cmd = cmd .. ' -H "Content-Type: application/json" -d "' .. escaped .. '"'
-    end
-    cmd = cmd .. ' 2>&1'
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local response_body = {}
     
-    local handle = io.popen(cmd)
-    local result = handle:read("*a")
-    handle:close()
+    local request_body = body or ""
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Content-Length"] = tostring(#request_body),
+    }
     
-    if callback then
-        if result and result ~= "" and not result:match("error") and not result:match("curl") then
-            callback(true, result)
-        else
-            callback(false, result or "Error")
-        end
+    local res, code, headers = http.request{
+        url = url,
+        method = method,
+        headers = headers,
+        source = ltn12.source.string(request_body),
+        sink = ltn12.sink.table(response_body),
+        timeout = 5,
+    }
+    
+    local response = table.concat(response_body)
+    
+    if code and code >= 200 and code < 300 then
+        if callback then callback(true, response) end
+    else
+        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
     end
 end
 
