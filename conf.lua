@@ -9,4 +9,6 @@ function love.conf(t)
     t.window.resizable = true
     t.modules.physics = false
     t.modules.video = false
+    t.modules.socket = true
+    t.modules.ssl = true
 end
