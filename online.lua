@@ -1,4 +1,4 @@
--- online.lua – работа с Firebase через socket.http (быстро)
+-- online.lua – работа с Firebase через socket.http + SSL
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -68,40 +68,68 @@ function online.getDebugText()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ socket.http)
+--  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ ssl.https + socket.http)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
     local response_body = {}
-    
     local request_body = body or ""
     local headers = {
         ["Content-Type"] = "application/json",
         ["Content-Length"] = tostring(#request_body),
     }
     
-    local res, code, headers = http.request{
-        url = url,
-        method = method,
-        headers = headers,
-        source = ltn12.source.string(request_body),
-        sink = ltn12.sink.table(response_body),
-        timeout = 5,
-    }
+    local ok, code, response
     
-    local response = table.concat(response_body)
-    
-    -- ИСПРАВЛЕНИЕ: преобразуем code в число
-    code = tonumber(code) or 0
-    
-    if code >= 200 and code < 300 then
-        if callback then callback(true, response) end
-    else
-        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
+    -- Пробуем использовать ssl.https (для HTTPS)
+    local hasSSL, ssl = pcall(require, "ssl.https")
+    if hasSSL then
+        local ltn12 = require("ltn12")
+        local res, code, headers = ssl.request{
+            url = url,
+            method = method,
+            headers = headers,
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+            timeout = 10,
+            verify = "none",
+            protocol = "tlsv1_2",
+        }
+        response = table.concat(response_body)
+        code = tonumber(code) or 0
+        if code >= 200 and code < 300 then
+            if callback then callback(true, response) end
+        else
+            if callback then callback(false, "SSL Error: " .. tostring(code)) end
+        end
+        return
     end
+    
+    -- Пробуем использовать socket.http (для HTTP без SSL)
+    local hasHTTP, http = pcall(require, "socket.http")
+    if hasHTTP then
+        local ltn12 = require("ltn12")
+        local res, code, headers = http.request{
+            url = url,
+            method = method,
+            headers = headers,
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+            timeout = 10,
+        }
+        response = table.concat(response_body)
+        code = tonumber(code) or 0
+        if code >= 200 and code < 300 then
+            if callback then callback(true, response) end
+        else
+            if callback then callback(false, "HTTP Error: " .. tostring(code)) end
+        end
+        return
+    end
+    
+    -- Если ничего не работает
+    if callback then callback(false, "No HTTP/SSL module available") end
 end
 
 -- ============================================================
@@ -205,6 +233,8 @@ function online.createRoom(roomCode, nickname, callback)
             return
         end
         
+        setDebug("Room info created")
+        
         local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
         local playerData = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
         
@@ -248,6 +278,8 @@ function online.joinRoom(roomCode, nickname, callback)
             if callback then callback(false, "Room not found") end
             return
         end
+        
+        setDebug("Room exists, joining...")
         
         local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
         local playerData = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
