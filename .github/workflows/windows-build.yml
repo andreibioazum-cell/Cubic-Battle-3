@@ -19,28 +19,33 @@ jobs:
 
       - name: Download LÖVE Windows 64-bit
         run: |
-          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
+          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/12.0/love-12.0-win64.zip
           Expand-Archive -Path love-windows.zip -DestinationPath love-windows
 
-      - name: Add SSL support (LuaSec) to build
+      - name: Copy LuaSocket and SSL modules
         run: |
+          mkdir -p dist\CubicBattle\socket
           mkdir -p dist\CubicBattle\ssl
-          # Скачиваем LuaSec для Windows (Lua 5.1 / LÖVE 11.5)
-          curl -L -o ssl.dll https://github.com/brunoos/luasec/raw/master/win32/ssl.dll
-          curl -L -o https.dll https://github.com/brunoos/luasec/raw/master/win32/https.dll
-          # Копируем в папку с игрой
-          copy ssl.dll dist\CubicBattle\
-          copy https.dll dist\CubicBattle\ssl\https.dll
+          mkdir -p dist\CubicBattle\mime
+          
+          # Копируем LuaSocket (уже есть в LOVE)
+          copy love-windows\love-12.0-win64\socket\*.lua dist\CubicBattle\socket\ 2>nul || echo "No socket lua files"
+          
+          # Копируем SSL модули (уже есть в LOVE)
+          copy love-windows\love-12.0-win64\ssl\*.lua dist\CubicBattle\ssl\ 2>nul || echo "No ssl lua files"
+          
+          # Копируем DLL
+          copy love-windows\love-12.0-win64\*.dll dist\CubicBattle\ 2>nul || echo "No dll files"
 
       - name: Create Portable EXE (64-bit)
         run: |
           New-Item -ItemType Directory -Force -Path dist\CubicBattle
-          Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
+          Copy-Item love-windows\love-12.0-win64\* -Destination dist\CubicBattle\
           cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
           Remove-Item dist\CubicBattle\love.exe
 
       - name: Upload Portable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle_Windows
+          name: CubicBattle_Windows_12.0
           path: dist\CubicBattle
