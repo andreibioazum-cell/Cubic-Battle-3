@@ -94,7 +94,10 @@ local function sendRequest(method, path, body, callback)
     
     local response = table.concat(response_body)
     
-    if code and code >= 200 and code < 300 then
+    -- ИСПРАВЛЕНИЕ: преобразуем code в число
+    code = tonumber(code) or 0
+    
+    if code >= 200 and code < 300 then
         if callback then callback(true, response) end
     else
         if callback then callback(false, "HTTP Error: " .. tostring(code)) end
