@@ -1,4 +1,4 @@
--- main.lua – с поддержкой онлайн-режима
+-- main.lua – с поддержкой онлайн-режима и кнопками управления окном
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -18,7 +18,129 @@ local lastState = nil
 local shotCooldown = 0
 local SHOT_DELAY = 0.15
 
--- ЗВУКИ И МУЗЫКА
+-- ============================================================
+--  КНОПКИ УПРАВЛЕНИЯ ОКНОМ (только для ПК)
+-- ============================================================
+local windowButtons = {
+    close = { x = 0, y = 0, w = 30, h = 30 },
+    maximize = { x = 0, y = 0, w = 30, h = 30 },
+    minimize = { x = 0, y = 0, w = 30, h = 30 },
+    isFullscreen = false,
+    hoverClose = false,
+    hoverMaximize = false,
+    hoverMinimize = false,
+    show = not isMobile
+}
+
+local function updateWindowButtons()
+    local w, h = love.graphics.getDimensions()
+    local size = 30
+    local spacing = 6
+    local padding = 8
+    
+    windowButtons.minimize.x = w - padding - size - spacing - size - spacing - size
+    windowButtons.minimize.y = padding
+    windowButtons.minimize.w = size
+    windowButtons.minimize.h = size
+    
+    windowButtons.maximize.x = w - padding - size - spacing - size
+    windowButtons.maximize.y = padding
+    windowButtons.maximize.w = size
+    windowButtons.maximize.h = size
+    
+    windowButtons.close.x = w - padding - size
+    windowButtons.close.y = padding
+    windowButtons.close.w = size
+    windowButtons.close.h = size
+end
+
+local function drawWindowButtons()
+    if not windowButtons.show then return end
+    
+    local size = windowButtons.close.w
+    
+    -- Фон для кнопок
+    love.graphics.setColor(0.08, 0.08, 0.12, 0.6)
+    love.graphics.rectangle("fill", windowButtons.close.x - 10, 2, 
+                            windowButtons.close.w + windowButtons.maximize.w + windowButtons.minimize.w + 50, 
+                            windowButtons.close.h + 10, 6, 6)
+    
+    -- ===== СВЕРНУТЬ =====
+    local minColor = windowButtons.hoverMinimize and {0.4, 0.4, 0.5, 1} or {0.25, 0.25, 0.35, 0.85}
+    love.graphics.setColor(minColor[1], minColor[2], minColor[3], minColor[4])
+    love.graphics.rectangle("fill", windowButtons.minimize.x, windowButtons.minimize.y, size, size, 4, 4)
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.setLineWidth(2)
+    love.graphics.line(windowButtons.minimize.x + 8, windowButtons.minimize.y + size/2, 
+                       windowButtons.minimize.x + size - 8, windowButtons.minimize.y + size/2)
+    
+    -- ===== РАЗВЕРНУТЬ =====
+    local maxColor = windowButtons.hoverMaximize and {0.4, 0.4, 0.5, 1} or {0.25, 0.25, 0.35, 0.85}
+    love.graphics.setColor(maxColor[1], maxColor[2], maxColor[3], maxColor[4])
+    love.graphics.rectangle("fill", windowButtons.maximize.x, windowButtons.maximize.y, size, size, 4, 4)
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.setLineWidth(2)
+    if windowButtons.isFullscreen then
+        love.graphics.rectangle("line", windowButtons.maximize.x + 4, windowButtons.maximize.y + 8, size - 12, size - 12)
+        love.graphics.rectangle("line", windowButtons.maximize.x + 8, windowButtons.maximize.y + 4, size - 12, size - 12)
+    else
+        love.graphics.rectangle("line", windowButtons.maximize.x + 5, windowButtons.maximize.y + 5, size - 10, size - 10)
+    end
+    
+    -- ===== ЗАКРЫТЬ =====
+    local closeColor = windowButtons.hoverClose and {0.9, 0.2, 0.2, 1} or {0.7, 0.15, 0.15, 0.9}
+    love.graphics.setColor(closeColor[1], closeColor[2], closeColor[3], closeColor[4])
+    love.graphics.rectangle("fill", windowButtons.close.x, windowButtons.close.y, size, size, 4, 4)
+    love.graphics.setColor(1, 1, 1, 0.9)
+    love.graphics.setLineWidth(2.5)
+    local m = 8
+    love.graphics.line(windowButtons.close.x + m, windowButtons.close.y + m, 
+                       windowButtons.close.x + size - m, windowButtons.close.y + size - m)
+    love.graphics.line(windowButtons.close.x + size - m, windowButtons.close.y + m, 
+                       windowButtons.close.x + m, windowButtons.close.y + size - m)
+end
+
+local function handleWindowButtons(x, y)
+    if not windowButtons.show then return false end
+    
+    if x >= windowButtons.close.x and x <= windowButtons.close.x + windowButtons.close.w and
+       y >= windowButtons.close.y and y <= windowButtons.close.y + windowButtons.close.h then
+        love.event.quit()
+        return true
+    end
+    
+    if x >= windowButtons.maximize.x and x <= windowButtons.maximize.x + windowButtons.maximize.w and
+       y >= windowButtons.maximize.y and y <= windowButtons.maximize.y + windowButtons.maximize.h then
+        windowButtons.isFullscreen = not windowButtons.isFullscreen
+        love.window.setFullscreen(windowButtons.isFullscreen, "desktop")
+        return true
+    end
+    
+    if x >= windowButtons.minimize.x and x <= windowButtons.minimize.x + windowButtons.minimize.w and
+       y >= windowButtons.minimize.y and y <= windowButtons.minimize.y + windowButtons.minimize.h then
+        love.window.minimize()
+        return true
+    end
+    
+    return false
+end
+
+local function windowButtonsMousemoved(x, y)
+    if not windowButtons.show then return end
+    
+    windowButtons.hoverClose = x >= windowButtons.close.x and x <= windowButtons.close.x + windowButtons.close.w and
+                               y >= windowButtons.close.y and y <= windowButtons.close.y + windowButtons.close.h
+    
+    windowButtons.hoverMaximize = x >= windowButtons.maximize.x and x <= windowButtons.maximize.x + windowButtons.maximize.w and
+                                  y >= windowButtons.maximize.y and y <= windowButtons.maximize.y + windowButtons.maximize.h
+    
+    windowButtons.hoverMinimize = x >= windowButtons.minimize.x and x <= windowButtons.minimize.x + windowButtons.minimize.w and
+                                  y >= windowButtons.minimize.y and y <= windowButtons.minimize.y + windowButtons.minimize.h
+end
+
+-- ============================================================
+--  ЗВУКИ И МУЗЫКА
+-- ============================================================
 local bgMusic = nil
 musicOn = true
 sfxOn = true
@@ -100,7 +222,9 @@ _G.playHitSound = playHitSound
 game.playShootSound = playShootSound
 game.playHitSound = playHitSound
 
--- СОХРАНЕНИЕ
+-- ============================================================
+--  СОХРАНЕНИЕ
+-- ============================================================
 SAVE_DATA = { 
     coins = 0, 
     ownedSkins = {}, 
@@ -166,13 +290,16 @@ function loadSave()
     sfxOn = sfxVal == 1
 end
 
--- LOVE CALLBACKS
+-- ============================================================
+--  LOVE CALLBACKS
+-- ============================================================
 function love.load()
     love.graphics.setDefaultFilter("linear", "linear")
     loadSave()
     controls.load()
     loadMusic()
     online.init()
+    updateWindowButtons()
 end
 
 function love.update(dt)
@@ -208,7 +335,6 @@ function love.update(dt)
         game.update(dt)
         controls.update(dt)
         
-        -- ОНЛАЙН: обновляем и отправляем позицию
         if online.isConnected() then
             online.update(dt)
             local px, py = game.getPlayerPosition()
@@ -265,6 +391,9 @@ function love.draw()
     elseif GameState.current == "settings" then
         settings.draw()
     end
+    
+    -- Рисуем кнопки управления окном поверх всего
+    drawWindowButtons()
 end
 
 function love.resize(w, h)
@@ -276,6 +405,7 @@ function love.resize(w, h)
     if credits.resize then credits.resize() end
     if settings.resize then settings.resize() end
     controls.resize()
+    updateWindowButtons()
 end
 
 function love.keypressed(key)
@@ -367,6 +497,11 @@ function love.touchpressed(id, x, y)
     if now - lastTap < 0.05 then return end
     lastTap = now
 
+    -- Проверяем кнопки окна
+    if handleWindowButtons(x, y) then
+        return
+    end
+
     if GameState.current == "game" or GameState.current == "online" then
         controls.touchpressed(id, x, y)
     end
@@ -394,12 +529,17 @@ end
 function love.mousepressed(x, y, button, istouch)
     if isMobile or istouch then return end
     if button == 1 then
+        -- Проверяем кнопки окна
+        if handleWindowButtons(x, y) then
+            return
+        end
         love.touchpressed(1, x, y)
     end
 end
 
 function love.mousemoved(x, y)
     if isMobile then return end
+    windowButtonsMousemoved(x, y)
     if love.mouse.isDown(1) then
         love.touchmoved(1, x, y)
     end
