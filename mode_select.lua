@@ -1,4 +1,4 @@
--- mode_select.lua – выбор режима с комнатами
+-- mode_select.lua – выбор режима (без комнат)
 local mode_select = {}
 
 local fontTitle, fontBtn
@@ -7,54 +7,6 @@ local btnMulti  = { w = 220, h = 75, x = 0, y = 0 }
 local btnBack   = { w = 140, h = 55, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
-
-local function sanitize(str)
-    if not str then return "" end
-    local result = ""
-    local i = 1
-    while i <= #str do
-        local b = str:byte(i)
-        if b < 0x80 then
-            if b >= 32 and b <= 126 then
-                result = result .. string.char(b)
-            else
-                result = result .. " "
-            end
-            i = i + 1
-        elseif b >= 0xC2 and b <= 0xDF then
-            local b2 = str:byte(i+1)
-            if b2 and b2 >= 0x80 and b2 <= 0xBF then
-                result = result .. string.char(b, b2)
-            else
-                result = result .. "?"
-            end
-            i = i + 2
-        elseif b >= 0xE0 and b <= 0xEF then
-            local b2 = str:byte(i+1)
-            local b3 = str:byte(i+2)
-            if b2 and b3 and b2 >= 0x80 and b2 <= 0xBF and b3 >= 0x80 and b3 <= 0xBF then
-                result = result .. string.char(b, b2, b3)
-            else
-                result = result .. "?"
-            end
-            i = i + 3
-        elseif b >= 0xF0 and b <= 0xF4 then
-            local b2 = str:byte(i+1)
-            local b3 = str:byte(i+2)
-            local b4 = str:byte(i+3)
-            if b2 and b3 and b4 and b2 >= 0x80 and b2 <= 0xBF and b3 >= 0x80 and b3 <= 0xBF and b4 >= 0x80 and b4 <= 0xBF then
-                result = result .. string.char(b, b2, b3, b4)
-            else
-                result = result .. "?"
-            end
-            i = i + 4
-        else
-            result = result .. "?"
-            i = i + 1
-        end
-    end
-    return result
-end
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -65,7 +17,6 @@ end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     alpha = alpha or 1
-    text = sanitize(text)
     love.graphics.setFont(font)
     local tw = font:getWidth(text)
     local startX = x
@@ -188,7 +139,8 @@ function mode_select.touchpressed(id, x, y)
 
     if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
         playButtonSound()
-        GameState.current = "room"
+        _G.roomCode = "global"
+        GameState.current = "game"
         return
     end
 end
