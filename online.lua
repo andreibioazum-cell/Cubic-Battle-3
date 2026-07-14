@@ -1,7 +1,8 @@
--- online.lua – работа с Firebase (ПК и Android)
+-- online.lua – работа с Firebase (ПК + Android)
 local online = {}
 
-local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
+-- ВАЖНО: для Android используем HTTP
+local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
 local ROOMS_PATH = "rooms/"
 
 local myUid = nil
@@ -27,7 +28,6 @@ local function setDebug(text)
     print("[ONLINE] " .. text)
 end
 
--- Функция для отправки сообщений в отладку игры
 local function sendToGameDebug(text, color)
     if _G.addDebugMessage then
         _G.addDebugMessage(text, color)
@@ -79,15 +79,10 @@ function online.getDebugText()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (РАБОТАЕТ НА ПК И ANDROID)
+--  ОТПРАВКА ЗАПРОСОВ
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
-    
-    -- Для Android используем HTTP (Firebase поддерживает)
-    if isAndroid then
-        url = url:gsub("https://", "http://")
-    end
     
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
     
