@@ -120,6 +120,7 @@ function mode_select.draw()
 
     drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
+    -- Кнопка SINGLEPLAYER
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnSingle.x + 5*scale, btnSingle.y + 6*scale, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -129,6 +130,7 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
 
+    -- Кнопка MULTIPLAYER
     love.graphics.setColor(0.0, 0.3, 0.0, 0.5)
     love.graphics.rectangle("fill", btnMulti.x + 5*scale, btnMulti.y + 6*scale, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.8, 0.2, 1)
@@ -138,6 +140,29 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     drawSpacedText("MULTIPLAYER", btnMulti.x, btnMulti.y + 22*scale, btnMulti.w, "center", fontBtn, nil, 1)
 
+    -- ============================================================
+    --  ПЛАВАЮЩАЯ НАДПИСЬ ОНЛАЙН (под кнопкой MULTIPLAYER)
+    -- ============================================================
+    local time = love.timer.getTime()
+    local yOffset = math.sin(time * 1.5) * 2
+    
+    local text = "Online is still being developed, it may be very weak, so don't throw slippers at us."
+    love.graphics.setFont(fontBtn)
+    local tw = fontBtn:getWidth(text)
+    local x = w/2 - tw/2
+    local y = btnMulti.y + btnMulti.h + 30 * scale + yOffset
+    
+    love.graphics.setColor(0, 0, 0, 0.6)
+    love.graphics.print(text, x + 2, y + 2)
+    
+    love.graphics.setColor(1, 0.8, 0.2, 0.85)
+    love.graphics.print(text, x, y)
+    
+    love.graphics.setColor(1, 0.8, 0.2, 0.25)
+    love.graphics.setLineWidth(1)
+    love.graphics.line(w/2 - tw/2, y + 22, w/2 + tw/2, y + 22)
+
+    -- Кнопка BACK
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
