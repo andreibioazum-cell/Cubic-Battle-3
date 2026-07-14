@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль с онлайн-режимом и отладкой
+-- game.lua – полный игровой модуль (онлайн + офлайн, без комнат)
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -41,7 +41,7 @@ local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
 -- ============================================================
---  ОТЛАДОЧНАЯ КОНСОЛЬ (внизу экрана)
+--  ОТЛАДКА
 -- ============================================================
 local debugConsole = {
     messages = {},
@@ -274,16 +274,22 @@ end
 --  ЗАГРУЗКА
 -- ============================================================
 function game.load()
-    isOnlineMode = (_G.roomCode ~= nil and _G.roomCode ~= "")
-
-    if not isOnlineMode then
+    -- Определяем режим
+    isOnlineMode = (GameState.current == "game")  -- если пришли из MULTIPLAYER
+    
+    if isOnlineMode then
+        -- ОНЛАЙН РЕЖИМ
+        online.init(SAVE_DATA.nickname or "Player")
+        cube.speed = 420
+        enemy.reset()
+        game.addDebugMessage("ONLINE MODE ACTIVATED", {0.2, 0.8, 0.2, 1})
+    else
+        -- ОФЛАЙН РЕЖИМ
         currentDifficulty = _G.difficulty or "normal"
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
         cube.speed = 260
-    else
-        enemy.reset()
-        cube.speed = 420
+        game.addDebugMessage("OFFLINE MODE", {0.5, 0.5, 0.8, 1})
     end
 
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
@@ -320,12 +326,6 @@ function game.load()
     controls.load()
     enemy.load()
     initSnow()
-
-    game.addDebugMessage("=== GAME STARTED ===", {0.3, 0.8, 0.3, 1})
-    game.addDebugMessage("Online mode: " .. tostring(isOnlineMode), {0.5, 0.5, 0.8, 1})
-    if isOnlineMode then
-        game.addDebugMessage("Room code: " .. (_G.roomCode or "none"), {0.5, 0.5, 0.8, 1})
-    end
 end
 
 function game.resize()
@@ -341,7 +341,9 @@ function game.update(dt)
 
     controls.update(dt)
 
+    -- ОНЛАЙН: отправка позиции
     if isOnlineMode and online.isConnected() then
+        online.update(dt)
         online.sendPosition(cube.x, cube.y)
     end
 
@@ -472,32 +474,6 @@ function game.update(dt)
                 if dead then return end
             end
         end
-    else
-        online.update(dt)
-
-        -- ОТЛАДКА ОНЛАЙН СТАТУСА (каждые 2 секунды)
-        if not debugConsole.timer then debugConsole.timer = 0 end
-        debugConsole.timer = debugConsole.timer + dt
-        if debugConsole.timer > 2 then
-            debugConsole.timer = 0
-            if online.isConnected() then
-                local playerCount = 0
-                for _ in pairs(online.getPlayers()) do
-                    playerCount = playerCount + 1
-                end
-                local status = "Online | Players: " .. playerCount
-                if playerCount > 0 then
-                    local names = {}
-                    for _, p in pairs(online.getPlayers()) do
-                        table.insert(names, p.nickname)
-                    end
-                    status = status .. " | " .. table.concat(names, ", ")
-                end
-                game.addDebugMessage(status, {0.2, 0.8, 0.2, 1})
-            else
-                game.addDebugMessage("OFFLINE - No Firebase signal", {0.9, 0.2, 0.2, 1})
-            end
-        end
     end
 
     updateSnow(dt)
@@ -535,14 +511,17 @@ function game.draw()
         end
     end
 
+    -- ОНЛАЙН: пули других игроков
     if isOnlineMode then
-        local onlineBullets = online.getBullets() or {}
-        for bid, b in pairs(onlineBullets) do
-            love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.circle("fill", b.x, b.y, 6)
+        for id, b in pairs(online.getBullets()) do
+            if b.owner ~= online.getMyUid() then
+                love.graphics.setColor(1, 0.2, 0.2, 1)
+                love.graphics.circle("fill", b.x, b.y, 6)
+            end
         end
     end
 
+    -- ОНЛАЙН: способности
     if isOnlineMode then
         local onlineAbilities = online.getAbilities() or {}
         for aid, ab in pairs(onlineAbilities) do
@@ -560,12 +539,13 @@ function game.draw()
         end
     end
 
+    -- Враг (только офлайн)
     if not isOnlineMode then
         enemy.drawBullets()
         enemy.draw()
     end
 
-    -- Отрисовка других игроков
+    -- ОНЛАЙН: другие игроки
     if isOnlineMode then
         for id, p in pairs(online.getPlayers()) do
             if id ~= online.getMyUid() then
