@@ -38,7 +38,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ДОЛЖНА БЫТЬ ПЕРВОЙ!)
+--  ОТПРАВКА ЗАПРОСОВ (socket.http для всех платформ)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
@@ -76,7 +76,7 @@ local function sendRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  ОСТАЛЬНЫЕ ФУНКЦИИ
+--  ФУНКЦИИ
 -- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
@@ -319,7 +319,7 @@ function online.updateSkin(skin)
 end
 
 -- ============================================================
---  ПАРСИНГ (ДОЛЖЕН БЫТЬ ПОСЛЕ sendRequest, НО ПЕРЕД ИСПОЛЬЗОВАНИЕМ)
+--  ПАРСИНГ
 -- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
