@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль с онлайн-режимом, скинами, снегом и пулями
+-- game.lua – полный игровой модуль с онлайн-режимом и отладкой
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -41,19 +41,73 @@ local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
 -- ============================================================
---  КРАСИВЫЕ СНЕЖИНКИ (6 лучей)
+--  ОТЛАДОЧНАЯ КОНСОЛЬ (внизу экрана)
+-- ============================================================
+local debugConsole = {
+    messages = {},
+    maxMessages = 6,
+    visible = true,
+    lineHeight = 20,
+    padding = 6,
+    bgColor = {0, 0, 0, 0.75}
+}
+
+function game.addDebugMessage(text, color)
+    color = color or {1, 1, 1, 1}
+    table.insert(debugConsole.messages, {
+        text = text,
+        color = color,
+        time = love.timer.getTime()
+    })
+    if #debugConsole.messages > debugConsole.maxMessages then
+        table.remove(debugConsole.messages, 1)
+    end
+    print("[DEBUG] " .. text)
+end
+
+local function drawDebugConsole()
+    if not debugConsole.visible then return end
+
+    local w = love.graphics.getWidth()
+    local totalHeight = #debugConsole.messages * debugConsole.lineHeight + debugConsole.padding * 2
+
+    love.graphics.setColor(debugConsole.bgColor[1], debugConsole.bgColor[2],
+                           debugConsole.bgColor[3], debugConsole.bgColor[4])
+    love.graphics.rectangle("fill", 0, love.graphics.getHeight() - totalHeight,
+                                w, totalHeight)
+
+    love.graphics.setColor(0.3, 0.3, 0.5, 0.5)
+    love.graphics.setLineWidth(1)
+    love.graphics.line(0, love.graphics.getHeight() - totalHeight, w, love.graphics.getHeight() - totalHeight)
+
+    love.graphics.setFont(font or love.graphics.newFont(14))
+    local y = love.graphics.getHeight() - debugConsole.padding - debugConsole.lineHeight
+    for i = #debugConsole.messages, 1, -1 do
+        local msg = debugConsole.messages[i]
+        local age = love.timer.getTime() - msg.time
+        local alpha = age > 10 and (1 - (age - 10) / 5) or 1
+        if alpha > 0 then
+            love.graphics.setColor(msg.color[1], msg.color[2], msg.color[3], msg.color[4] * alpha)
+            love.graphics.print(msg.text, debugConsole.padding + 5, y)
+            y = y - debugConsole.lineHeight
+        end
+    end
+end
+
+-- ============================================================
+--  СНЕЖИНКИ
 -- ============================================================
 local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
     size = size or 3
     alpha = alpha or 1
     rotation = rotation or 0
     twinkle = twinkle or 1
-    
+
     love.graphics.setColor(1, 1, 1, alpha * twinkle)
     love.graphics.push()
     love.graphics.translate(x, y)
     love.graphics.rotate(rotation)
-    
+
     for i = 0, 5 do
         local angle = i * math.pi / 3
         love.graphics.push()
@@ -67,14 +121,11 @@ local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
         love.graphics.circle("fill", size * 3, 0, size * 0.6)
         love.graphics.pop()
     end
-    
+
     love.graphics.circle("fill", 0, 0, size * 0.8)
     love.graphics.pop()
 end
 
--- ============================================================
---  СНЕГ ПО ВСЕМУ ЭКРАНУ
--- ============================================================
 local snowflakes = {}
 local function initSnow()
     local w, h = love.graphics.getDimensions()
@@ -100,7 +151,7 @@ local function updateSnow(dt)
         f.y = f.y + f.speed * dt
         f.x = f.x + math.sin(f.phase + love.timer.getTime() * 0.4 + f.wobble) * 25 * dt
         f.rotation = f.rotation + f.rotSpeed * dt
-        
+
         if f.y > h/2 + 20 then
             f.y = -h/2 - 20
             f.x = math.random(-w/2, w/2)
@@ -220,7 +271,7 @@ local function fireLaser(px, py, aimX, aimY)
 end
 
 -- ============================================================
---  ЗАГРУЗКА ИГРЫ
+--  ЗАГРУЗКА
 -- ============================================================
 function game.load()
     isOnlineMode = (_G.roomCode ~= nil and _G.roomCode ~= "")
@@ -269,6 +320,12 @@ function game.load()
     controls.load()
     enemy.load()
     initSnow()
+
+    game.addDebugMessage("=== GAME STARTED ===", {0.3, 0.8, 0.3, 1})
+    game.addDebugMessage("Online mode: " .. tostring(isOnlineMode), {0.5, 0.5, 0.8, 1})
+    if isOnlineMode then
+        game.addDebugMessage("Room code: " .. (_G.roomCode or "none"), {0.5, 0.5, 0.8, 1})
+    end
 end
 
 function game.resize()
@@ -277,16 +334,14 @@ function game.resize()
 end
 
 -- ============================================================
---  ОБНОВЛЕНИЕ ИГРЫ
+--  ОБНОВЛЕНИЕ
 -- ============================================================
 function game.update(dt)
     if dead then return end
 
     controls.update(dt)
 
-    -- ОНЛАЙН: обновление
     if isOnlineMode and online.isConnected() then
-        online.update(dt)
         online.sendPosition(cube.x, cube.y)
     end
 
@@ -311,6 +366,7 @@ function game.update(dt)
             controls.setAbilityAvailable(false)
             if isOnlineMode and online.isConnected() then
                 online.sendAbility("revive", cube.x, cube.y)
+                game.addDebugMessage("Revive used", {0.2, 0.8, 0.2, 1})
             end
         elseif equippedSkin == "NASTYA CUBE" and laserCooldown <= 0 then
             local aimX, aimY = controls.getAim()
@@ -322,6 +378,7 @@ function game.update(dt)
             if _G.playShootSound then _G.playShootSound() end
             if isOnlineMode and online.isConnected() then
                 online.sendAbility("laser", cube.x, cube.y, aimX, aimY)
+                game.addDebugMessage("Laser fired", {0.9, 0.2, 0.2, 1})
             end
         elseif equippedSkin == "BUK CUBE" and not isDashing and dashCooldown <= 0 then
             local dx, dy = controls.getMove()
@@ -345,6 +402,7 @@ function game.update(dt)
             spawnDashBullet(cube.x, cube.y, dashDirX, dashDirY)
             if isOnlineMode and online.isConnected() then
                 online.sendAbility("dash", cube.x, cube.y, dashDirX, dashDirY)
+                game.addDebugMessage("Dash", {0.3, 0.6, 0.9, 1})
             end
         end
     end
@@ -414,13 +472,39 @@ function game.update(dt)
                 if dead then return end
             end
         end
+    else
+        online.update(dt)
+
+        -- ОТЛАДКА ОНЛАЙН СТАТУСА (каждые 2 секунды)
+        if not debugConsole.timer then debugConsole.timer = 0 end
+        debugConsole.timer = debugConsole.timer + dt
+        if debugConsole.timer > 2 then
+            debugConsole.timer = 0
+            if online.isConnected() then
+                local playerCount = 0
+                for _ in pairs(online.getPlayers()) do
+                    playerCount = playerCount + 1
+                end
+                local status = "Online | Players: " .. playerCount
+                if playerCount > 0 then
+                    local names = {}
+                    for _, p in pairs(online.getPlayers()) do
+                        table.insert(names, p.nickname)
+                    end
+                    status = status .. " | " .. table.concat(names, ", ")
+                end
+                game.addDebugMessage(status, {0.2, 0.8, 0.2, 1})
+            else
+                game.addDebugMessage("OFFLINE - No Firebase signal", {0.9, 0.2, 0.2, 1})
+            end
+        end
     end
 
     updateSnow(dt)
 end
 
 -- ============================================================
---  ОТРИСОВКА ИГРЫ (С КРАСИВЫМ ИНТЕРФЕЙСОМ)
+--  ОТРИСОВКА
 -- ============================================================
 function game.draw()
     love.graphics.setColor(1, 1, 1, 1)
@@ -439,7 +523,6 @@ function game.draw()
 
     drawSnow()
 
-    -- СВОИ ПУЛИ
     for _, b in ipairs(bullets) do
         if b.isDash then
             love.graphics.setColor(0, 0, 0, 1)
@@ -452,17 +535,14 @@ function game.draw()
         end
     end
 
-    -- ОНЛАЙН: ПУЛИ ДРУГИХ ИГРОКОВ
     if isOnlineMode then
-        for id, b in pairs(online.getBullets()) do
-            if b.owner ~= online.getMyUid() then
-                love.graphics.setColor(1, 0.2, 0.2, 1)
-                love.graphics.circle("fill", b.x, b.y, 6)
-            end
+        local onlineBullets = online.getBullets() or {}
+        for bid, b in pairs(onlineBullets) do
+            love.graphics.setColor(0, 0, 0, 1)
+            love.graphics.circle("fill", b.x, b.y, 6)
         end
     end
 
-    -- ОНЛАЙН: СПОСОБНОСТИ
     if isOnlineMode then
         local onlineAbilities = online.getAbilities() or {}
         for aid, ab in pairs(onlineAbilities) do
@@ -480,15 +560,12 @@ function game.draw()
         end
     end
 
-    -- ВРАГ (только оффлайн)
     if not isOnlineMode then
         enemy.drawBullets()
         enemy.draw()
     end
 
-    -- ============================================================
-    --  ОНЛАЙН: ОТРИСОВКА ДРУГИХ ИГРОКОВ (КРАСИВО)
-    -- ============================================================
+    -- Отрисовка других игроков
     if isOnlineMode then
         for id, p in pairs(online.getPlayers()) do
             if id ~= online.getMyUid() then
@@ -502,29 +579,25 @@ function game.draw()
                 else
                     imgToDraw = playerImg
                 end
-                
-                -- Тень игрока
+
                 love.graphics.setColor(0, 0, 0, 0.3)
                 love.graphics.draw(imgToDraw, p.x - PLAYER_SIZE/2 + 4, p.y - PLAYER_SIZE/2 + 6, 0, 1, 1)
-                
-                -- Сам игрок
+
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.draw(imgToDraw, p.x - PLAYER_SIZE/2, p.y - PLAYER_SIZE/2, 0, 1, 1)
-                
-                -- Никнейм с фоном
+
                 love.graphics.setColor(0, 0, 0, 0.7)
                 love.graphics.setFont(font)
                 local nick = p.nickname or "???"
                 local nickW = font:getWidth(nick)
                 love.graphics.rectangle("fill", p.x - nickW/2 - 4, p.y - 40, nickW + 8, 22, 4, 4)
-                
+
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.print(nick, p.x - nickW/2, p.y - 38)
             end
         end
     end
 
-    -- ПРИЦЕЛ
     if controls.isAiming() then
         local ax, ay = controls.getAim()
         love.graphics.setColor(0, 0, 0, 0.55)
@@ -532,7 +605,6 @@ function game.draw()
         love.graphics.line(cube.x, cube.y, cube.x + ax * 180, cube.y + ay * 180)
     end
 
-    -- ЛАЗЕР
     if laserActive then
         love.graphics.setLineWidth(8)
         love.graphics.setColor(1, 0, 0, 0.8)
@@ -546,7 +618,6 @@ function game.draw()
         love.graphics.setLineWidth(1)
     end
 
-    -- СВОЙ ИГРОК
     local imgToDraw
     if equippedSkin == "AZUM CUBE" then
         imgToDraw = azumImg
@@ -558,7 +629,6 @@ function game.draw()
         imgToDraw = playerImg
     end
 
-    -- Тень
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
@@ -566,7 +636,6 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Сам игрок
     love.graphics.push()
     love.graphics.translate(cube.x, cube.y)
     love.graphics.rotate(cube.angle)
@@ -575,7 +644,6 @@ function game.draw()
     love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
     love.graphics.pop()
 
-    -- Эффект даша
     if isDashing then
         love.graphics.setColor(1, 1, 1, 0.3)
         love.graphics.circle("fill", cube.x, cube.y, PLAYER_SIZE * 1.2)
@@ -586,20 +654,16 @@ function game.draw()
 
     love.graphics.pop()
 
-    -- ============================================================
-    --  HUD (КРАСИВЫЙ ИНТЕРФЕЙС)
-    -- ============================================================
+    -- HUD
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)
     local barW, barH = 200, 18
     local px, py = 20, 20
-    
-    -- HP игрока
+
     drawHPBar(px, py, barW, barH, cube.hp, PLAYER_HP_MAX, {0.3, 0.85, 0.35})
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.printf("HP " .. math.max(0, cube.hp) .. " / " .. PLAYER_HP_MAX, px, py + 22, barW, "left")
 
-    -- Режим игры
     if not isOnlineMode then
         local diffText = "NORMAL"
         if currentDifficulty == "easy" then diffText = "EASY" end
@@ -615,7 +679,6 @@ function game.draw()
         love.graphics.printf("Players: " .. playerCount, px, py + 66, 200, "left")
     end
 
-    -- Способности
     if equippedSkin == "BUK CUBE" then
         local cd = math.max(0, dashCooldown)
         if isDashing then
@@ -639,7 +702,6 @@ function game.draw()
         end
     end
 
-    -- HP врага (оффлайн)
     if not isOnlineMode then
         local e, _, enemyMaxHP = enemy.get()
         if e then
@@ -651,21 +713,21 @@ function game.draw()
         end
     end
 
-    -- Отладка онлайн
     if isOnlineMode then
         local debugText = online.getDebugText()
         if debugText then
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.setFont(font)
-            love.graphics.printf(debugText, 20, love.graphics.getHeight() - 80, love.graphics.getWidth() - 40, "left")
+            love.graphics.printf(debugText, 20, love.graphics.getHeight() - 120, love.graphics.getWidth() - 40, "left")
         end
     end
 
+    drawDebugConsole()
     controls.draw()
 end
 
 -- ============================================================
---  ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ
+--  ОБРАБОТКА КАСАНИЙ
 -- ============================================================
 function game.touchpressed(id, x, y)
     controls.touchpressed(id, x, y)
