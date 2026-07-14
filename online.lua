@@ -1,4 +1,4 @@
--- online.lua – работа с Firebase (ПК и Android через socket.http)
+-- online.lua – работа с Firebase (ПК и Android)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -79,17 +79,18 @@ function online.getDebugText()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ socket.http)
+--  ОТПРАВКА ЗАПРОСОВ (РАБОТАЕТ НА ПК И ANDROID)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
-    -- Для Android заменяем https на http (Firebase поддерживает оба)
     local url = DB_URL .. path .. ".json"
+    
+    -- Для Android используем HTTP (Firebase поддерживает)
     if isAndroid then
         url = url:gsub("https://", "http://")
     end
-
+    
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
-
+    
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     local response_body = {}
@@ -98,7 +99,7 @@ local function sendRequest(method, path, body, callback)
         ["Content-Type"] = "application/json",
         ["Content-Length"] = tostring(#request_body),
     }
-
+    
     local res, code = http.request{
         url = url,
         method = method,
@@ -107,10 +108,10 @@ local function sendRequest(method, path, body, callback)
         sink = ltn12.sink.table(response_body),
         timeout = 10,
     }
-
+    
     local response = table.concat(response_body)
     code = tonumber(code) or 0
-
+    
     if code >= 200 and code < 300 then
         sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
         if callback then callback(true, response) end
