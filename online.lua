@@ -1,6 +1,7 @@
+-- online.lua – работа с Firebase (ПК: socket.http, Android: ssl.https)
 local online = {}
 
-local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
@@ -37,47 +38,6 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
--- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (socket.http для всех платформ)
--- ============================================================
-local function sendRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json"
-    
-    sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
-    
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
-    local response_body = {}
-    local request_body = body or ""
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Content-Length"] = tostring(#request_body),
-    }
-    
-    local res, code = http.request{
-        url = url,
-        method = method,
-        headers = headers,
-        source = ltn12.source.string(request_body),
-        sink = ltn12.sink.table(response_body),
-        timeout = 10,
-    }
-    
-    local response = table.concat(response_body)
-    code = tonumber(code) or 0
-    
-    if code >= 200 and code < 300 then
-        sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-        if callback then callback(true, response) end
-    else
-        sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
-    end
-end
-
--- ============================================================
---  ФУНКЦИИ
--- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -95,14 +55,14 @@ function online.connect()
     local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
     
-    sendRequest("PUT", path, data, function(ok)
+    sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
             setDebug("Connected to global server")
             sendToGameDebug("Connected to global server", {0.2, 0.8, 0.2, 1})
         else
-            setDebug("Failed to connect")
-            sendToGameDebug("Failed to connect", {0.9, 0.2, 0.2, 1})
+            setDebug("Failed to connect: " .. tostring(response))
+            sendToGameDebug("Failed to connect: " .. tostring(response), {0.9, 0.2, 0.2, 1})
         end
     end)
 end
@@ -131,6 +91,153 @@ function online.getDebugText()
     return debugText
 end
 
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: ssl.https)
+-- ============================================================
+local function sendRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json"
+    
+    sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
+    
+    if isAndroid then
+        -- Android: используем ssl.https
+        local https = require("ssl.https")
+        local ltn12 = require("ltn12")
+        local response_body = {}
+        local request_body = body or ""
+        local headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = tostring(#request_body),
+        }
+        
+        local res, code = https.request{
+            url = url,
+            method = method,
+            headers = headers,
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+            timeout = 10,
+            verify = false,
+            protocol = "tlsv1_2",
+        }
+        
+        local response = table.concat(response_body)
+        code = tonumber(code) or 0
+        
+        if code >= 200 and code < 300 then
+            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+            if callback then callback(true, response) end
+        else
+            sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
+            if callback then callback(false, "SSL Error: " .. tostring(code)) end
+        end
+    else
+        -- ПК: используем socket.http
+        local http = require("socket.http")
+        local ltn12 = require("ltn12")
+        local response_body = {}
+        local request_body = body or ""
+        local headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = tostring(#request_body),
+        }
+        
+        local res, code = http.request{
+            url = url,
+            method = method,
+            headers = headers,
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+            timeout = 10,
+        }
+        
+        local response = table.concat(response_body)
+        code = tonumber(code) or 0
+        
+        if code >= 200 and code < 300 then
+            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+            if callback then callback(true, response) end
+        else
+            sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
+            if callback then callback(false, "HTTP Error: " .. tostring(code)) end
+        end
+    end
+end
+
+-- ============================================================
+--  ПАРСИНГ
+-- ============================================================
+local function parsePlayers(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local nick = data:match('"nickname":%s*"([^"]+)"')
+        local skin = data:match('"skin":%s*"([^"]+)"')
+        if x and y then
+            result[id] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                nickname = nick or "Player",
+                skin = skin or "NONE",
+                targetX = tonumber(x) or 0,
+                targetY = tonumber(y) or 0
+            }
+        end
+    end
+    return result
+end
+
+local function parseBullets(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local dx = data:match('"dx":%s*([%d%.%-]+)')
+        local dy = data:match('"dy":%s*([%d%.%-]+)')
+        local owner = data:match('"owner":%s*"([^"]+)"')
+        if x and y and dx and dy then
+            result[id] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                dx = tonumber(dx) or 0,
+                dy = tonumber(dy) or 0,
+                owner = owner or "",
+                life = 3
+            }
+        end
+    end
+    return result
+end
+
+local function parseAbilities(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local type = data:match('"type":%s*"([^"]+)"')
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local owner = data:match('"owner":%s*"([^"]+)"')
+        if type and x and y then
+            result[id] = {
+                type = type,
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                owner = owner or "",
+                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
+                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
+                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
+            }
+        end
+    end
+    return result
+end
+
+-- ============================================================
+--  ОТПРАВКА ДАННЫХ
+-- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid then return end
 
@@ -164,6 +271,9 @@ function online.sendAbility(abilityType, x, y, dirX, dirY)
     sendRequest("PUT", path, data)
 end
 
+-- ============================================================
+--  ПОЛУЧЕНИЕ ДАННЫХ
+-- ============================================================
 function online.fetchPlayers()
     if not isConnected then
         sendToGameDebug("Cannot fetch: not connected", {0.9, 0.8, 0.2, 1})
@@ -316,77 +426,6 @@ end
 
 function online.updateSkin(skin)
     mySkin = skin
-end
-
--- ============================================================
---  ПАРСИНГ
--- ============================================================
-local function parsePlayers(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local nick = data:match('"nickname":%s*"([^"]+)"')
-        local skin = data:match('"skin":%s*"([^"]+)"')
-        if x and y then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                nickname = nick or "Player",
-                skin = skin or "NONE",
-                targetX = tonumber(x) or 0,
-                targetY = tonumber(y) or 0
-            }
-        end
-    end
-    return result
-end
-
-local function parseBullets(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local dx = data:match('"dx":%s*([%d%.%-]+)')
-        local dy = data:match('"dy":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if x and y and dx and dy then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                dx = tonumber(dx) or 0,
-                dy = tonumber(dy) or 0,
-                owner = owner or "",
-                life = 3
-            }
-        end
-    end
-    return result
-end
-
-local function parseAbilities(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local type = data:match('"type":%s*"([^"]+)"')
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if type and x and y then
-            result[id] = {
-                type = type,
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                owner = owner or "",
-                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
-                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
-                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
-            }
-        end
-    end
-    return result
 end
 
 return online
