@@ -1,11 +1,12 @@
 local online = {}
 
 local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
-local ROOMS_PATH = "rooms/"
+local PLAYERS_PATH = "players/"
+local BULLETS_PATH = "bullets/"
+local ABILITIES_PATH = "abilities/"
 
 local myUid = nil
 local myNickname = nil
-local myRoomCode = nil
 local mySkin = "NONE"
 local players = {}
 local bullets = {}
@@ -36,20 +37,34 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
-function online.generateRoomCode()
-    local chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    local code = ""
-    for i = 1, 5 do
-        local idx = math.random(1, #chars)
-        code = code .. chars:sub(idx, idx)
-    end
-    return code
-end
-
-function online.init()
+function online.init(nickname)
+    myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
+    myUid = generateUuid()
+    
     setDebug("Online initialized")
     sendToGameDebug("Online initialized", {0.5, 0.5, 0.8, 1})
+    
+    -- Сразу подключаемся
+    online.connect()
+end
+
+function online.connect()
+    if not myUid then return end
+    
+    local path = PLAYERS_PATH .. myUid
+    local data = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
+    
+    sendRequest("PUT", path, data, function(ok)
+        if ok then
+            isConnected = true
+            setDebug("Connected to global server")
+            sendToGameDebug("Connected to global server", {0.2, 0.8, 0.2, 1})
+        else
+            setDebug("Failed to connect")
+            sendToGameDebug("Failed to connect", {0.9, 0.2, 0.2, 1})
+        end
+    end)
 end
 
 function online.getMyUid()
@@ -76,9 +91,6 @@ function online.getDebugText()
     return debugText
 end
 
--- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (РАБОТАЕТ НА ПК И ANDROID)
--- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
@@ -114,9 +126,6 @@ local function sendRequest(method, path, body, callback)
     end
 end
 
--- ============================================================
---  ПАРСИНГ
--- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
@@ -185,110 +194,8 @@ local function parseAbilities(jsonStr)
     return result
 end
 
--- ============================================================
---  КОМНАТЫ
--- ============================================================
-function online.createRoom(roomCode, nickname, callback)
-    if not nickname or nickname == "" then
-        if callback then callback(false, "Nickname required") end
-        return
-    end
-    if not roomCode or roomCode == "" then
-        roomCode = online.generateRoomCode()
-    end
-
-    myRoomCode = roomCode
-    myUid = generateUuid()
-    myNickname = nickname
-    mySkin = SAVE_DATA.equippedSkin or "NONE"
-
-    sendToGameDebug("Creating room: " .. roomCode, {0.3, 0.8, 0.8, 1})
-    setDebug("Creating room: " .. roomCode)
-
-    local infoPath = ROOMS_PATH .. roomCode .. "/info"
-    local infoData = '{"owner":"' .. myUid .. '","created":' .. os.time() .. '}'
-
-    sendRequest("PUT", infoPath, infoData, function(ok)
-        if not ok then
-            sendToGameDebug("Failed to create room", {0.9, 0.2, 0.2, 1})
-            setDebug("Failed to create room")
-            if callback then callback(false, "Failed to create room") end
-            return
-        end
-
-        setDebug("Room info created")
-        sendToGameDebug("Room info created", {0.2, 0.8, 0.2, 1})
-
-        local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
-        local playerData = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
-
-        sendRequest("PUT", playerPath, playerData, function(ok2)
-            if ok2 then
-                isConnected = true
-                setDebug("Room created: " .. roomCode)
-                sendToGameDebug("Room created: " .. roomCode, {0.2, 0.8, 0.2, 1})
-                if callback then callback(true, roomCode) end
-            else
-                setDebug("Failed to write player")
-                sendToGameDebug("Failed to write player", {0.9, 0.2, 0.2, 1})
-                if callback then callback(false, "Failed to write player") end
-            end
-        end)
-    end)
-end
-
-function online.joinRoom(roomCode, nickname, callback)
-    if not nickname or nickname == "" then
-        if callback then callback(false, "Nickname required") end
-        return
-    end
-    if not roomCode or roomCode == "" then
-        if callback then callback(false, "Room code required") end
-        return
-    end
-
-    myRoomCode = roomCode
-    myUid = generateUuid()
-    myNickname = nickname
-    mySkin = SAVE_DATA.equippedSkin or "NONE"
-
-    sendToGameDebug("Joining room: " .. roomCode, {0.3, 0.8, 0.8, 1})
-    setDebug("Joining room: " .. roomCode)
-
-    sendRequest("GET", ROOMS_PATH .. roomCode .. "/info", nil, function(ok, res)
-        if not ok or res == "null" then
-            setDebug("Room not found")
-            sendToGameDebug("Room not found: " .. roomCode, {0.9, 0.2, 0.2, 1})
-            if callback then callback(false, "Room not found") end
-            return
-        end
-
-        setDebug("Room exists, joining...")
-        sendToGameDebug("Room exists, joining...", {0.2, 0.8, 0.2, 1})
-
-        local playerPath = ROOMS_PATH .. roomCode .. "/players/" .. myUid
-        local playerData = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
-
-        sendRequest("PUT", playerPath, playerData, function(ok2)
-            if ok2 then
-                isConnected = true
-                setDebug("Joined room: " .. roomCode)
-                sendToGameDebug("Joined room: " .. roomCode, {0.2, 0.8, 0.2, 1})
-                if callback then callback(true, roomCode) end
-            else
-                setDebug("Failed to write player")
-                sendToGameDebug("Failed to write player", {0.9, 0.2, 0.2, 1})
-                if callback then callback(false, "Failed to write player") end
-            end
-        end)
-    end)
-end
-
--- ============================================================
---  ОТПРАВКА ДАННЫХ
--- ============================================================
 function online.sendPosition(x, y)
-    if not isConnected or not myUid or not myRoomCode then return end
+    if not isConnected or not myUid then return end
 
     local newX = math.floor(x)
     local newY = math.floor(y)
@@ -297,42 +204,38 @@ function online.sendPosition(x, y)
     lastSentX = newX
     lastSentY = newY
 
-    local path = ROOMS_PATH .. myRoomCode .. "/players/" .. myUid
+    local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":%d,"y":%d,"nickname":"%s","skin":"%s"}', newX, newY, myNickname, mySkin)
     sendRequest("PUT", path, data)
 end
 
 function online.sendBullet(x, y, dx, dy)
-    if not isConnected or not myUid or not myRoomCode then return end
+    if not isConnected or not myUid then return end
     local bulletId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
-    local path = ROOMS_PATH .. myRoomCode .. "/bullets/" .. bulletId
+    local path = BULLETS_PATH .. bulletId
     local data = string.format('{"x":%d,"y":%d,"dx":%f,"dy":%f,"owner":"%s","time":%f}',
         math.floor(x), math.floor(y), dx, dy, myUid, love.timer.getTime())
     sendRequest("PUT", path, data)
 end
 
 function online.sendAbility(abilityType, x, y, dirX, dirY)
-    if not isConnected or not myUid or not myRoomCode then return end
+    if not isConnected or not myUid then return end
     local abilityId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
-    local path = ROOMS_PATH .. myRoomCode .. "/abilities/" .. abilityId
+    local path = ABILITIES_PATH .. abilityId
     local data = string.format('{"type":"%s","x":%d,"y":%d,"dirX":%f,"dirY":%f,"owner":"%s","time":%f}',
         abilityType, math.floor(x), math.floor(y), dirX or 0, dirY or 0, myUid, love.timer.getTime())
     sendRequest("PUT", path, data)
 end
 
--- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ
--- ============================================================
 function online.fetchPlayers()
-    if not isConnected or not myRoomCode then
+    if not isConnected then
         sendToGameDebug("Cannot fetch: not connected", {0.9, 0.8, 0.2, 1})
         return
     end
 
-    local path = ROOMS_PATH .. myRoomCode .. "/players"
     sendToGameDebug("Fetching players...", {0.5, 0.5, 0.8, 1})
 
-    sendRequest("GET", path, nil, function(ok, res)
+    sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             local newPlayers = parsePlayers(res)
 
@@ -364,21 +267,20 @@ function online.fetchPlayers()
                 table.insert(names, info.nickname)
             end
             if count > 0 then
-                sendToGameDebug("Players in room: " .. count .. " - " .. table.concat(names, ", "), {0.2, 0.8, 0.2, 1})
+                sendToGameDebug("Players online: " .. count .. " - " .. table.concat(names, ", "), {0.2, 0.8, 0.2, 1})
             end
         else
-            sendToGameDebug("No players in room", {0.9, 0.6, 0.2, 1})
+            sendToGameDebug("No players online", {0.9, 0.6, 0.2, 1})
         end
     end)
 end
 
 function online.fetchData()
-    if not isConnected or not myRoomCode then return end
+    if not isConnected then return end
+
     online.fetchPlayers()
 
-    local path = ROOMS_PATH .. myRoomCode
-
-    sendRequest("GET", path .. "/bullets", nil, function(ok, res)
+    sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             local ok2, data = pcall(love.data.decode, "string", "json", res)
             if ok2 and data then
@@ -399,7 +301,7 @@ function online.fetchData()
         end
     end)
 
-    sendRequest("GET", path .. "/abilities", nil, function(ok, res)
+    sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             local ok2, data = pcall(love.data.decode, "string", "json", res)
             if ok2 and data then
@@ -423,9 +325,6 @@ function online.fetchData()
     end)
 end
 
--- ============================================================
---  ОБНОВЛЕНИЕ
--- ============================================================
 function online.update(dt)
     if not isConnected then return end
 
@@ -463,12 +362,9 @@ function online.update(dt)
     end
 end
 
--- ============================================================
---  ВЫХОД
--- ============================================================
 function online.leave()
-    if isConnected and myUid and myRoomCode then
-        sendRequest("DELETE", ROOMS_PATH .. myRoomCode .. "/players/" .. myUid)
+    if isConnected and myUid then
+        sendRequest("DELETE", PLAYERS_PATH .. myUid)
     end
     isConnected = false
     players = {}
@@ -476,10 +372,9 @@ function online.leave()
     abilities = {}
     myUid = nil
     myNickname = nil
-    myRoomCode = nil
     lastSentX = nil
     lastSentY = nil
-    sendToGameDebug("Left room", {0.5, 0.5, 0.8, 1})
+    sendToGameDebug("Left server", {0.5, 0.5, 0.8, 1})
 end
 
 function online.updateSkin(skin)
