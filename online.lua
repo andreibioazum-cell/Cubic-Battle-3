@@ -508,4 +508,23 @@ end
 --  ВЫХОД
 -- ============================================================
 function online.leave()
-    if is
+    if isConnected and myUid and myRoomCode then
+        sendRequest("DELETE", ROOMS_PATH .. myRoomCode .. "/players/" .. myUid)
+    end
+    isConnected = false
+    players = {}
+    bullets = {}
+    abilities = {}
+    myUid = nil
+    myNickname = nil
+    myRoomCode = nil
+    lastSentX = nil
+    lastSentY = nil
+    sendToGameDebug("Left room", {0.5, 0.5, 0.8, 1})
+end
+
+function online.updateSkin(skin)
+    mySkin = skin
+end
+
+return online
