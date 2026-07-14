@@ -1,4 +1,5 @@
--- online.lua – работа с Firebase (ПК: LuaSocket, Android: HTTPS)
+-- online.lua – работа с Firebase через socket.http (ПК) и https (Android)
+
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -71,13 +72,13 @@ function online.getDebugText()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: LuaSocket, Android: HTTPS)
+--  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
     if isAndroid then
-        -- Android: используем ssl.https (встроен в LOVE)
+        -- Android: используем ssl.https
         local https = require("ssl.https")
         local ltn12 = require("ltn12")
         local response_body = {}
@@ -96,7 +97,6 @@ local function sendRequest(method, path, body, callback)
             sink = ltn12.sink.table(response_body),
             timeout = 5,
             verify = false,
-            protocol = "tlsv1_2",
         }
         
         local response = table.concat(response_body)
@@ -108,7 +108,7 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(false, "SSL Error: " .. tostring(code)) end
         end
     else
-        -- ПК: используем LuaSocket (встроен в LOVE)
+        -- ПК: используем socket.http
         local http = require("socket.http")
         local ltn12 = require("ltn12")
         local response_body = {}
