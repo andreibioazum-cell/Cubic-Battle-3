@@ -1,4 +1,4 @@
--- online.lua – работа с Firebase (ПК: socket.http, Android: https)
+-- online.lua – работа с Firebase (ПК и Android через socket.http)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -79,66 +79,44 @@ function online.getDebugText()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ
+--  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ socket.http)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
+    -- Для Android заменяем https на http (Firebase поддерживает оба)
     local url = DB_URL .. path .. ".json"
+    if isAndroid then
+        url = url:gsub("https://", "http://")
+    end
 
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
 
-    if isAndroid then
-        local https = require("ssl.https")
-        local ltn12 = require("ltn12")
-        local response_body = {}
-        local request_body = body or ""
-        local headers = {
-            ["Content-Type"] = "application/json",
-            ["Content-Length"] = tostring(#request_body),
-        }
-        local res, code = https.request{
-            url = url,
-            method = method,
-            headers = headers,
-            source = ltn12.source.string(request_body),
-            sink = ltn12.sink.table(response_body),
-            timeout = 5,
-            verify = false,
-        }
-        local response = table.concat(response_body)
-        code = tonumber(code) or 0
-        if code >= 200 and code < 300 then
-            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-            if callback then callback(true, response) end
-        else
-            sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-            if callback then callback(false, "SSL Error: " .. tostring(code)) end
-        end
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local response_body = {}
+    local request_body = body or ""
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Content-Length"] = tostring(#request_body),
+    }
+
+    local res, code = http.request{
+        url = url,
+        method = method,
+        headers = headers,
+        source = ltn12.source.string(request_body),
+        sink = ltn12.sink.table(response_body),
+        timeout = 10,
+    }
+
+    local response = table.concat(response_body)
+    code = tonumber(code) or 0
+
+    if code >= 200 and code < 300 then
+        sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+        if callback then callback(true, response) end
     else
-        local http = require("socket.http")
-        local ltn12 = require("ltn12")
-        local response_body = {}
-        local request_body = body or ""
-        local headers = {
-            ["Content-Type"] = "application/json",
-            ["Content-Length"] = tostring(#request_body),
-        }
-        local res, code = http.request{
-            url = url,
-            method = method,
-            headers = headers,
-            source = ltn12.source.string(request_body),
-            sink = ltn12.sink.table(response_body),
-            timeout = 5,
-        }
-        local response = table.concat(response_body)
-        code = tonumber(code) or 0
-        if code >= 200 and code < 300 then
-            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-            if callback then callback(true, response) end
-        else
-            sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-            if callback then callback(false, "HTTP Error: " .. tostring(code)) end
-        end
+        sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
+        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
     end
 end
 
