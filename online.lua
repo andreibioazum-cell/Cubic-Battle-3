@@ -76,6 +76,9 @@ function online.getDebugText()
     return debugText
 end
 
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСОВ (РАБОТАЕТ НА ПК И ANDROID)
+-- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
@@ -111,6 +114,9 @@ local function sendRequest(method, path, body, callback)
     end
 end
 
+-- ============================================================
+--  ПАРСИНГ
+-- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
@@ -179,6 +185,9 @@ local function parseAbilities(jsonStr)
     return result
 end
 
+-- ============================================================
+--  КОМНАТЫ
+-- ============================================================
 function online.createRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
         if callback then callback(false, "Nickname required") end
@@ -275,6 +284,9 @@ function online.joinRoom(roomCode, nickname, callback)
     end)
 end
 
+-- ============================================================
+--  ОТПРАВКА ДАННЫХ
+-- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid or not myRoomCode then return end
 
@@ -308,6 +320,9 @@ function online.sendAbility(abilityType, x, y, dirX, dirY)
     sendRequest("PUT", path, data)
 end
 
+-- ============================================================
+--  ПОЛУЧЕНИЕ ДАННЫХ
+-- ============================================================
 function online.fetchPlayers()
     if not isConnected or not myRoomCode then
         sendToGameDebug("Cannot fetch: not connected", {0.9, 0.8, 0.2, 1})
@@ -359,7 +374,6 @@ end
 
 function online.fetchData()
     if not isConnected or not myRoomCode then return end
-
     online.fetchPlayers()
 
     local path = ROOMS_PATH .. myRoomCode
@@ -409,6 +423,9 @@ function online.fetchData()
     end)
 end
 
+-- ============================================================
+--  ОБНОВЛЕНИЕ
+-- ============================================================
 function online.update(dt)
     if not isConnected then return end
 
@@ -446,6 +463,9 @@ function online.update(dt)
     end
 end
 
+-- ============================================================
+--  ВЫХОД
+-- ============================================================
 function online.leave()
     if isConnected and myUid and myRoomCode then
         sendRequest("DELETE", ROOMS_PATH .. myRoomCode .. "/players/" .. myUid)
