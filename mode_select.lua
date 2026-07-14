@@ -91,24 +91,22 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     drawSpacedText("MULTIPLAYER", btnMulti.x, btnMulti.y + 22*scale, btnMulti.w, "center", fontBtn, nil, 1)
 
-    -- ============================================================
-    --  ПЛАВАЮЩАЯ НАДПИСЬ ОНЛАЙН (под кнопкой MULTIPLAYER)
-    -- ============================================================
+    -- ПЛАВАЮЩАЯ НАДПИСЬ
     local time = love.timer.getTime()
     local yOffset = math.sin(time * 1.5) * 2
-    
+
     local text = "Online is still being developed, it may be very weak, so don't throw slippers at us."
     love.graphics.setFont(fontBtn)
     local tw = fontBtn:getWidth(text)
     local x = w/2 - tw/2
     local y = btnMulti.y + btnMulti.h + 30 * scale + yOffset
-    
+
     love.graphics.setColor(0, 0, 0, 0.6)
     love.graphics.print(text, x + 2, y + 2)
-    
+
     love.graphics.setColor(1, 0.8, 0.2, 0.85)
     love.graphics.print(text, x, y)
-    
+
     love.graphics.setColor(1, 0.8, 0.2, 0.25)
     love.graphics.setLineWidth(1)
     love.graphics.line(w/2 - tw/2, y + 22, w/2 + tw/2, y + 22)
@@ -139,7 +137,6 @@ function mode_select.touchpressed(id, x, y)
 
     if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
         playButtonSound()
-        _G.roomCode = "global"
         GameState.current = "game"
         return
     end
