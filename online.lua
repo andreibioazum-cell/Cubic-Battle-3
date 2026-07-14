@@ -37,6 +37,47 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСОВ (ДОЛЖНА БЫТЬ ПЕРВОЙ!)
+-- ============================================================
+local function sendRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json"
+    
+    sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
+    
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local response_body = {}
+    local request_body = body or ""
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Content-Length"] = tostring(#request_body),
+    }
+    
+    local res, code = http.request{
+        url = url,
+        method = method,
+        headers = headers,
+        source = ltn12.source.string(request_body),
+        sink = ltn12.sink.table(response_body),
+        timeout = 10,
+    }
+    
+    local response = table.concat(response_body)
+    code = tonumber(code) or 0
+    
+    if code >= 200 and code < 300 then
+        sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+        if callback then callback(true, response) end
+    else
+        sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
+        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
+    end
+end
+
+-- ============================================================
+--  ОСТАЛЬНЫЕ ФУНКЦИИ
+-- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -45,7 +86,6 @@ function online.init(nickname)
     setDebug("Online initialized")
     sendToGameDebug("Online initialized", {0.5, 0.5, 0.8, 1})
     
-    -- Сразу подключаемся
     online.connect()
 end
 
@@ -89,109 +129,6 @@ end
 
 function online.getDebugText()
     return debugText
-end
-
-local function sendRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json"
-    
-    sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
-    
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
-    local response_body = {}
-    local request_body = body or ""
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Content-Length"] = tostring(#request_body),
-    }
-    
-    local res, code = http.request{
-        url = url,
-        method = method,
-        headers = headers,
-        source = ltn12.source.string(request_body),
-        sink = ltn12.sink.table(response_body),
-        timeout = 10,
-    }
-    
-    local response = table.concat(response_body)
-    code = tonumber(code) or 0
-    
-    if code >= 200 and code < 300 then
-        sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-        if callback then callback(true, response) end
-    else
-        sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
-    end
-end
-
-local function parsePlayers(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local nick = data:match('"nickname":%s*"([^"]+)"')
-        local skin = data:match('"skin":%s*"([^"]+)"')
-        if x and y then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                nickname = nick or "Player",
-                skin = skin or "NONE",
-                targetX = tonumber(x) or 0,
-                targetY = tonumber(y) or 0
-            }
-        end
-    end
-    return result
-end
-
-local function parseBullets(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local dx = data:match('"dx":%s*([%d%.%-]+)')
-        local dy = data:match('"dy":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if x and y and dx and dy then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                dx = tonumber(dx) or 0,
-                dy = tonumber(dy) or 0,
-                owner = owner or "",
-                life = 3
-            }
-        end
-    end
-    return result
-end
-
-local function parseAbilities(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local type = data:match('"type":%s*"([^"]+)"')
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if type and x and y then
-            result[id] = {
-                type = type,
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                owner = owner or "",
-                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
-                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
-                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
-            }
-        end
-    end
-    return result
 end
 
 function online.sendPosition(x, y)
@@ -379,6 +316,77 @@ end
 
 function online.updateSkin(skin)
     mySkin = skin
+end
+
+-- ============================================================
+--  ПАРСИНГ (ДОЛЖЕН БЫТЬ ПОСЛЕ sendRequest, НО ПЕРЕД ИСПОЛЬЗОВАНИЕМ)
+-- ============================================================
+local function parsePlayers(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local nick = data:match('"nickname":%s*"([^"]+)"')
+        local skin = data:match('"skin":%s*"([^"]+)"')
+        if x and y then
+            result[id] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                nickname = nick or "Player",
+                skin = skin or "NONE",
+                targetX = tonumber(x) or 0,
+                targetY = tonumber(y) or 0
+            }
+        end
+    end
+    return result
+end
+
+local function parseBullets(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local dx = data:match('"dx":%s*([%d%.%-]+)')
+        local dy = data:match('"dy":%s*([%d%.%-]+)')
+        local owner = data:match('"owner":%s*"([^"]+)"')
+        if x and y and dx and dy then
+            result[id] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                dx = tonumber(dx) or 0,
+                dy = tonumber(dy) or 0,
+                owner = owner or "",
+                life = 3
+            }
+        end
+    end
+    return result
+end
+
+local function parseAbilities(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local type = data:match('"type":%s*"([^"]+)"')
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local owner = data:match('"owner":%s*"([^"]+)"')
+        if type and x and y then
+            result[id] = {
+                type = type,
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                owner = owner or "",
+                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
+                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
+                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
+            }
+        end
+    end
+    return result
 end
 
 return online
