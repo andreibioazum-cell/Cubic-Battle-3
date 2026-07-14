@@ -1,7 +1,5 @@
--- online.lua – работа с Firebase (ПК + Android)
 local online = {}
 
--- ВАЖНО: для Android используем HTTP
 local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
 local ROOMS_PATH = "rooms/"
 
@@ -78,9 +76,6 @@ function online.getDebugText()
     return debugText
 end
 
--- ============================================================
---  ОТПРАВКА ЗАПРОСОВ
--- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
@@ -116,9 +111,6 @@ local function sendRequest(method, path, body, callback)
     end
 end
 
--- ============================================================
---  ПАРСИНГ ИГРОКОВ
--- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
@@ -187,9 +179,6 @@ local function parseAbilities(jsonStr)
     return result
 end
 
--- ============================================================
---  СОЗДАНИЕ КОМНАТЫ
--- ============================================================
 function online.createRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
         if callback then callback(false, "Nickname required") end
@@ -239,9 +228,6 @@ function online.createRoom(roomCode, nickname, callback)
     end)
 end
 
--- ============================================================
---  ВХОД В КОМНАТУ
--- ============================================================
 function online.joinRoom(roomCode, nickname, callback)
     if not nickname or nickname == "" then
         if callback then callback(false, "Nickname required") end
@@ -289,9 +275,6 @@ function online.joinRoom(roomCode, nickname, callback)
     end)
 end
 
--- ============================================================
---  ОТПРАВКА ПОЗИЦИИ
--- ============================================================
 function online.sendPosition(x, y)
     if not isConnected or not myUid or not myRoomCode then return end
 
@@ -307,9 +290,6 @@ function online.sendPosition(x, y)
     sendRequest("PUT", path, data)
 end
 
--- ============================================================
---  ОТПРАВКА ПУЛИ
--- ============================================================
 function online.sendBullet(x, y, dx, dy)
     if not isConnected or not myUid or not myRoomCode then return end
     local bulletId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
@@ -319,9 +299,6 @@ function online.sendBullet(x, y, dx, dy)
     sendRequest("PUT", path, data)
 end
 
--- ============================================================
---  ОТПРАВКА СПОСОБНОСТИ
--- ============================================================
 function online.sendAbility(abilityType, x, y, dirX, dirY)
     if not isConnected or not myUid or not myRoomCode then return end
     local abilityId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
@@ -331,9 +308,6 @@ function online.sendAbility(abilityType, x, y, dirX, dirY)
     sendRequest("PUT", path, data)
 end
 
--- ============================================================
---  ПОСТОЯННАЯ ПРОВЕРКА ИГРОКОВ
--- ============================================================
 function online.fetchPlayers()
     if not isConnected or not myRoomCode then
         sendToGameDebug("Cannot fetch: not connected", {0.9, 0.8, 0.2, 1})
@@ -383,9 +357,6 @@ function online.fetchPlayers()
     end)
 end
 
--- ============================================================
---  ПОЛУЧЕНИЕ ВСЕХ ДАННЫХ
--- ============================================================
 function online.fetchData()
     if not isConnected or not myRoomCode then return end
 
@@ -438,9 +409,6 @@ function online.fetchData()
     end)
 end
 
--- ============================================================
---  ОБНОВЛЕНИЕ
--- ============================================================
 function online.update(dt)
     if not isConnected then return end
 
@@ -478,9 +446,6 @@ function online.update(dt)
     end
 end
 
--- ============================================================
---  ВЫХОД
--- ============================================================
 function online.leave()
     if isConnected and myUid and myRoomCode then
         sendRequest("DELETE", ROOMS_PATH .. myRoomCode .. "/players/" .. myUid)
