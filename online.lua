@@ -1,7 +1,7 @@
 -- online.lua – работа с Firebase (ПК: socket.http, Android: https)
 local online = {}
 
-local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
