@@ -1,8 +1,7 @@
--- online.lua – полный, без ошибок (sendRequest + parse в начале)
-
+-- online.lua – работа с Firebase (простой HTTP)
 local online = {}
 
-local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
@@ -40,7 +39,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ПАРСИНГ (ДОЛЖЕН БЫТЬ ПЕРЕД ИСПОЛЬЗОВАНИЕМ)
+--  ПАРСИНГ
 -- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
@@ -111,15 +110,16 @@ local function parseAbilities(jsonStr)
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ДОЛЖНА БЫТЬ ПОСЛЕ ПАРСИНГА, НО ДО ВСЕГО)
+--  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ HTTP)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
     
-    if isAndroid then
-        local https = require("ssl.https")
+    -- Пробуем использовать встроенный https (если есть)
+    local ok, https = pcall(require, "https")
+    if ok then
         local ltn12 = require("ltn12")
         local response_body = {}
         local request_body = body or ""
@@ -135,8 +135,6 @@ local function sendRequest(method, path, body, callback)
             source = ltn12.source.string(request_body),
             sink = ltn12.sink.table(response_body),
             timeout = 10,
-            verify = false,
-            protocol = "tlsv1_2",
         }
         
         local response = table.concat(response_body)
@@ -147,37 +145,39 @@ local function sendRequest(method, path, body, callback)
             if callback then callback(true, response) end
         else
             sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-            if callback then callback(false, "SSL Error: " .. tostring(code)) end
+            if callback then callback(false, "HTTPS Error: " .. tostring(code)) end
         end
+        return
+    end
+    
+    -- Если https нет, используем socket.http (для ПК)
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local response_body = {}
+    local request_body = body or ""
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Content-Length"] = tostring(#request_body),
+    }
+    
+    local res, code = http.request{
+        url = url,
+        method = method,
+        headers = headers,
+        source = ltn12.source.string(request_body),
+        sink = ltn12.sink.table(response_body),
+        timeout = 10,
+    }
+    
+    local response = table.concat(response_body)
+    code = tonumber(code) or 0
+    
+    if code >= 200 and code < 300 then
+        sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+        if callback then callback(true, response) end
     else
-        local http = require("socket.http")
-        local ltn12 = require("ltn12")
-        local response_body = {}
-        local request_body = body or ""
-        local headers = {
-            ["Content-Type"] = "application/json",
-            ["Content-Length"] = tostring(#request_body),
-        }
-        
-        local res, code = http.request{
-            url = url,
-            method = method,
-            headers = headers,
-            source = ltn12.source.string(request_body),
-            sink = ltn12.sink.table(response_body),
-            timeout = 10,
-        }
-        
-        local response = table.concat(response_body)
-        code = tonumber(code) or 0
-        
-        if code >= 200 and code < 300 then
-            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-            if callback then callback(true, response) end
-        else
-            sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-            if callback then callback(false, "HTTP Error: " .. tostring(code)) end
-        end
+        sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
+        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
     end
 end
 
