@@ -33,7 +33,7 @@ jobs:
 
       - name: Set package name
         run: |
-          sed -i 's/applicationId "org.love2d.android"/applicationId "com.cubicbattle"/g' love-android/app/build.gradle
+          sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
 
       - name: Create app name
         run: |
@@ -49,6 +49,10 @@ jobs:
           sed -i '/abiFilters/d' love-android/app/build.gradle
           sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a" }' love-android/app/build.gradle
 
+      - name: Add Internet Permission to AndroidManifest
+        run: |
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' love-android/app/src/main/AndroidManifest.xml
+
       - name: Package game.love
         run: |
           zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
@@ -62,16 +66,9 @@ jobs:
         run: |
           mkdir -p love-android/app/src/embed/assets/ssl
           cd love-android/app/src/embed/assets
-          wget -q https://raw.githubusercontent.com/brunoos/luasec/master/src/ssl.lua
-          wget -q https://raw.githubusercontent.com/brunoos/luasec/master/src/https.lua
-          wget -q https://raw.githubusercontent.com/diegonehab/luasocket/master/src/ltn12.lua
-          wget -q https://raw.githubusercontent.com/diegonehab/luasocket/master/src/socket.lua
-          mkdir -p socket
-          wget -q -O socket/http.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/http.lua
-          wget -q -O socket/url.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/url.lua
-          wget -q -O socket/tp.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/tp.lua
-          wget -q -O socket/ftp.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/ftp.lua
-          wget -q -O socket/smtp.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/smtp.lua
+          wget -q -O ssl/ssl.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/ssl.lua
+          wget -q -O ssl/https.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/https.lua
+          wget -q -O ltn12.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/ltn12.lua
 
       - name: Optimize Gradle
         run: |
