@@ -1,7 +1,7 @@
--- online.lua – работа с Firebase (простой HTTP)
+-- online.lua – работа с Firebase (ПК: socket.http, Android: https)
 local online = {}
 
-local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
@@ -22,6 +22,7 @@ local SEND_INTERVAL = 0.3
 local FETCH_INTERVAL = 0.3
 
 local isAndroid = (love.system.getOS() == "Android")
+local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
     debugText = text
@@ -110,16 +111,22 @@ local function parseAbilities(jsonStr)
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ЧЕРЕЗ HTTP)
+--  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
     
-    -- Пробуем использовать встроенный https (если есть)
-    local ok, https = pcall(require, "https")
-    if ok then
+    -- Android: встроенный https
+    if isAndroid then
+        local ok, https = pcall(require, "https")
+        if not ok then
+            sendToGameDebug("Error: https module not found", {0.9, 0.2, 0.2, 1})
+            if callback then callback(false, "https module not found") end
+            return
+        end
+        
         local ltn12 = require("ltn12")
         local response_body = {}
         local request_body = body or ""
@@ -150,7 +157,7 @@ local function sendRequest(method, path, body, callback)
         return
     end
     
-    -- Если https нет, используем socket.http (для ПК)
+    -- Windows: socket.http
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     local response_body = {}
