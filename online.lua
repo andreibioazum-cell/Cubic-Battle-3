@@ -1,7 +1,7 @@
--- online.lua – глобальный сервер (без комнат)
+-- online.lua – работает на ПК и Android
 local online = {}
 
-local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
@@ -22,6 +22,7 @@ local SEND_INTERVAL = 0.3
 local FETCH_INTERVAL = 0.3
 
 local isAndroid = (love.system.getOS() == "Android")
+local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
     debugText = text
@@ -110,13 +111,88 @@ local function parseAbilities(jsonStr)
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (socket.http + HTTP)
+--  ОТПРАВКА ЗАПРОСОВ (ПК: ssl.https, Android: https)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
     
+    -- ============================================================
+    --  Android: встроенный https (LOVE 12.0)
+    -- ============================================================
+    if isAndroid then
+        local ok, https = pcall(require, "https")
+        if ok then
+            local ltn12 = require("ltn12")
+            local response_body = {}
+            local request_body = body or ""
+            local headers = {
+                ["Content-Type"] = "application/json",
+                ["Content-Length"] = tostring(#request_body),
+            }
+            
+            local res, code = https.request(url, {
+                method = method,
+                headers = headers,
+                source = ltn12.source.string(request_body),
+                sink = ltn12.sink.table(response_body),
+                timeout = 10,
+                verify = false,
+            })
+            
+            local response = table.concat(response_body)
+            code = tonumber(code) or 0
+            
+            if code >= 200 and code < 300 then
+                sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+                if callback then callback(true, response) end
+            else
+                sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
+                if callback then callback(false, "HTTPS Error: " .. tostring(code)) end
+            end
+            return
+        end
+    end
+    
+    -- ============================================================
+    --  ПК: ssl.https (если есть) или socket.http
+    -- ============================================================
+    local ok, sslhttps = pcall(require, "ssl.https")
+    if ok then
+        local ltn12 = require("ltn12")
+        local response_body = {}
+        local request_body = body or ""
+        local headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = tostring(#request_body),
+        }
+        
+        local res, code = sslhttps.request{
+            url = url,
+            method = method,
+            headers = headers,
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+            timeout = 10,
+        }
+        
+        local response = table.concat(response_body)
+        code = tonumber(code) or 0
+        
+        if code >= 200 and code < 300 then
+            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+            if callback then callback(true, response) end
+        else
+            sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
+            if callback then callback(false, "SSL Error: " .. tostring(code)) end
+        end
+        return
+    end
+    
+    -- ============================================================
+    --  Fallback: socket.http (HTTP)
+    -- ============================================================
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     local response_body = {}
@@ -126,8 +202,11 @@ local function sendRequest(method, path, body, callback)
         ["Content-Length"] = tostring(#request_body),
     }
     
+    -- Для socket.http используем HTTP
+    local httpUrl = url:gsub("https://", "http://")
+    
     local res, code = http.request{
-        url = url,
+        url = httpUrl,
         method = method,
         headers = headers,
         source = ltn12.source.string(request_body),
@@ -148,7 +227,7 @@ local function sendRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  ГЛОБАЛЬНОЕ ПОДКЛЮЧЕНИЕ (БЕЗ КОМНАТ)
+--  ФУНКЦИИ
 -- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
