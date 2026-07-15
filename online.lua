@@ -133,13 +133,14 @@ local function sendRequest(method, path, body, callback)
             ["Content-Length"] = tostring(#request_body),
         }
         
-        -- ✅ ПРАВИЛЬНЫЙ ВЫЗОВ для LOVE 12.0 (https.request(url, options))
+        -- ✅ ДОБАВЛЕН verify = false
         local res, code = https.request(url, {
             method = method,
             headers = headers,
             source = ltn12.source.string(request_body),
             sink = ltn12.sink.table(response_body),
             timeout = 10,
+            verify = false,   -- <--- ОТКЛЮЧАЕМ ПРОВЕРКУ SSL
         })
         
         local response = table.concat(response_body)
