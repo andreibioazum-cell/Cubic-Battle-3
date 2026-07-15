@@ -22,7 +22,6 @@ local SEND_INTERVAL = 0.3
 local FETCH_INTERVAL = 0.3
 
 local isAndroid = (love.system.getOS() == "Android")
-local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
     debugText = text
@@ -118,7 +117,6 @@ local function sendRequest(method, path, body, callback)
     
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
     
-    -- Android: встроенный https
     if isAndroid then
         local ok, https = pcall(require, "https")
         if not ok then
@@ -157,7 +155,6 @@ local function sendRequest(method, path, body, callback)
         return
     end
     
-    -- Windows: socket.http
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     local response_body = {}
