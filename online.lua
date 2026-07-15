@@ -1,7 +1,7 @@
--- online.lua – работа с Firebase (ПК + Android)
+-- online.lua – глобальный сервер (без комнат)
 local online = {}
 
-local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
+local DB_URL = "http://cubic-battle-3-default-rtdb.firebaseio.com/"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
@@ -110,80 +110,13 @@ local function parseAbilities(jsonStr)
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: socket.http, Android: https)
+--  ОТПРАВКА ЗАПРОСОВ (socket.http + HTTP)
 -- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json"
     
     sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
     
-    -- ============================================================
-    --  Android: используем встроенный https (LOVE 12.0)
-    -- ============================================================
-    if isAndroid then
-        local ok, https = pcall(require, "https")
-        if ok then
-            local ltn12 = require("ltn12")
-            local response_body = {}
-            local request_body = body or ""
-            local headers = {
-                ["Content-Type"] = "application/json",
-                ["Content-Length"] = tostring(#request_body),
-            }
-            
-            local res, code = https.request(url, {
-                method = method,
-                headers = headers,
-                source = ltn12.source.string(request_body),
-                sink = ltn12.sink.table(response_body),
-                timeout = 10,
-                verify = false,
-            })
-            
-            local response = table.concat(response_body)
-            code = tonumber(code) or 0
-            
-            if code >= 200 and code < 300 then
-                sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-                if callback then callback(true, response) end
-            else
-                sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-                if callback then callback(false, "HTTPS Error: " .. tostring(code)) end
-            end
-            return
-        end
-        
-        -- Если https не работает, пробуем lua-requests
-        local ok2, requests = pcall(require, "requests")
-        if ok2 then
-            local options = {
-                method = method,
-                headers = {
-                    ["Content-Type"] = "application/json",
-                },
-                verify = false,
-            }
-            if body then
-                options.data = body
-            end
-            
-            local ok3, response = pcall(requests.request, url, options)
-            if ok3 and response.status >= 200 and response.status < 300 then
-                sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-                if callback then callback(true, response.text) end
-                return
-            end
-        end
-        
-        -- Если ничего не работает, пишем ошибку
-        sendToGameDebug("Error: No HTTP library available", {0.9, 0.2, 0.2, 1})
-        if callback then callback(false, "No HTTP library available") end
-        return
-    end
-    
-    -- ============================================================
-    --  ПК (Windows): используем socket.http
-    -- ============================================================
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     local response_body = {}
@@ -215,7 +148,7 @@ local function sendRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  ФУНКЦИИ
+--  ГЛОБАЛЬНОЕ ПОДКЛЮЧЕНИЕ (БЕЗ КОМНАТ)
 -- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
@@ -233,6 +166,9 @@ function online.connect()
     
     local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
+    
+    sendToGameDebug("Connecting to global server...", {0.3, 0.8, 0.8, 1})
+    setDebug("Connecting to global server")
     
     sendRequest("PUT", path, data, function(ok, response)
         if ok then
