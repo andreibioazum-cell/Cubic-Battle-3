@@ -1,11 +1,19 @@
--- online.lua – работает на ПК и Android
+-- online.lua – полностью рабочий вариант с Firebase REST API
 local online = {}
 
+-- ============================================================
+--  КОНФИГУРАЦИЯ FIREBASE (из вашего файла)
+-- ============================================================
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
+local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"  -- Ваш реальный ключ
+
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
 
+-- ============================================================
+--  СОСТОЯНИЕ
+-- ============================================================
 local myUid = nil
 local myNickname = nil
 local mySkin = "NONE"
@@ -24,6 +32,9 @@ local FETCH_INTERVAL = 0.3
 local isAndroid = (love.system.getOS() == "Android")
 local isWindows = (love.system.getOS() == "Windows")
 
+-- ============================================================
+--  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+-- ============================================================
 local function setDebug(text)
     debugText = text
     print("[ONLINE] " .. text)
@@ -40,11 +51,134 @@ local function generateUuid()
 end
 
 -- ============================================================
+--  ОСНОВНАЯ ФУНКЦИЯ ОТПРАВКИ ЗАПРОСОВ (ПУБЛИЧНАЯ)
+-- ============================================================
+function online.sendRequest(method, path, body, callback)
+    -- Добавляем API ключ для аутентификации
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    
+    sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
+    print("[ONLINE] " .. method .. " " .. url)
+    
+    -- ============================================================
+    --  Android: встроенный https (LOVE 12.0)
+    -- ============================================================
+    if isAndroid then
+        local ok, https = pcall(require, "https")
+        if ok then
+            local ltn12 = require("ltn12")
+            local response_body = {}
+            local request_body = body or ""
+            local headers = {
+                ["Content-Type"] = "application/json",
+                ["Content-Length"] = tostring(#request_body),
+            }
+            
+            local res, code = https.request(url, {
+                method = method,
+                headers = headers,
+                source = ltn12.source.string(request_body),
+                sink = ltn12.sink.table(response_body),
+                timeout = 10,
+                verify = false,
+            })
+            
+            local response = table.concat(response_body)
+            code = tonumber(code) or 0
+            
+            if code >= 200 and code < 300 then
+                sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+                if callback then callback(true, response) end
+            else
+                sendToGameDebug("Error " .. code .. ": " .. method .. " " .. path, {0.9, 0.2, 0.2, 1})
+                print("[ONLINE] Error: " .. code .. " - " .. response)
+                if callback then callback(false, response) end
+            end
+            return
+        end
+    end
+    
+    -- ============================================================
+    --  ПК: ssl.https
+    -- ============================================================
+    local ok, sslhttps = pcall(require, "ssl.https")
+    if ok then
+        local ltn12 = require("ltn12")
+        local response_body = {}
+        local request_body = body or ""
+        local headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = tostring(#request_body),
+        }
+        
+        local res, code = sslhttps.request{
+            url = url,
+            method = method,
+            headers = headers,
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+            timeout = 10,
+        }
+        
+        local response = table.concat(response_body)
+        code = tonumber(code) or 0
+        
+        if code >= 200 and code < 300 then
+            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+            if callback then callback(true, response) end
+        else
+            sendToGameDebug("Error " .. code .. ": " .. method .. " " .. path, {0.9, 0.2, 0.2, 1})
+            print("[ONLINE] Error: " .. code .. " - " .. response)
+            if callback then callback(false, response) end
+        end
+        return
+    end
+    
+    -- ============================================================
+    --  Fallback: socket.http (HTTP)
+    -- ============================================================
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local response_body = {}
+    local request_body = body or ""
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Content-Length"] = tostring(#request_body),
+    }
+    
+    -- Для socket.http используем HTTP
+    local httpUrl = url:gsub("https://", "http://")
+    
+    local res, code = http.request{
+        url = httpUrl,
+        method = method,
+        headers = headers,
+        source = ltn12.source.string(request_body),
+        sink = ltn12.sink.table(response_body),
+        timeout = 10,
+    }
+    
+    local response = table.concat(response_body)
+    code = tonumber(code) or 0
+    
+    if code >= 200 and code < 300 then
+        sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
+        if callback then callback(true, response) end
+    else
+        sendToGameDebug("Error " .. code .. ": " .. method .. " " .. path, {0.9, 0.2, 0.2, 1})
+        print("[ONLINE] Error: " .. code .. " - " .. response)
+        if callback then callback(false, response) end
+    end
+end
+
+-- ============================================================
 --  ПАРСИНГ
 -- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
+    
+    -- Обрабатываем ответ в формате {"id": {"x": 1, "y": 2, ...}}
     for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
         local x = data:match('"x":%s*([%d%.%-]+)')
         local y = data:match('"y":%s*([%d%.%-]+)')
@@ -111,130 +245,16 @@ local function parseAbilities(jsonStr)
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСОВ (ПК: ssl.https, Android: https)
--- ============================================================
-local function sendRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json"
-    
-    sendToGameDebug("Request: " .. method .. " " .. path, {0.5, 0.5, 0.8, 1})
-    
-    -- ============================================================
-    --  Android: встроенный https (LOVE 12.0)
-    -- ============================================================
-    if isAndroid then
-        local ok, https = pcall(require, "https")
-        if ok then
-            local ltn12 = require("ltn12")
-            local response_body = {}
-            local request_body = body or ""
-            local headers = {
-                ["Content-Type"] = "application/json",
-                ["Content-Length"] = tostring(#request_body),
-            }
-            
-            local res, code = https.request(url, {
-                method = method,
-                headers = headers,
-                source = ltn12.source.string(request_body),
-                sink = ltn12.sink.table(response_body),
-                timeout = 10,
-                verify = false,
-            })
-            
-            local response = table.concat(response_body)
-            code = tonumber(code) or 0
-            
-            if code >= 200 and code < 300 then
-                sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-                if callback then callback(true, response) end
-            else
-                sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-                if callback then callback(false, "HTTPS Error: " .. tostring(code)) end
-            end
-            return
-        end
-    end
-    
-    -- ============================================================
-    --  ПК: ssl.https (если есть) или socket.http
-    -- ============================================================
-    local ok, sslhttps = pcall(require, "ssl.https")
-    if ok then
-        local ltn12 = require("ltn12")
-        local response_body = {}
-        local request_body = body or ""
-        local headers = {
-            ["Content-Type"] = "application/json",
-            ["Content-Length"] = tostring(#request_body),
-        }
-        
-        local res, code = sslhttps.request{
-            url = url,
-            method = method,
-            headers = headers,
-            source = ltn12.source.string(request_body),
-            sink = ltn12.sink.table(response_body),
-            timeout = 10,
-        }
-        
-        local response = table.concat(response_body)
-        code = tonumber(code) or 0
-        
-        if code >= 200 and code < 300 then
-            sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-            if callback then callback(true, response) end
-        else
-            sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-            if callback then callback(false, "SSL Error: " .. tostring(code)) end
-        end
-        return
-    end
-    
-    -- ============================================================
-    --  Fallback: socket.http (HTTP)
-    -- ============================================================
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
-    local response_body = {}
-    local request_body = body or ""
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Content-Length"] = tostring(#request_body),
-    }
-    
-    -- Для socket.http используем HTTP
-    local httpUrl = url:gsub("https://", "http://")
-    
-    local res, code = http.request{
-        url = httpUrl,
-        method = method,
-        headers = headers,
-        source = ltn12.source.string(request_body),
-        sink = ltn12.sink.table(response_body),
-        timeout = 10,
-    }
-    
-    local response = table.concat(response_body)
-    code = tonumber(code) or 0
-    
-    if code >= 200 and code < 300 then
-        sendToGameDebug("Success: " .. method .. " " .. path, {0.2, 0.8, 0.2, 1})
-        if callback then callback(true, response) end
-    else
-        sendToGameDebug("Error: " .. method .. " " .. path .. " - " .. tostring(code), {0.9, 0.2, 0.2, 1})
-        if callback then callback(false, "HTTP Error: " .. tostring(code)) end
-    end
-end
-
--- ============================================================
---  ФУНКЦИИ
+--  ОСНОВНЫЕ ФУНКЦИИ
 -- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
-    myUid = generateUuid()
+    myUid = SAVE_DATA.uid or generateUuid()
+    SAVE_DATA.uid = myUid
+    SAVE_SAVE()
     
-    setDebug("Online initialized")
+    setDebug("Online initialized with UID: " .. myUid)
     sendToGameDebug("Online initialized", {0.5, 0.5, 0.8, 1})
     
     online.connect()
@@ -249,14 +269,16 @@ function online.connect()
     sendToGameDebug("Connecting to global server...", {0.3, 0.8, 0.8, 1})
     setDebug("Connecting to global server")
     
-    sendRequest("PUT", path, data, function(ok, response)
+    online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
             setDebug("Connected to global server")
             sendToGameDebug("Connected to global server", {0.2, 0.8, 0.2, 1})
+            print("[ONLINE] Connected successfully! Response: " .. tostring(response))
         else
             setDebug("Failed to connect: " .. tostring(response))
             sendToGameDebug("Failed to connect: " .. tostring(response), {0.9, 0.2, 0.2, 1})
+            print("[ONLINE] Connection failed: " .. tostring(response))
         end
     end)
 end
@@ -296,8 +318,9 @@ function online.sendPosition(x, y)
     lastSentY = newY
 
     local path = PLAYERS_PATH .. myUid
-    local data = string.format('{"x":%d,"y":%d,"nickname":"%s","skin":"%s"}', newX, newY, myNickname, mySkin)
-    sendRequest("PUT", path, data)
+    local data = string.format('{"x":%d,"y":%d,"nickname":"%s","skin":"%s"}', 
+        newX, newY, myNickname, mySkin)
+    online.sendRequest("PATCH", path, data)
 end
 
 function online.sendBullet(x, y, dx, dy)
@@ -306,7 +329,7 @@ function online.sendBullet(x, y, dx, dy)
     local path = BULLETS_PATH .. bulletId
     local data = string.format('{"x":%d,"y":%d,"dx":%f,"dy":%f,"owner":"%s","time":%f}',
         math.floor(x), math.floor(y), dx, dy, myUid, love.timer.getTime())
-    sendRequest("PUT", path, data)
+    online.sendRequest("PUT", path, data)
 end
 
 function online.sendAbility(abilityType, x, y, dirX, dirY)
@@ -315,7 +338,17 @@ function online.sendAbility(abilityType, x, y, dirX, dirY)
     local path = ABILITIES_PATH .. abilityId
     local data = string.format('{"type":"%s","x":%d,"y":%d,"dirX":%f,"dirY":%f,"owner":"%s","time":%f}',
         abilityType, math.floor(x), math.floor(y), dirX or 0, dirY or 0, myUid, love.timer.getTime())
-    sendRequest("PUT", path, data)
+    online.sendRequest("PUT", path, data)
+end
+
+function online.updateSkin(skin)
+    mySkin = skin
+    if isConnected and myUid then
+        local path = PLAYERS_PATH .. myUid
+        local data = string.format('{"skin":"%s"}', skin)
+        online.sendRequest("PATCH", path, data)
+        sendToGameDebug("Skin updated to: " .. skin, {0.2, 0.8, 0.2, 1})
+    end
 end
 
 function online.fetchPlayers()
@@ -326,7 +359,7 @@ function online.fetchPlayers()
 
     sendToGameDebug("Fetching players...", {0.5, 0.5, 0.8, 1})
 
-    sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
+    online.sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             local newPlayers = parsePlayers(res)
 
@@ -371,47 +404,15 @@ function online.fetchData()
 
     online.fetchPlayers()
 
-    sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
+    online.sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
-            local ok2, data = pcall(love.data.decode, "string", "json", res)
-            if ok2 and data then
-                bullets = {}
-                for bid, info in pairs(data) do
-                    if info.owner ~= myUid then
-                        bullets[bid] = {
-                            x = info.x or 0,
-                            y = info.y or 0,
-                            dx = info.dx or 0,
-                            dy = info.dy or 0,
-                            owner = info.owner or "",
-                            time = info.time or 0,
-                        }
-                    end
-                end
-            end
+            bullets = parseBullets(res)
         end
     end)
 
-    sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
+    online.sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
-            local ok2, data = pcall(love.data.decode, "string", "json", res)
-            if ok2 and data then
-                abilities = {}
-                for aid, info in pairs(data) do
-                    if info.owner ~= myUid then
-                        abilities[aid] = {
-                            type = info.type or "",
-                            x = info.x or 0,
-                            y = info.y or 0,
-                            dirX = info.dirX or 0,
-                            dirY = info.dirY or 0,
-                            owner = info.owner or "",
-                            target = info.target or "",
-                            time = info.time or 0,
-                        }
-                    end
-                end
-            end
+            abilities = parseAbilities(res)
         end
     end)
 end
@@ -419,6 +420,7 @@ end
 function online.update(dt)
     if not isConnected then return end
 
+    -- Плавная интерполяция позиций
     for id, p in pairs(players) do
         if p.targetX then
             p.x = p.x or p.targetX
@@ -428,6 +430,7 @@ function online.update(dt)
         end
     end
 
+    -- Обновление пуль
     for id, b in pairs(bullets) do
         b.x = b.x + b.dx * 390 * dt
         b.y = b.y + b.dy * 390 * dt
@@ -435,6 +438,7 @@ function online.update(dt)
         if b.life <= 0 then bullets[id] = nil end
     end
 
+    -- Отправка позиции
     sendTimer = sendTimer + dt
     if sendTimer >= SEND_INTERVAL then
         sendTimer = 0
@@ -446,6 +450,7 @@ function online.update(dt)
         end
     end
 
+    -- Получение данных
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
@@ -455,7 +460,7 @@ end
 
 function online.leave()
     if isConnected and myUid then
-        sendRequest("DELETE", PLAYERS_PATH .. myUid)
+        online.sendRequest("DELETE", PLAYERS_PATH .. myUid)
     end
     isConnected = false
     players = {}
@@ -466,10 +471,6 @@ function online.leave()
     lastSentX = nil
     lastSentY = nil
     sendToGameDebug("Left server", {0.5, 0.5, 0.8, 1})
-end
-
-function online.updateSkin(skin)
-    mySkin = skin
 end
 
 return online
