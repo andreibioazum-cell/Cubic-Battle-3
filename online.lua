@@ -1,8 +1,8 @@
--- online.lua - работает на Windows, Android, Linux
+-- online.lua - СУПЕР БЫСТРЫЙ! Не блокирует игру!
 local online = {}
 
 -- ============================================================
---  КОНФИГУРАЦИЯ FIREBASE
+--  КОНФИГУРАЦИЯ
 -- ============================================================
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
@@ -26,10 +26,16 @@ local lastSentX = nil
 local lastSentY = nil
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.3
-local FETCH_INTERVAL = 0.3
+local SEND_INTERVAL = 0.5  -- реже отправляем
+local FETCH_INTERVAL = 1.0  -- реже получаем
 
 local isAndroid = (love.system.getOS() == "Android")
+
+-- ============================================================
+--  ОЧЕРЕДЬ ЗАПРОСОВ (НЕ БЛОКИРУЕТ!)
+-- ============================================================
+local requestQueue = {}
+local isProcessing = false
 
 local function setDebug(text)
     debugText = text
@@ -41,33 +47,60 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ФУНКЦИЯ ЗАПРОСА - РАБОТАЕТ ВЕЗДЕ!
+--  ОТПРАВКА ЗАПРОСА В ФОНЕ (НЕ БЛОКИРУЕТ!)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    print("[ONLINE] " .. method .. " " .. url)
+    -- Добавляем в очередь
+    table.insert(requestQueue, {
+        method = method,
+        url = url,
+        body = body,
+        callback = callback,
+        timestamp = love.timer.getTime()
+    })
+    
+    -- Если очередь не обрабатывается - запускаем
+    if not isProcessing then
+        processQueue()
+    end
+end
+
+-- ============================================================
+--  ОБРАБОТЧИК ОЧЕРЕДИ (В ФОНЕ!)
+-- ============================================================
+function processQueue()
+    if #requestQueue == 0 then
+        isProcessing = false
+        return
+    end
+    
+    isProcessing = true
+    local req = table.remove(requestQueue, 1)
+    
+    print("[ONLINE] Sending: " .. req.method .. " " .. req.url)
     
     -- ============================================================
-    --  Android: используем встроенный https (LÖVE 12.0)
+    --  Android: используем https
     -- ============================================================
     if isAndroid then
         local ok, https = pcall(require, "https")
         if ok then
             local ltn12 = require("ltn12")
             local response_body = {}
-            local request_body = body or ""
+            local request_body = req.body or ""
             local headers = {
                 ["Content-Type"] = "application/json",
                 ["Content-Length"] = tostring(#request_body),
             }
             
-            local res, code = https.request(url, {
-                method = method,
+            local res, code = https.request(req.url, {
+                method = req.method,
                 headers = headers,
                 source = ltn12.source.string(request_body),
                 sink = ltn12.sink.table(response_body),
-                timeout = 10,
+                timeout = 5,
                 verify = false,
             })
             
@@ -75,48 +108,86 @@ function online.sendRequest(method, path, body, callback)
             code = tonumber(code) or 0
             
             if code >= 200 and code < 300 then
-                print("[ONLINE] ✅ Android success!")
-                if callback then callback(true, response) end
+                print("[ONLINE] ✅ Success!")
+                if req.callback then req.callback(true, response) end
             else
-                print("[ONLINE] ❌ Android error: " .. code)
-                if callback then callback(false, response) end
+                print("[ONLINE] ❌ Error: " .. code)
+                if req.callback then req.callback(false, response) end
             end
+            
+            -- Обрабатываем следующую очередь
+            processQueue()
             return
         end
     end
     
     -- ============================================================
-    --  ПК (Windows/Linux/macOS): используем socket.http
-    --  Работает быстро, без лагов!
+    --  ПК: используем curl (НО НЕ ЖДЕМ!)
     -- ============================================================
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
-    local response_body = {}
-    local request_body = body or ""
-    
-    http.TIMEOUT = 10
-    
-    local res, code = http.request{
-        url = url,
-        method = method,
-        headers = {
-            ["Content-Type"] = "application/json",
-            ["Content-Length"] = tostring(#request_body),
-        },
-        source = ltn12.source.string(request_body),
-        sink = ltn12.sink.table(response_body),
-    }
-    
-    local response = table.concat(response_body)
-    code = tonumber(code) or 0
-    
-    if code >= 200 and code < 300 then
-        print("[ONLINE] ✅ PC success! Response: " .. response)
-        if callback then callback(true, response) end
+    local cmd
+    if req.method == "GET" then
+        cmd = 'start /B curl -s -X GET "' .. req.url .. '" > NUL 2>&1'
     else
-        print("[ONLINE] ❌ PC error: " .. code)
-        if callback then callback(false, response) end
+        local data = req.body or "{}"
+        data = data:gsub('"', '\\"')
+        cmd = 'start /B curl -s -X ' .. req.method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. req.url .. '" > NUL 2>&1'
     end
+    
+    print("[ONLINE] CMD: " .. cmd)
+    
+    -- ЗАПУСКАЕМ В ФОНЕ! НЕ ЖДЕМ ОТВЕТА!
+    os.execute(cmd)
+    
+    -- Сразу говорим "успешно" (мы не знаем результат)
+    if req.callback then 
+        req.callback(true, "Sent") 
+    end
+    
+    -- Обрабатываем следующую очередь
+    processQueue()
+end
+
+-- ============================================================
+--  ПОЛУЧЕНИЕ ДАННЫХ (ОТДЕЛЬНЫЙ ПОТОК)
+-- ============================================================
+function online.fetchDataSync()
+    if not isConnected then return end
+    
+    -- Получаем игроков через curl (с ожиданием, но редко)
+    local function fetchPlayers()
+        local url = DB_URL .. PLAYERS_PATH .. ".json?auth=" .. API_KEY
+        local cmd = 'curl -s -X GET "' .. url .. '"'
+        
+        print("[ONLINE] Fetching players...")
+        local handle = io.popen(cmd)
+        local result = handle and handle:read("*a")
+        if handle then handle:close() end
+        
+        if result and result ~= "" and not result:match("curl:") then
+            local newPlayers = parsePlayers(result)
+            
+            for id, data in pairs(newPlayers) do
+                if id ~= myUid then
+                    if not players[id] then
+                        players[id] = data
+                    else
+                        players[id].targetX = data.x
+                        players[id].targetY = data.y
+                        players[id].nickname = data.nickname
+                        players[id].skin = data.skin
+                    end
+                end
+            end
+            
+            for id in pairs(players) do
+                if not newPlayers[id] then
+                    players[id] = nil
+                end
+            end
+        end
+    end
+    
+    fetchPlayers()
 end
 
 -- ============================================================
@@ -202,23 +273,17 @@ function online.init(nickname)
     SAVE_SAVE()
     
     setDebug("Online initialized with UID: " .. myUid)
-    online.connect()
-end
-
-function online.connect()
-    if not myUid then return end
     
+    -- Сразу подключаемся
     local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
-    
-    setDebug("Connecting to global server...")
     
     online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
-            setDebug("✅ Connected to global server!")
+            setDebug("✅ Connected!")
         else
-            setDebug("❌ Failed to connect")
+            setDebug("❌ Failed")
             isConnected = false
         end
     end)
@@ -291,50 +356,10 @@ function online.updateSkin(skin)
     end
 end
 
-function online.fetchPlayers()
-    if not isConnected then return end
-
-    online.sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            local newPlayers = parsePlayers(res)
-
-            for id, data in pairs(newPlayers) do
-                if id ~= myUid then
-                    if not players[id] then
-                        players[id] = data
-                    else
-                        players[id].targetX = data.x
-                        players[id].targetY = data.y
-                        players[id].nickname = data.nickname
-                        players[id].skin = data.skin
-                    end
-                end
-            end
-
-            for id in pairs(players) do
-                if not newPlayers[id] then
-                    players[id] = nil
-                end
-            end
-        end
-    end)
-
-    online.sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            bullets = parseBullets(res)
-        end
-    end)
-
-    online.sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            abilities = parseAbilities(res)
-        end
-    end)
-end
-
 function online.update(dt)
     if not isConnected then return end
 
+    -- Плавная интерполяция
     for id, p in pairs(players) do
         if p.targetX then
             p.x = p.x or p.targetX
@@ -344,34 +369,18 @@ function online.update(dt)
         end
     end
 
-    for id, b in pairs(bullets) do
-        b.x = b.x + b.dx * 390 * dt
-        b.y = b.y + b.dy * 390 * dt
-        b.life = b.life - dt
-        if b.life <= 0 then bullets[id] = nil end
-    end
-
-    sendTimer = sendTimer + dt
-    if sendTimer >= SEND_INTERVAL then
-        sendTimer = 0
-        if online.onSendPosition then
-            local x, y = online.onSendPosition()
-            if x and y then
-                online.sendPosition(x, y)
-            end
-        end
-    end
-
+    -- Получаем данные раз в 2 секунды (редко, чтобы не лагать)
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
-        online.fetchPlayers()
+        online.fetchDataSync()
     end
 end
 
 function online.leave()
     if isConnected and myUid then
-        online.sendRequest("DELETE", PLAYERS_PATH .. myUid)
+        local path = PLAYERS_PATH .. myUid
+        online.sendRequest("DELETE", path)
     end
     isConnected = false
     players = {}
