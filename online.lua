@@ -1,8 +1,8 @@
--- online.lua - СУПЕР БЫСТРЫЙ! Не блокирует игру!
+-- online.lua - РАБОТАЕТ ВЕЗДЕ! Android + Windows + Linux
 local online = {}
 
 -- ============================================================
---  КОНФИГУРАЦИЯ
+--  КОНФИГУРАЦИЯ FIREBASE
 -- ============================================================
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
@@ -26,16 +26,11 @@ local lastSentX = nil
 local lastSentY = nil
 local sendTimer = 0
 local fetchTimer = 0
-local SEND_INTERVAL = 0.5  -- реже отправляем
-local FETCH_INTERVAL = 1.0  -- реже получаем
+local SEND_INTERVAL = 0.5
+local FETCH_INTERVAL = 1.0
 
 local isAndroid = (love.system.getOS() == "Android")
-
--- ============================================================
---  ОЧЕРЕДЬ ЗАПРОСОВ (НЕ БЛОКИРУЕТ!)
--- ============================================================
-local requestQueue = {}
-local isProcessing = false
+local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
     debugText = text
@@ -47,147 +42,159 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА В ФОНЕ (НЕ БЛОКИРУЕТ!)
+--  ОТПРАВКА ЗАПРОСА (ПРОБУЕМ ВСЕ СПОСОБЫ)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    -- Добавляем в очередь
-    table.insert(requestQueue, {
-        method = method,
-        url = url,
-        body = body,
-        callback = callback,
-        timestamp = love.timer.getTime()
-    })
-    
-    -- Если очередь не обрабатывается - запускаем
-    if not isProcessing then
-        processQueue()
-    end
-end
-
--- ============================================================
---  ОБРАБОТЧИК ОЧЕРЕДИ (В ФОНЕ!)
--- ============================================================
-function processQueue()
-    if #requestQueue == 0 then
-        isProcessing = false
-        return
-    end
-    
-    isProcessing = true
-    local req = table.remove(requestQueue, 1)
-    
-    print("[ONLINE] Sending: " .. req.method .. " " .. req.url)
+    print("[ONLINE] " .. method .. " " .. url)
     
     -- ============================================================
-    --  Android: используем https
+    --  СПОСОБ 1: Встроенный https (LÖVE 12.0)
     -- ============================================================
-    if isAndroid then
-        local ok, https = pcall(require, "https")
-        if ok then
-            local ltn12 = require("ltn12")
-            local response_body = {}
-            local request_body = req.body or ""
-            local headers = {
-                ["Content-Type"] = "application/json",
-                ["Content-Length"] = tostring(#request_body),
-            }
-            
-            local res, code = https.request(req.url, {
-                method = req.method,
-                headers = headers,
-                source = ltn12.source.string(request_body),
-                sink = ltn12.sink.table(response_body),
-                timeout = 5,
-                verify = false,
-            })
-            
-            local response = table.concat(response_body)
-            code = tonumber(code) or 0
-            
-            if code >= 200 and code < 300 then
-                print("[ONLINE] ✅ Success!")
-                if req.callback then req.callback(true, response) end
-            else
-                print("[ONLINE] ❌ Error: " .. code)
-                if req.callback then req.callback(false, response) end
-            end
-            
-            -- Обрабатываем следующую очередь
-            processQueue()
-            return
+    local ok, https = pcall(require, "https")
+    if ok then
+        local ltn12 = require("ltn12")
+        local response_body = {}
+        local request_body = body or ""
+        local headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = tostring(#request_body),
+        }
+        
+        local res, code = https.request(url, {
+            method = method,
+            headers = headers,
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+            timeout = 10,
+            verify = false,
+        })
+        
+        local response = table.concat(response_body)
+        code = tonumber(code) or 0
+        
+        if code >= 200 and code < 300 then
+            print("[ONLINE] ✅ HTTPS success!")
+            if callback then callback(true, response) end
+            return true
+        else
+            print("[ONLINE] ❌ HTTPS error: " .. code)
+            -- Пробуем другие способы
         end
     end
     
     -- ============================================================
-    --  ПК: используем curl (НО НЕ ЖДЕМ!)
+    --  СПОСОБ 2: socket.http (работает везде!)
     -- ============================================================
-    local cmd
-    if req.method == "GET" then
-        cmd = 'start /B curl -s -X GET "' .. req.url .. '" > NUL 2>&1'
-    else
-        local data = req.body or "{}"
-        data = data:gsub('"', '\\"')
-        cmd = 'start /B curl -s -X ' .. req.method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. req.url .. '" > NUL 2>&1'
-    end
-    
-    print("[ONLINE] CMD: " .. cmd)
-    
-    -- ЗАПУСКАЕМ В ФОНЕ! НЕ ЖДЕМ ОТВЕТА!
-    os.execute(cmd)
-    
-    -- Сразу говорим "успешно" (мы не знаем результат)
-    if req.callback then 
-        req.callback(true, "Sent") 
-    end
-    
-    -- Обрабатываем следующую очередь
-    processQueue()
-end
-
--- ============================================================
---  ПОЛУЧЕНИЕ ДАННЫХ (ОТДЕЛЬНЫЙ ПОТОК)
--- ============================================================
-function online.fetchDataSync()
-    if not isConnected then return end
-    
-    -- Получаем игроков через curl (с ожиданием, но редко)
-    local function fetchPlayers()
-        local url = DB_URL .. PLAYERS_PATH .. ".json?auth=" .. API_KEY
-        local cmd = 'curl -s -X GET "' .. url .. '"'
+    local ok, http = pcall(require, "socket.http")
+    if ok then
+        local ltn12 = require("ltn12")
+        local response_body = {}
+        local request_body = body or ""
         
-        print("[ONLINE] Fetching players...")
+        http.TIMEOUT = 10
+        
+        -- Пробуем HTTPS
+        local res, code = http.request{
+            url = url,
+            method = method,
+            headers = {
+                ["Content-Type"] = "application/json",
+                ["Content-Length"] = tostring(#request_body),
+            },
+            source = ltn12.source.string(request_body),
+            sink = ltn12.sink.table(response_body),
+        }
+        
+        local response = table.concat(response_body)
+        code = tonumber(code) or 0
+        
+        if code >= 200 and code < 300 then
+            print("[ONLINE] ✅ socket.http success!")
+            if callback then callback(true, response) end
+            return true
+        else
+            print("[ONLINE] ❌ socket.http error: " .. code)
+        end
+    end
+    
+    -- ============================================================
+    --  СПОСОБ 3: curl (Android + ПК)
+    -- ============================================================
+    -- Проверяем, есть ли curl
+    local hasCurl = false
+    if isAndroid or isWindows then
+        local test = io.popen("curl --version 2>nul")
+        if test then
+            test:close()
+            hasCurl = true
+        end
+    end
+    
+    if hasCurl then
+        local cmd
+        if method == "GET" then
+            cmd = 'curl -s -X GET "' .. url .. '"'
+        else
+            local data = body or "{}"
+            data = data:gsub('"', '\\"')
+            if isWindows then
+                cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+            else
+                -- Android / Linux
+                cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d \'' .. data .. '\' "' .. url .. '"'
+            end
+        end
+        
+        print("[ONLINE] CMD: " .. cmd)
+        
         local handle = io.popen(cmd)
         local result = handle and handle:read("*a")
         if handle then handle:close() end
         
         if result and result ~= "" and not result:match("curl:") then
-            local newPlayers = parsePlayers(result)
-            
-            for id, data in pairs(newPlayers) do
-                if id ~= myUid then
-                    if not players[id] then
-                        players[id] = data
-                    else
-                        players[id].targetX = data.x
-                        players[id].targetY = data.y
-                        players[id].nickname = data.nickname
-                        players[id].skin = data.skin
-                    end
-                end
-            end
-            
-            for id in pairs(players) do
-                if not newPlayers[id] then
-                    players[id] = nil
-                end
-            end
+            print("[ONLINE] ✅ Curl success! Response: " .. result)
+            if callback then callback(true, result) end
+            return true
+        else
+            print("[ONLINE] ❌ Curl failed")
         end
     end
     
-    fetchPlayers()
+    -- ============================================================
+    --  СПОСОБ 4: wget (Android)
+    -- ============================================================
+    if isAndroid then
+        local cmd
+        if method == "GET" then
+            cmd = 'wget -q -O - "' .. url .. '"'
+        else
+            local data = body or "{}"
+            cmd = 'wget -q -O - --method=' .. method .. ' --header="Content-Type: application/json" --body-data=\'' .. data .. '\' "' .. url .. '"'
+        end
+        
+        print("[ONLINE] WGET: " .. cmd)
+        
+        local handle = io.popen(cmd)
+        local result = handle and handle:read("*a")
+        if handle then handle:close() end
+        
+        if result and result ~= "" then
+            print("[ONLINE] ✅ Wget success!")
+            if callback then callback(true, result) end
+            return true
+        else
+            print("[ONLINE] ❌ Wget failed")
+        end
+    end
+    
+    -- ============================================================
+    --  ВСЁ ПРОВАЛИЛОСЬ
+    -- ============================================================
+    print("[ONLINE] ❌ ALL METHODS FAILED!")
+    if callback then callback(false, "All methods failed") end
+    return false
 end
 
 -- ============================================================
@@ -273,18 +280,26 @@ function online.init(nickname)
     SAVE_SAVE()
     
     setDebug("Online initialized with UID: " .. myUid)
+    online.connect()
+end
+
+function online.connect()
+    if not myUid then return end
     
-    -- Сразу подключаемся
     local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
+    
+    setDebug("Connecting...")
     
     online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
             setDebug("✅ Connected!")
+            print("[ONLINE] ✅ Connected to Firebase!")
         else
             setDebug("❌ Failed")
             isConnected = false
+            print("[ONLINE] ❌ Connection failed!")
         end
     end)
 end
@@ -356,6 +371,47 @@ function online.updateSkin(skin)
     end
 end
 
+function online.fetchPlayers()
+    if not isConnected then return end
+
+    online.sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
+        if ok and res and res ~= "null" then
+            local newPlayers = parsePlayers(res)
+
+            for id, data in pairs(newPlayers) do
+                if id ~= myUid then
+                    if not players[id] then
+                        players[id] = data
+                    else
+                        players[id].targetX = data.x
+                        players[id].targetY = data.y
+                        players[id].nickname = data.nickname
+                        players[id].skin = data.skin
+                    end
+                end
+            end
+
+            for id in pairs(players) do
+                if not newPlayers[id] then
+                    players[id] = nil
+                end
+            end
+        end
+    end)
+
+    online.sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
+        if ok and res and res ~= "null" then
+            bullets = parseBullets(res)
+        end
+    end)
+
+    online.sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
+        if ok and res and res ~= "null" then
+            abilities = parseAbilities(res)
+        end
+    end)
+end
+
 function online.update(dt)
     if not isConnected then return end
 
@@ -369,18 +425,37 @@ function online.update(dt)
         end
     end
 
-    -- Получаем данные раз в 2 секунды (редко, чтобы не лагать)
+    -- Обновление пуль
+    for id, b in pairs(bullets) do
+        b.x = b.x + b.dx * 390 * dt
+        b.y = b.y + b.dy * 390 * dt
+        b.life = b.life - dt
+        if b.life <= 0 then bullets[id] = nil end
+    end
+
+    -- Отправка позиции
+    sendTimer = sendTimer + dt
+    if sendTimer >= SEND_INTERVAL then
+        sendTimer = 0
+        if online.onSendPosition then
+            local x, y = online.onSendPosition()
+            if x and y then
+                online.sendPosition(x, y)
+            end
+        end
+    end
+
+    -- Получение данных
     fetchTimer = fetchTimer + dt
     if fetchTimer >= FETCH_INTERVAL then
         fetchTimer = 0
-        online.fetchDataSync()
+        online.fetchPlayers()
     end
 end
 
 function online.leave()
     if isConnected and myUid then
-        local path = PLAYERS_PATH .. myUid
-        online.sendRequest("DELETE", path)
+        online.sendRequest("DELETE", PLAYERS_PATH .. myUid)
     end
     isConnected = false
     players = {}
