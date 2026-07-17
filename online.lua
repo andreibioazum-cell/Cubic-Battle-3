@@ -1,4 +1,4 @@
--- online.lua - РАБОТАЕТ ВЕЗДЕ! Android + Windows + Linux
+-- online.lua - БЕЗ ОКОН КОМАНДНОЙ СТРОКИ!
 local online = {}
 
 -- ============================================================
@@ -42,7 +42,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА (ПРОБУЕМ ВСЕ СПОСОБЫ)
+--  ОТПРАВКА ЗАПРОСА (БЕЗ ОКОН!)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
@@ -50,7 +50,7 @@ function online.sendRequest(method, path, body, callback)
     print("[ONLINE] " .. method .. " " .. url)
     
     -- ============================================================
-    --  СПОСОБ 1: Встроенный https (LÖVE 12.0)
+    --  СПОСОБ 1: Встроенный https (LÖVE 12.0) - БЕЗ ОКОН
     -- ============================================================
     local ok, https = pcall(require, "https")
     if ok then
@@ -80,12 +80,11 @@ function online.sendRequest(method, path, body, callback)
             return true
         else
             print("[ONLINE] ❌ HTTPS error: " .. code)
-            -- Пробуем другие способы
         end
     end
     
     -- ============================================================
-    --  СПОСОБ 2: socket.http (работает везде!)
+    --  СПОСОБ 2: socket.http (работает везде!) - БЕЗ ОКОН
     -- ============================================================
     local ok, http = pcall(require, "socket.http")
     if ok then
@@ -95,7 +94,6 @@ function online.sendRequest(method, path, body, callback)
         
         http.TIMEOUT = 10
         
-        -- Пробуем HTTPS
         local res, code = http.request{
             url = url,
             method = method,
@@ -120,31 +118,16 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 3: curl (Android + ПК)
+    --  СПОСОБ 3: curl (Android) - БЕЗ ОКОН!
     -- ============================================================
-    -- Проверяем, есть ли curl
-    local hasCurl = false
-    if isAndroid or isWindows then
-        local test = io.popen("curl --version 2>nul")
-        if test then
-            test:close()
-            hasCurl = true
-        end
-    end
-    
-    if hasCurl then
+    if isAndroid then
         local cmd
         if method == "GET" then
-            cmd = 'curl -s -X GET "' .. url .. '"'
+            cmd = 'curl -s -X GET "' .. url .. '" 2>/dev/null'
         else
             local data = body or "{}"
             data = data:gsub('"', '\\"')
-            if isWindows then
-                cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-            else
-                -- Android / Linux
-                cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d \'' .. data .. '\' "' .. url .. '"'
-            end
+            cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '" 2>/dev/null'
         end
         
         print("[ONLINE] CMD: " .. cmd)
@@ -154,7 +137,7 @@ function online.sendRequest(method, path, body, callback)
         if handle then handle:close() end
         
         if result and result ~= "" and not result:match("curl:") then
-            print("[ONLINE] ✅ Curl success! Response: " .. result)
+            print("[ONLINE] ✅ Curl success!")
             if callback then callback(true, result) end
             return true
         else
@@ -163,15 +146,15 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 4: wget (Android)
+    --  СПОСОБ 4: wget (Android) - БЕЗ ОКОН!
     -- ============================================================
     if isAndroid then
         local cmd
         if method == "GET" then
-            cmd = 'wget -q -O - "' .. url .. '"'
+            cmd = 'wget -q -O - "' .. url .. '" 2>/dev/null'
         else
             local data = body or "{}"
-            cmd = 'wget -q -O - --method=' .. method .. ' --header="Content-Type: application/json" --body-data=\'' .. data .. '\' "' .. url .. '"'
+            cmd = 'wget -q -O - --method=' .. method .. ' --header="Content-Type: application/json" --body-data=\'' .. data .. '\' "' .. url .. '" 2>/dev/null'
         end
         
         print("[ONLINE] WGET: " .. cmd)
