@@ -2,7 +2,7 @@
 local version_check = {}
 
 local online = require("online")
-local VERSION = "1.3"  -- Текущая версия игры
+local VERSION = "13"  -- Текущая версия игры
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 local CONFIG_PATH = "config/version"
 
