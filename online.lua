@@ -1,4 +1,4 @@
--- online.lua - ФИНАЛЬНАЯ (без бат-файлов)
+-- online.lua - УНИВЕРСАЛЬНЫЙ (ТОЛЬКО CURL НА ВСЕХ ПЛАТФОРМАХ)
 local online = {}
 
 -- ============================================================
@@ -27,9 +27,8 @@ local lastSentY = nil
 local lastSentTime = 0
 local fetchTimer = 0
 
-local osName = love.system.getOS()
-local isAndroid = (osName == "Android")
-local isWindows = (osName == "Windows")
+local isAndroid = (love.system.getOS() == "Android")
+local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
     debugText = text
@@ -41,199 +40,45 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ВЫПОЛНЕНИЕ КОМАНДЫ БЕЗ ОКОН (Windows)
--- ============================================================
-local function executeHiddenCommand(cmd)
-    -- Создаем VBS который запускает команду скрыто
-    -- Используем WScript.Shell с параметром 0 (скрытое окно)
-    -- Но без создания временных файлов!
-    
-    local vbsFile = os.tmpname() .. ".vbs"
-    
-    -- VBS код который выполняет команду и сохраняет результат
-    local vbsContent = [[
-        Dim objShell, objExec, output
-        Set objShell = CreateObject("WScript.Shell")
-        
-        ' Запускаем команду скрыто
-        Set objExec = objShell.Exec("]] .. cmd .. [[")
-        
-        ' Ждем завершения (максимум 10 секунд)
-        Dim timeout
-        timeout = 0
-        Do While objExec.Status = 0 And timeout < 10
-            WScript.Sleep 100
-            timeout = timeout + 0.1
-        Loop
-        
-        ' Читаем вывод
-        output = objExec.StdOut.ReadAll()
-        
-        ' Если есть ошибка, читаем её
-        If output = "" Then
-            output = objExec.StdErr.ReadAll()
-        End If
-        
-        ' Выводим результат
-        WScript.Echo output
-    ]]
-    
-    local file = io.open(vbsFile, "w")
-    if not file then
-        print("[ONLINE] ❌ Cannot create VBS file!")
-        return nil
-    end
-    
-    file:write(vbsContent)
-    file:close()
-    
-    -- Запускаем VBS и сразу читаем результат
-    local runCmd = 'cscript //nologo "' .. vbsFile .. '"'
-    print("[ONLINE] Running: " .. runCmd)
-    
-    local handle = io.popen(runCmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
-    
-    -- Удаляем VBS файл
-    os.remove(vbsFile)
-    
-    return result
-end
-
--- ============================================================
---  ОТПРАВКА ЗАПРОСА
+--  ОТПРАВКА ЗАПРОСА (CURL НА ВСЕХ ПЛАТФОРМАХ)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    print("[ONLINE] " .. method .. " " .. path)
-    
+    -- Экранируем данные для curl
     local data = body or "{}"
-    local response = nil
-    local success = false
+    data = data:gsub('"', '\\"')
     
-    -- ============================================================
-    --  ANDROID: curl
-    -- ============================================================
-    if isAndroid then
-        local escapedData = data:gsub('"', '\\"')
-        local cmd
-        
-        if method == "GET" then
-            cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-        else
-            cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. escapedData .. '" "' .. url .. '"'
-        end
-        
-        print("[ONLINE] Android CMD: " .. cmd)
-        
-        local handle = io.popen(cmd)
-        response = handle and handle:read("*a")
-        if handle then handle:close() end
-        
-        if response and response ~= "" and not response:match("curl:") and not response:match("Failed") then
-            success = true
-            print("[ONLINE] ✅ curl success on Android!")
-        end
+    -- Формируем команду curl
+    local cmd
+    if method == "GET" then
+        cmd = 'curl -s -X GET "' .. url .. '"'
+    else
+        cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
     end
     
-    -- ============================================================
-    --  WINDOWS: ПРЯМОЙ ВЫЗОВ ЧЕРЕЗ VBS (без bat)
-    -- ============================================================
-    if not success and isWindows then
-        -- Экранируем кавычки для командной строки
-        local escapedData = data:gsub('"', '\\"')
-        local cmd
-        
-        -- Пробуем curl
-        if method == "GET" then
-            cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-        else
-            cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. escapedData .. '" "' .. url .. '"'
-        end
-        
-        print("[ONLINE] Windows VBS CMD: " .. cmd)
-        
-        response = executeHiddenCommand(cmd)
-        
-        -- Проверяем ответ
-        if response and response ~= "" and 
-           not response:match("curl:") and 
-           not response:match("Could not") and
-           not response:match("not found") then
-            success = true
-            print("[ONLINE] ✅ curl success on Windows (hidden)!")
-        end
-    end
+    print("[ONLINE] " .. method .. " " .. path)
+    print("[ONLINE] CMD: " .. cmd)
     
-    -- ============================================================
-    --  WINDOWS FALLBACK: PowerShell (если curl не работает)
-    -- ============================================================
-    if not success and isWindows then
-        local escapedData = data:gsub('"', '""')
-        local cmd
-        
-        if method == "GET" then
-            cmd = 'powershell -Command "Invoke-RestMethod -Uri ''' .. url .. ''' -Method Get -TimeoutSec 10 | ConvertTo-Json -Compress"'
-        else
-            cmd = 'powershell -Command "Invoke-RestMethod -Uri ''' .. url .. ''' -Method ' .. method .. ' -Body ''' .. escapedData .. ''' -ContentType ''application/json'' -TimeoutSec 10 | ConvertTo-Json -Compress"'
-        end
-        
-        print("[ONLINE] Windows VBS PowerShell: " .. cmd)
-        
-        response = executeHiddenCommand(cmd)
-        
-        if response and response ~= "" and 
-           not response:match("error") and 
-           not response:match("Invoke-RestMethod") and
-           not response:match("Could not") then
-            success = true
-            print("[ONLINE] ✅ PowerShell success on Windows (hidden)!")
-        end
-    end
+    -- Выполняем curl
+    local handle = io.popen(cmd)
+    local result = handle and handle:read("*a")
+    if handle then handle:close() end
     
-    -- ============================================================
-    --  MAC/LINUX: curl
-    -- ============================================================
-    if not success and not isWindows and not isAndroid then
-        local escapedData = data:gsub('"', '\\"')
-        local cmd
-        
-        if method == "GET" then
-            cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-        else
-            cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. escapedData .. '" "' .. url .. '"'
-        end
-        
-        print("[ONLINE] Mac/Linux CMD: " .. cmd)
-        
-        local handle = io.popen(cmd)
-        response = handle and handle:read("*a")
-        if handle then handle:close() end
-        
-        if response and response ~= "" and not response:match("curl:") then
-            success = true
-            print("[ONLINE] ✅ curl success on Mac/Linux!")
-        end
-    end
-    
-    -- ============================================================
-    --  РЕЗУЛЬТАТ
-    -- ============================================================
-    if success then
-        if callback then callback(true, response) end
+    -- Проверяем результат
+    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") and not result:match("error") then
+        print("[ONLINE] Curl success!")
+        if callback then callback(true, result) end
         return true
     else
-        print("[ONLINE] ❌ All methods failed!")
-        print("[ONLINE] Last response: " .. tostring(response))
-        if callback then callback(false, "All methods failed") end
+        print("[ONLINE] Curl failed: " .. tostring(result))
+        if callback then callback(false, result or "Curl failed") end
         return false
     end
 end
 
 -- ============================================================
---  ПАРСИНГ (без изменений)
+--  ПАРСИНГ
 -- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
@@ -285,13 +130,13 @@ local function parseAbilities(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
     for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local type = data:match('"type":%s*"([^"]+)"')
+        local typ = data:match('"type":%s*"([^"]+)"')
         local x = data:match('"x":%s*([%d%.%-]+)')
         local y = data:match('"y":%s*([%d%.%-]+)')
         local owner = data:match('"owner":%s*"([^"]+)"')
-        if type and x and y then
+        if typ and x and y then
             result[id] = {
-                type = type,
+                type = typ,
                 x = tonumber(x) or 0,
                 y = tonumber(y) or 0,
                 owner = owner or "",
@@ -329,12 +174,12 @@ function online.connect()
     online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
-            setDebug("✅ Connected!")
-            print("[ONLINE] ✅ Connected to Firebase!")
+            setDebug("Connected!")
+            print("[ONLINE] Connected to Firebase!")
         else
-            setDebug("❌ Failed")
+            setDebug("Failed to connect")
             isConnected = false
-            print("[ONLINE] ❌ Connection failed!")
+            print("[ONLINE] Connection failed!")
         end
     end)
 end
