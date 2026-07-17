@@ -1,4 +1,4 @@
--- online.lua - БЕЗ ОКОН КОМАНДНОЙ СТРОКИ!
+-- online.lua - для ПК (Windows) БЕЗ ОКОН!
 local online = {}
 
 -- ============================================================
@@ -29,7 +29,6 @@ local fetchTimer = 0
 local SEND_INTERVAL = 0.5
 local FETCH_INTERVAL = 1.0
 
-local isAndroid = (love.system.getOS() == "Android")
 local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
@@ -42,7 +41,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА (БЕЗ ОКОН!)
+--  ОТПРАВКА ЗАПРОСА (ДЛЯ ПК - БЕЗ ОКОН!)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
@@ -84,7 +83,7 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 2: socket.http (работает везде!) - БЕЗ ОКОН
+    --  СПОСОБ 2: socket.http (есть в LÖVE 11.5) - БЕЗ ОКОН!
     -- ============================================================
     local ok, http = pcall(require, "socket.http")
     if ok then
@@ -94,6 +93,7 @@ function online.sendRequest(method, path, body, callback)
         
         http.TIMEOUT = 10
         
+        -- Пробуем HTTPS через socket.http (если есть SSL)
         local res, code = http.request{
             url = url,
             method = method,
@@ -114,24 +114,52 @@ function online.sendRequest(method, path, body, callback)
             return true
         else
             print("[ONLINE] ❌ socket.http error: " .. code)
+            
+            -- Если HTTPS не работает, пробуем HTTP
+            local httpUrl = url:gsub("https://", "http://")
+            print("[ONLINE] Retry with HTTP: " .. httpUrl)
+            
+            local res2, code2 = http.request{
+                url = httpUrl,
+                method = method,
+                headers = {
+                    ["Content-Type"] = "application/json",
+                    ["Content-Length"] = tostring(#request_body),
+                },
+                source = ltn12.source.string(request_body),
+                sink = ltn12.sink.table(response_body),
+            }
+            
+            local response2 = table.concat(response_body)
+            code2 = tonumber(code2) or 0
+            
+            if code2 >= 200 and code2 < 300 then
+                print("[ONLINE] ✅ HTTP success!")
+                if callback then callback(true, response2) end
+                return true
+            else
+                print("[ONLINE] ❌ HTTP error: " .. code2)
+            end
         end
     end
     
     -- ============================================================
-    --  СПОСОБ 3: curl (Android) - БЕЗ ОКОН!
+    --  СПОСОБ 3: curl (скрыто!) - БЕЗ ОКОН!
     -- ============================================================
-    if isAndroid then
+    if isWindows then
+        -- Используем curl с подавлением окна
         local cmd
         if method == "GET" then
-            cmd = 'curl -s -X GET "' .. url .. '" 2>/dev/null'
+            cmd = 'curl -s -X GET "' .. url .. '"'
         else
             local data = body or "{}"
             data = data:gsub('"', '\\"')
-            cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '" 2>/dev/null'
+            cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
         end
         
         print("[ONLINE] CMD: " .. cmd)
         
+        -- Используем popen (НЕ start /B, чтобы получить ответ)
         local handle = io.popen(cmd)
         local result = handle and handle:read("*a")
         if handle then handle:close() end
@@ -142,33 +170,6 @@ function online.sendRequest(method, path, body, callback)
             return true
         else
             print("[ONLINE] ❌ Curl failed")
-        end
-    end
-    
-    -- ============================================================
-    --  СПОСОБ 4: wget (Android) - БЕЗ ОКОН!
-    -- ============================================================
-    if isAndroid then
-        local cmd
-        if method == "GET" then
-            cmd = 'wget -q -O - "' .. url .. '" 2>/dev/null'
-        else
-            local data = body or "{}"
-            cmd = 'wget -q -O - --method=' .. method .. ' --header="Content-Type: application/json" --body-data=\'' .. data .. '\' "' .. url .. '" 2>/dev/null'
-        end
-        
-        print("[ONLINE] WGET: " .. cmd)
-        
-        local handle = io.popen(cmd)
-        local result = handle and handle:read("*a")
-        if handle then handle:close() end
-        
-        if result and result ~= "" then
-            print("[ONLINE] ✅ Wget success!")
-            if callback then callback(true, result) end
-            return true
-        else
-            print("[ONLINE] ❌ Wget failed")
         end
     end
     
