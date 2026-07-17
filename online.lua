@@ -1,4 +1,4 @@
--- online.lua - ОПТИМИЗИРОВАННАЯ ВЕРСИЯ (без лагов!)
+-- online.lua - УНИВЕРСАЛЬНЫЙ (Android + ПК)
 local online = {}
 
 -- ============================================================
@@ -25,13 +25,10 @@ local debugText = "Waiting..."
 local lastSentX = nil
 local lastSentY = nil
 local lastSentTime = 0
+local fetchTimer = 0
 
--- ОЧЕРЕДЬ ЗАПРОСОВ (отправляем редко!)
-local requestQueue = {}
-local isProcessing = false
-
-local isWindows = (love.system.getOS() == "Windows")
 local isAndroid = (love.system.getOS() == "Android")
+local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
     debugText = text
@@ -43,91 +40,49 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА (ДОБАВЛЯЕМ В ОЧЕРЕДЬ!)
+--  ОТПРАВКА ЗАПРОСА (РАБОТАЕТ ВЕЗДЕ!)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
-    -- Добавляем в очередь вместо мгновенной отправки
-    table.insert(requestQueue, {
-        method = method,
-        path = path,
-        body = body,
-        callback = callback,
-        timestamp = love.timer.getTime()
-    })
-    
-    -- Запускаем обработку очереди если не запущена
-    if not isProcessing then
-        processQueue()
-    end
-end
-
--- ============================================================
---  ОБРАБОТЧИК ОЧЕРЕДИ (отправляем по одному!)
--- ============================================================
-function processQueue()
-    if #requestQueue == 0 then
-        isProcessing = false
-        return
-    end
-    
-    isProcessing = true
-    local req = table.remove(requestQueue, 1)
-    
-    print("[ONLINE] Processing: " .. req.method .. " " .. req.path)
-    
-    -- Отправляем запрос
-    sendRequestNow(req.method, req.path, req.body, function(ok, response)
-        if req.callback then
-            req.callback(ok, response)
-        end
-        -- Обрабатываем следующий запрос в очереди
-        processQueue()
-    end)
-end
-
--- ============================================================
---  РЕАЛЬНАЯ ОТПРАВКА ЗАПРОСА
--- ============================================================
-function sendRequestNow(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
+    print("[ONLINE] " .. method .. " " .. url)
+    
     -- ============================================================
-    --  Android: используем https (если есть)
+    --  ANDROID: только curl
     -- ============================================================
     if isAndroid then
-        local ok, https = pcall(require, "https")
-        if ok then
-            local ltn12 = require("ltn12")
-            local response_body = {}
-            local request_body = body or ""
-            local headers = {
-                ["Content-Type"] = "application/json",
-                ["Content-Length"] = tostring(#request_body),
-            }
-            
-            local res, code = https.request(url, {
-                method = method,
-                headers = headers,
-                source = ltn12.source.string(request_body),
-                sink = ltn12.sink.table(response_body),
-                timeout = 5,
-                verify = false,
-            })
-            
-            local response = table.concat(response_body)
-            code = tonumber(code) or 0
-            
-            if code >= 200 and code < 300 then
-                if callback then callback(true, response) end
-                return
-            end
+        local data = body or "{}"
+        data = data:gsub('"', '\\"')
+        
+        local cmd
+        if method == "GET" then
+            cmd = 'curl -s -X GET "' .. url .. '"'
+        else
+            cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+        end
+        
+        print("[ONLINE] CMD: " .. cmd)
+        
+        local handle = io.popen(cmd)
+        local result = handle and handle:read("*a")
+        if handle then handle:close() end
+        
+        if result and result ~= "" and not result:match("curl:") then
+            print("[ONLINE] ✅ Curl success!")
+            if callback then callback(true, result) end
+            return true
+        else
+            print("[ONLINE] ❌ Curl failed")
+            if callback then callback(false, "Curl failed") end
+            return false
         end
     end
     
     -- ============================================================
-    --  Windows: используем socket.http (БЫСТРО!)
+    --  WINDOWS: socket.http (быстро!) или curl
     -- ============================================================
     if isWindows then
+        -- Пробуем socket.http
         local ok, http = pcall(require, "socket.http")
         if ok then
             local ltn12 = require("ltn12")
@@ -151,34 +106,45 @@ function sendRequestNow(method, path, body, callback)
             code = tonumber(code) or 0
             
             if code >= 200 and code < 300 then
+                print("[ONLINE] ✅ socket.http success!")
                 if callback then callback(true, response) end
-                return
+                return true
+            else
+                print("[ONLINE] ❌ socket.http error: " .. code)
             end
+        end
+        
+        -- Fallback: curl
+        local data = body or "{}"
+        data = data:gsub('"', '\\"')
+        
+        local cmd
+        if method == "GET" then
+            cmd = 'curl -s -X GET "' .. url .. '"'
+        else
+            cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+        end
+        
+        print("[ONLINE] CMD: " .. cmd)
+        
+        local handle = io.popen(cmd)
+        local result = handle and handle:read("*a")
+        if handle then handle:close() end
+        
+        if result and result ~= "" and not result:match("curl:") then
+            print("[ONLINE] ✅ Curl success!")
+            if callback then callback(true, result) end
+            return true
+        else
+            print("[ONLINE] ❌ Curl failed")
         end
     end
     
     -- ============================================================
-    --  Fallback: curl (если ничего не работает)
+    --  ВСЁ ПРОВАЛИЛОСЬ
     -- ============================================================
-    local data = body or "{}"
-    data = data:gsub('"', '\\"')
-    
-    local cmd
-    if method == "GET" then
-        cmd = 'curl -s -X GET "' .. url .. '"'
-    else
-        cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-    end
-    
-    local handle = io.popen(cmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
-    
-    if result and result ~= "" then
-        if callback then callback(true, result) end
-    else
-        if callback then callback(false, "Failed") end
-    end
+    if callback then callback(false, "All methods failed") end
+    return false
 end
 
 -- ============================================================
@@ -279,9 +245,11 @@ function online.connect()
         if ok then
             isConnected = true
             setDebug("✅ Connected!")
+            print("[ONLINE] ✅ Connected to Firebase!")
         else
             setDebug("❌ Failed")
             isConnected = false
+            print("[ONLINE] ❌ Connection failed!")
         end
     end)
 end
@@ -316,10 +284,8 @@ function online.sendPosition(x, y)
     local newX = math.floor(x)
     local newY = math.floor(y)
     
-    -- Отправляем только если позиция изменилась
     if lastSentX == newX and lastSentY == newY then return end
     
-    -- И только раз в 0.5 секунды
     local now = love.timer.getTime()
     if now - lastSentTime < 0.5 then return end
     lastSentTime = now
@@ -401,10 +367,6 @@ function online.fetchPlayers()
     end)
 end
 
--- Таймеры для обновления
-local fetchTimer = 0
-local FETCH_INTERVAL = 2.0  -- Получаем данные раз в 2 секунды!
-
 function online.update(dt)
     if not isConnected then return end
 
@@ -418,9 +380,9 @@ function online.update(dt)
         end
     end
 
-    -- Получаем данные РЕДКО (раз в 2 секунды)
+    -- Получаем данные раз в 2 секунды
     fetchTimer = fetchTimer + dt
-    if fetchTimer >= FETCH_INTERVAL then
+    if fetchTimer >= 2.0 then
         fetchTimer = 0
         online.fetchPlayers()
     end
