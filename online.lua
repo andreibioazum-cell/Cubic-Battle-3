@@ -1,4 +1,4 @@
--- online.lua - для ПК (Windows) БЕЗ ОКОН!
+-- online.lua - СКРЫТЫЙ CURL (БЕЗ ОКОН!)
 local online = {}
 
 -- ============================================================
@@ -41,7 +41,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА (ДЛЯ ПК - БЕЗ ОКОН!)
+--  СКРЫТЫЙ ВЫЗОВ CURL (БЕЗ ОКОН!)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
@@ -83,7 +83,7 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 2: socket.http (есть в LÖVE 11.5) - БЕЗ ОКОН!
+    --  СПОСОБ 2: socket.http (LÖVE 11.5) - БЕЗ ОКОН
     -- ============================================================
     local ok, http = pcall(require, "socket.http")
     if ok then
@@ -93,7 +93,6 @@ function online.sendRequest(method, path, body, callback)
         
         http.TIMEOUT = 10
         
-        -- Пробуем HTTPS через socket.http (если есть SSL)
         local res, code = http.request{
             url = url,
             method = method,
@@ -114,62 +113,56 @@ function online.sendRequest(method, path, body, callback)
             return true
         else
             print("[ONLINE] ❌ socket.http error: " .. code)
-            
-            -- Если HTTPS не работает, пробуем HTTP
-            local httpUrl = url:gsub("https://", "http://")
-            print("[ONLINE] Retry with HTTP: " .. httpUrl)
-            
-            local res2, code2 = http.request{
-                url = httpUrl,
-                method = method,
-                headers = {
-                    ["Content-Type"] = "application/json",
-                    ["Content-Length"] = tostring(#request_body),
-                },
-                source = ltn12.source.string(request_body),
-                sink = ltn12.sink.table(response_body),
-            }
-            
-            local response2 = table.concat(response_body)
-            code2 = tonumber(code2) or 0
-            
-            if code2 >= 200 and code2 < 300 then
-                print("[ONLINE] ✅ HTTP success!")
-                if callback then callback(true, response2) end
-                return true
-            else
-                print("[ONLINE] ❌ HTTP error: " .. code2)
-            end
         end
     end
     
     -- ============================================================
-    --  СПОСОБ 3: curl (скрыто!) - БЕЗ ОКОН!
+    --  СПОСОБ 3: СКРЫТЫЙ CURL (БЕЗ ОКОН!) через VBS
     -- ============================================================
     if isWindows then
-        -- Используем curl с подавлением окна
+        -- Создаём VBS скрипт для скрытого запуска
+        local vbsPath = os.tmpname() .. ".vbs"
+        
+        local data = body or "{}"
+        data = data:gsub('"', '\\"')
+        
         local cmd
         if method == "GET" then
             cmd = 'curl -s -X GET "' .. url .. '"'
         else
-            local data = body or "{}"
-            data = data:gsub('"', '\\"')
             cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
         end
         
-        print("[ONLINE] CMD: " .. cmd)
+        -- VBS скрипт: запускает cmd скрыто и сохраняет результат
+        local vbsContent = [[
+Set WshShell = CreateObject("WScript.Shell")
+Set objExec = WshShell.Exec("]] .. cmd .. [[")
+strOutput = objExec.StdOut.ReadAll()
+WScript.Echo strOutput
+]]
         
-        -- Используем popen (НЕ start /B, чтобы получить ответ)
-        local handle = io.popen(cmd)
+        -- Сохраняем VBS файл
+        local file = io.open(vbsPath, "w")
+        file:write(vbsContent)
+        file:close()
+        
+        print("[ONLINE] VBS: " .. vbsPath)
+        
+        -- Запускаем VBS скрыто
+        local runCmd = 'cscript //nologo "' .. vbsPath .. '"'
+        local handle = io.popen(runCmd)
         local result = handle and handle:read("*a")
         if handle then handle:close() end
         
+        -- Удаляем VBS файл
+        os.remove(vbsPath)
+        
         if result and result ~= "" and not result:match("curl:") then
-            print("[ONLINE] ✅ Curl success!")
+            print("[ONLINE] ✅ Hidden curl success! Response: " .. result)
             if callback then callback(true, result) end
             return true
         else
-            print("[ONLINE] ❌ Curl failed")
+            print("[ONLINE] ❌ Hidden curl failed: " .. tostring(result))
         end
     end
     
