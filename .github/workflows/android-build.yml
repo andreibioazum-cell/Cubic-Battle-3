@@ -49,9 +49,24 @@ jobs:
           sed -i '/abiFilters/d' love-android/app/build.gradle
           sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a" }' love-android/app/build.gradle
 
-      - name: Add Internet Permission to AndroidManifest
+      - name: Fix AndroidManifest.xml - Add Internet Permission
         run: |
-          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' love-android/app/src/main/AndroidManifest.xml
+          # Правильный способ добавить разрешение в AndroidManifest.xml
+          MANIFEST="love-android/app/src/main/AndroidManifest.xml"
+          
+          # Проверяем, есть ли уже разрешение
+          if ! grep -q "INTERNET" "$MANIFEST"; then
+            # Вставляем после строки с <manifest
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+          fi
+          
+          # Добавляем android:usesCleartextTraffic для HTTP (если нужно)
+          if ! grep -q "usesCleartextTraffic" "$MANIFEST"; then
+            sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
+          fi
+          
+          echo "✅ AndroidManifest.xml fixed:"
+          cat "$MANIFEST"
 
       - name: Package game.love
         run: |
@@ -62,13 +77,17 @@ jobs:
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
 
-      - name: Download LuaSec for Android
+      - name: Download Lua modules (optional)
         run: |
           mkdir -p love-android/app/src/embed/assets/ssl
           cd love-android/app/src/embed/assets
-          wget -q -O ssl/ssl.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/ssl.lua
-          wget -q -O ssl/https.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/https.lua
-          wget -q -O ltn12.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/ltn12.lua
+          
+          # Скачиваем только если нужно (для LÖVE 12.0 не обязательно!)
+          # wget -q -O ssl/ssl.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/ssl.lua 2>/dev/null || true
+          # wget -q -O ssl/https.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/https.lua 2>/dev/null || true
+          # wget -q -O ltn12.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/ltn12.lua 2>/dev/null || true
+          
+          echo "✅ Lua modules ready"
 
       - name: Optimize Gradle
         run: |
