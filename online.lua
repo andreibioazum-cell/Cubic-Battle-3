@@ -1,4 +1,4 @@
--- online.lua - СКРЫТЫЙ CURL (БЕЗ ОКОН!)
+-- online.lua - PowerShell + curl (ПОЛНОСТЬЮ СКРЫТО!)
 local online = {}
 
 -- ============================================================
@@ -41,7 +41,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  СКРЫТЫЙ ВЫЗОВ CURL (БЕЗ ОКОН!)
+--  ОТПРАВКА ЗАПРОСА (ПОЛНОСТЬЮ СКРЫТО!)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
@@ -49,7 +49,7 @@ function online.sendRequest(method, path, body, callback)
     print("[ONLINE] " .. method .. " " .. url)
     
     -- ============================================================
-    --  СПОСОБ 1: Встроенный https (LÖVE 12.0) - БЕЗ ОКОН
+    --  СПОСОБ 1: Встроенный https (LÖVE 12.0)
     -- ============================================================
     local ok, https = pcall(require, "https")
     if ok then
@@ -83,7 +83,7 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 2: socket.http (LÖVE 11.5) - БЕЗ ОКОН
+    --  СПОСОБ 2: socket.http (LÖVE 11.5)
     -- ============================================================
     local ok, http = pcall(require, "socket.http")
     if ok then
@@ -117,14 +117,11 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 3: СКРЫТЫЙ CURL (БЕЗ ОКОН!) через VBS
+    --  СПОСОБ 3: PowerShell + curl (ПОЛНОСТЬЮ СКРЫТО!)
     -- ============================================================
     if isWindows then
-        -- Создаём VBS скрипт для скрытого запуска
-        local vbsPath = os.tmpname() .. ".vbs"
-        
         local data = body or "{}"
-        data = data:gsub('"', '\\"')
+        data = data:gsub('"', '""')  -- Для PowerShell нужно двойные кавычки
         
         local cmd
         if method == "GET" then
@@ -133,36 +130,36 @@ function online.sendRequest(method, path, body, callback)
             cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
         end
         
-        -- VBS скрипт: запускает cmd скрыто и сохраняет результат
-        local vbsContent = [[
-Set WshShell = CreateObject("WScript.Shell")
-Set objExec = WshShell.Exec("]] .. cmd .. [[")
-strOutput = objExec.StdOut.ReadAll()
-WScript.Echo strOutput
+        -- PowerShell скрипт: запускает curl СКРЫТО
+        local psScript = [[
+$cmd = "]] .. cmd .. [["
+$result = & cmd /c $cmd 2>$null
+Write-Output $result
 ]]
         
-        -- Сохраняем VBS файл
-        local file = io.open(vbsPath, "w")
-        file:write(vbsContent)
+        -- Сохраняем PowerShell скрипт
+        local psPath = os.tmpname() .. ".ps1"
+        local file = io.open(psPath, "w")
+        file:write(psScript)
         file:close()
         
-        print("[ONLINE] VBS: " .. vbsPath)
+        print("[ONLINE] PS: " .. psPath)
         
-        -- Запускаем VBS скрыто
-        local runCmd = 'cscript //nologo "' .. vbsPath .. '"'
+        -- Запускаем PowerShell СКРЫТО через cmd
+        local runCmd = 'powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. psPath .. '"'
         local handle = io.popen(runCmd)
         local result = handle and handle:read("*a")
         if handle then handle:close() end
         
-        -- Удаляем VBS файл
-        os.remove(vbsPath)
+        -- Удаляем PS файл
+        os.remove(psPath)
         
         if result and result ~= "" and not result:match("curl:") then
-            print("[ONLINE] ✅ Hidden curl success! Response: " .. result)
+            print("[ONLINE] ✅ Hidden PowerShell success!")
             if callback then callback(true, result) end
             return true
         else
-            print("[ONLINE] ❌ Hidden curl failed: " .. tostring(result))
+            print("[ONLINE] ❌ PowerShell failed: " .. tostring(result))
         end
     end
     
