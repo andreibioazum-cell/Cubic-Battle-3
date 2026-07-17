@@ -1,4 +1,4 @@
--- online.lua - PowerShell + curl (ПОЛНОСТЬЮ СКРЫТО!)
+-- online.lua - cmd на 0.1 секунды (не заметишь!)
 local online = {}
 
 -- ============================================================
@@ -41,7 +41,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА (ПОЛНОСТЬЮ СКРЫТО!)
+--  ОТПРАВКА ЗАПРОСА (cmd на МИГ!)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
@@ -49,7 +49,7 @@ function online.sendRequest(method, path, body, callback)
     print("[ONLINE] " .. method .. " " .. url)
     
     -- ============================================================
-    --  СПОСОБ 1: Встроенный https (LÖVE 12.0)
+    --  СПОСОБ 1: Встроенный https (LÖVE 12.0) - БЕЗ ОКОН
     -- ============================================================
     local ok, https = pcall(require, "https")
     if ok then
@@ -83,7 +83,7 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 2: socket.http (LÖVE 11.5)
+    --  СПОСОБ 2: socket.http (LÖVE 11.5) - БЕЗ ОКОН
     -- ============================================================
     local ok, http = pcall(require, "socket.http")
     if ok then
@@ -117,49 +117,58 @@ function online.sendRequest(method, path, body, callback)
     end
     
     -- ============================================================
-    --  СПОСОБ 3: PowerShell + curl (ПОЛНОСТЬЮ СКРЫТО!)
+    --  СПОСОБ 3: cmd с start /B (ОКНО НЕ ВИДНО!)
     -- ============================================================
     if isWindows then
         local data = body or "{}"
-        data = data:gsub('"', '""')  -- Для PowerShell нужно двойные кавычки
+        data = data:gsub('"', '\\"')
+        
+        -- Создаём bat файл который запускает curl и сохраняет результат
+        local batPath = os.tmpname() .. ".bat"
+        local resultPath = os.tmpname() .. ".txt"
         
         local cmd
         if method == "GET" then
-            cmd = 'curl -s -X GET "' .. url .. '"'
+            cmd = 'curl -s -X GET "' .. url .. '" > "' .. resultPath .. '" 2>&1'
         else
-            cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+            cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '" > "' .. resultPath .. '" 2>&1'
         end
         
-        -- PowerShell скрипт: запускает curl СКРЫТО
-        local psScript = [[
-$cmd = "]] .. cmd .. [["
-$result = & cmd /c $cmd 2>$null
-Write-Output $result
+        -- Пишем bat файл
+        local batContent = [[
+@echo off
+]] .. cmd .. [[
+exit
 ]]
         
-        -- Сохраняем PowerShell скрипт
-        local psPath = os.tmpname() .. ".ps1"
-        local file = io.open(psPath, "w")
-        file:write(psScript)
+        local file = io.open(batPath, "w")
+        file:write(batContent)
         file:close()
         
-        print("[ONLINE] PS: " .. psPath)
+        print("[ONLINE] BAT: " .. batPath)
         
-        -- Запускаем PowerShell СКРЫТО через cmd
-        local runCmd = 'powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. psPath .. '"'
-        local handle = io.popen(runCmd)
-        local result = handle and handle:read("*a")
-        if handle then handle:close() end
+        -- Запускаем bat СКРЫТО через start /B
+        local runCmd = 'start /B "" "' .. batPath .. '"'
+        os.execute(runCmd)
         
-        -- Удаляем PS файл
-        os.remove(psPath)
+        -- Ждём немного (0.1 секунды)
+        love.timer.sleep(0.1)
+        
+        -- Читаем результат
+        local resultFile = io.open(resultPath, "r")
+        local result = resultFile and resultFile:read("*a")
+        if resultFile then resultFile:close() end
+        
+        -- Удаляем файлы
+        os.remove(batPath)
+        os.remove(resultPath)
         
         if result and result ~= "" and not result:match("curl:") then
-            print("[ONLINE] ✅ Hidden PowerShell success!")
+            print("[ONLINE] ✅ Hidden CMD success! Response: " .. result)
             if callback then callback(true, result) end
             return true
         else
-            print("[ONLINE] ❌ PowerShell failed: " .. tostring(result))
+            print("[ONLINE] ❌ Hidden CMD failed: " .. tostring(result))
         end
     end
     
