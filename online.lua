@@ -1,4 +1,4 @@
--- online.lua - УНИВЕРСАЛЬНЫЙ (ТОЛЬКО CURL НА ВСЕХ ПЛАТФОРМАХ)
+-- online.lua - УНИВЕРСАЛЬНЫЙ (ПК + Android + Mac/Linux)
 local online = {}
 
 -- ============================================================
@@ -29,6 +29,8 @@ local fetchTimer = 0
 
 local isAndroid = (love.system.getOS() == "Android")
 local isWindows = (love.system.getOS() == "Windows")
+local isMac = (love.system.getOS() == "OS X")
+local isLinux = (love.system.getOS() == "Linux")
 
 local function setDebug(text)
     debugText = text
@@ -40,39 +42,349 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА (CURL НА ВСЕХ ПЛАТФОРМАХ)
+--  ПОИСК CURL НА ANDROID (ВСЕ ПУТИ)
+-- ============================================================
+local function findCurlAndroid()
+    local paths = {
+        "curl",
+        "/system/bin/curl",
+        "/system/xbin/curl",
+        "/vendor/bin/curl",
+        "/data/local/bin/curl",
+        "/data/data/com.termux/files/usr/bin/curl",
+        "/data/data/com.termux/files/home/bin/curl",
+        "/sbin/curl",
+        "/magisk/.core/bin/curl",
+        "/data/adb/magisk/bin/curl",
+        "/data/data/io.neoterm/files/usr/bin/curl",
+        "/data/local/tmp/curl",
+        "/mnt/sdcard/bin/curl",
+        "/storage/emulated/0/bin/curl",
+        "/system/sd/xbin/curl",
+        "/system/bin/busybox",
+        "/system/xbin/busybox",
+        "/apex/com.android.runtime/bin/curl",
+        "/apex/com.android.art/bin/curl"
+    }
+    
+    for _, path in ipairs(paths) do
+        local testCmd = path .. " --version 2>/dev/null"
+        local handle = io.popen(testCmd)
+        local result = handle and handle:read("*a")
+        if handle then handle:close() end
+        
+        if result and result ~= "" and not result:match("not found") and not result:match("No such") then
+            print("[ONLINE] ✅ Found curl at: " .. path)
+            return path
+        end
+    end
+    
+    -- Пробуем through which
+    local whichCmd = 'which curl 2>/dev/null'
+    local handle = io.popen(whichCmd)
+    local result = handle and handle:read("*a")
+    if handle then handle:close() end
+    
+    if result and result ~= "" then
+        local path = result:gsub("\n", "")
+        print("[ONLINE] ✅ Found curl via which: " .. path)
+        return path
+    end
+    
+    return nil
+end
+
+-- ============================================================
+--  ПОИСК HTTP КЛИЕНТА НА ПК (Windows/Mac/Linux)
+-- ============================================================
+local function findCurlPC()
+    -- На ПК просто проверяем curl
+    local testCmd = 'curl --version 2>/dev/null'
+    local handle = io.popen(testCmd)
+    local result = handle and handle:read("*a")
+    if handle then handle:close() end
+    
+    if result and result ~= "" and not result:match("not found") then
+        print("[ONLINE] ✅ Found curl on PC")
+        return "curl"
+    end
+    
+    -- Пробуем wget
+    local testCmd2 = 'wget --version 2>/dev/null'
+    local handle2 = io.popen(testCmd2)
+    local result2 = handle2 and handle2:read("*a")
+    if handle2 then handle2:close() end
+    
+    if result2 and result2 ~= "" and not result2:match("not found") then
+        print("[ONLINE] ✅ Found wget on PC")
+        return "wget"
+    end
+    
+    -- На Windows пробуем PowerShell
+    if isWindows then
+        local testCmd3 = 'powershell -Command "Get-Command Invoke-RestMethod" 2>$null'
+        local handle3 = io.popen(testCmd3)
+        local result3 = handle3 and handle3:read("*a")
+        if handle3 then handle3:close() end
+        
+        if result3 and result3 ~= "" then
+            print("[ONLINE] ✅ Found PowerShell on Windows")
+            return "powershell"
+        end
+    end
+    
+    print("[ONLINE] ❌ No HTTP client found on PC!")
+    return nil
+end
+
+-- ============================================================
+--  ВЫБОР HTTP КЛИЕНТА (ВСЕ ПЛАТФОРМЫ)
+-- ============================================================
+local httpClient = nil
+local clientType = nil
+
+if isAndroid then
+    -- На Android ищем curl
+    local curl = findCurlAndroid()
+    if curl then
+        httpClient = curl
+        clientType = "curl"
+        print("[ONLINE] Using curl on Android: " .. httpClient)
+    else
+        -- Пробуем wget
+        local wgetPaths = {"wget", "/system/bin/wget", "/system/xbin/wget"}
+        for _, path in ipairs(wgetPaths) do
+            local testCmd = path .. " --version 2>/dev/null"
+            local handle = io.popen(testCmd)
+            local result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("not found") then
+                httpClient = path
+                clientType = "wget"
+                print("[ONLINE] Using wget on Android: " .. httpClient)
+                break
+            end
+        end
+    end
+else
+    -- На ПК (Windows/Mac/Linux)
+    local pcClient = findCurlPC()
+    if pcClient then
+        clientType = pcClient
+        if pcClient == "curl" or pcClient == "wget" then
+            httpClient = pcClient
+            print("[ONLINE] Using " .. pcClient .. " on PC")
+        elseif pcClient == "powershell" then
+            clientType = "powershell"
+            httpClient = "powershell"
+            print("[ONLINE] Using PowerShell on Windows")
+        end
+    end
+end
+
+if not clientType then
+    print("[ONLINE] ❌ No HTTP client found!")
+    setDebug("No HTTP client found! Install curl or wget")
+end
+
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСА (УНИВЕРСАЛЬНАЯ)
 -- ============================================================
 function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    -- Экранируем данные для curl
-    local data = body or "{}"
-    data = data:gsub('"', '\\"')
+    print("[ONLINE] ========================================")
+    print("[ONLINE] METHOD: " .. method)
+    print("[ONLINE] PATH: " .. path)
+    print("[ONLINE] URL: " .. url)
     
-    -- Формируем команду curl
-    local cmd
-    if method == "GET" then
-        cmd = 'curl -s -X GET "' .. url .. '"'
-    else
-        cmd = 'curl -s -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+    local data = body or "{}"
+    local result = nil
+    local success = false
+    
+    if not clientType then
+        print("[ONLINE] ❌ No HTTP client available!")
+        if callback then callback(false, "No HTTP client") end
+        return false
     end
     
-    print("[ONLINE] " .. method .. " " .. path)
-    print("[ONLINE] CMD: " .. cmd)
+    -- ============================================================
+    --  ANDROID: curl или wget
+    -- ============================================================
+    if isAndroid then
+        local escapedData = data:gsub('"', '\\"')
+        
+        if clientType == "curl" and httpClient then
+            local cmd
+            if method == "GET" then
+                cmd = httpClient .. ' -s -m 5 -X GET "' .. url .. '"'
+            else
+                cmd = httpClient .. ' -s -m 5 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. escapedData .. '" "' .. url .. '"'
+            end
+            
+            print("[ONLINE] CMD (Android curl): " .. cmd)
+            
+            local handle = io.popen(cmd)
+            result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("curl:") and not result:match("not found") then
+                success = true
+                print("[ONLINE] ✅ Android curl success!")
+            end
+            
+        elseif clientType == "wget" and httpClient then
+            local cmd
+            if method == "GET" then
+                cmd = httpClient .. ' -q -O- --timeout=5 "' .. url .. '"'
+            else
+                cmd = httpClient .. ' -q -O- --timeout=5 --header="Content-Type: application/json" --post-data="' .. escapedData .. '" "' .. url .. '"'
+            end
+            
+            print("[ONLINE] CMD (Android wget): " .. cmd)
+            
+            local handle = io.popen(cmd)
+            result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("wget:") then
+                success = true
+                print("[ONLINE] ✅ Android wget success!")
+            end
+        end
+    end
     
-    -- Выполняем curl
-    local handle = io.popen(cmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
+    -- ============================================================
+    --  WINDOWS: curl, wget или PowerShell
+    -- ============================================================
+    if not success and isWindows then
+        local escapedData = data:gsub('"', '\\"')
+        
+        if clientType == "curl" then
+            local cmd
+            if method == "GET" then
+                cmd = 'curl -s -m 5 -X GET "' .. url .. '"'
+            else
+                cmd = 'curl -s -m 5 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. escapedData .. '" "' .. url .. '"'
+            end
+            
+            print("[ONLINE] CMD (Windows curl): " .. cmd)
+            
+            local handle = io.popen(cmd)
+            result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("curl:") then
+                success = true
+                print("[ONLINE] ✅ Windows curl success!")
+            end
+            
+        elseif clientType == "wget" then
+            local cmd
+            if method == "GET" then
+                cmd = 'wget -q -O- --timeout=5 "' .. url .. '"'
+            else
+                cmd = 'wget -q -O- --timeout=5 --header="Content-Type: application/json" --post-data="' .. escapedData .. '" "' .. url .. '"'
+            end
+            
+            print("[ONLINE] CMD (Windows wget): " .. cmd)
+            
+            local handle = io.popen(cmd)
+            result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("wget:") then
+                success = true
+                print("[ONLINE] ✅ Windows wget success!")
+            end
+            
+        elseif clientType == "powershell" then
+            local escapedData = data:gsub('"', '""')
+            local psCmd
+            
+            if method == "GET" then
+                psCmd = 'powershell -Command "try { $r = Invoke-RestMethod -Uri ''' .. url .. ''' -Method Get -TimeoutSec 5; $r | ConvertTo-Json -Compress } catch { exit 1 }"'
+            else
+                psCmd = 'powershell -Command "try { $r = Invoke-RestMethod -Uri ''' .. url .. ''' -Method ' .. method .. ' -Body ''' .. escapedData .. ''' -ContentType ''application/json'' -TimeoutSec 5; $r | ConvertTo-Json -Compress } catch { exit 1 }"'
+            end
+            
+            print("[ONLINE] CMD (PowerShell): " .. psCmd)
+            
+            local handle = io.popen(psCmd)
+            result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("error") then
+                success = true
+                print("[ONLINE] ✅ PowerShell success!")
+            end
+        end
+    end
     
-    -- Проверяем результат
-    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") and not result:match("error") then
-        print("[ONLINE] Curl success!")
+    -- ============================================================
+    --  MAC / LINUX: curl или wget
+    -- ============================================================
+    if not success and (isMac or isLinux) then
+        local escapedData = data:gsub('"', '\\"')
+        
+        if clientType == "curl" then
+            local cmd
+            if method == "GET" then
+                cmd = 'curl -s -m 5 -X GET "' .. url .. '"'
+            else
+                cmd = 'curl -s -m 5 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. escapedData .. '" "' .. url .. '"'
+            end
+            
+            print("[ONLINE] CMD (Mac/Linux curl): " .. cmd)
+            
+            local handle = io.popen(cmd)
+            result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("curl:") then
+                success = true
+                print("[ONLINE] ✅ Mac/Linux curl success!")
+            end
+            
+        elseif clientType == "wget" then
+            local cmd
+            if method == "GET" then
+                cmd = 'wget -q -O- --timeout=5 "' .. url .. '"'
+            else
+                cmd = 'wget -q -O- --timeout=5 --header="Content-Type: application/json" --post-data="' .. escapedData .. '" "' .. url .. '"'
+            end
+            
+            print("[ONLINE] CMD (Mac/Linux wget): " .. cmd)
+            
+            local handle = io.popen(cmd)
+            result = handle and handle:read("*a")
+            if handle then handle:close() end
+            
+            if result and result ~= "" and not result:match("wget:") then
+                success = true
+                print("[ONLINE] ✅ Mac/Linux wget success!")
+            end
+        end
+    end
+    
+    -- ============================================================
+    --  РЕЗУЛЬТАТ
+    -- ============================================================
+    if success then
+        print("[ONLINE] ✅ Request successful!")
+        if result then
+            print("[ONLINE] Response: " .. result:sub(1, 100) .. "...")
+        end
         if callback then callback(true, result) end
         return true
     else
-        print("[ONLINE] Curl failed: " .. tostring(result))
-        if callback then callback(false, result or "Curl failed") end
+        print("[ONLINE] ❌ Request failed!")
+        if result then
+            print("[ONLINE] Error: " .. result)
+        end
+        setDebug("Connection failed - check internet")
+        if callback then callback(false, "All methods failed") end
         return false
     end
 end
@@ -174,12 +486,12 @@ function online.connect()
     online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
-            setDebug("Connected!")
-            print("[ONLINE] Connected to Firebase!")
+            setDebug("✅ Connected!")
+            print("[ONLINE] ✅ Connected to Firebase!")
         else
-            setDebug("Failed to connect")
+            setDebug("❌ Failed to connect")
             isConnected = false
-            print("[ONLINE] Connection failed!")
+            print("[ONLINE] ❌ Connection failed!")
         end
     end)
 end
