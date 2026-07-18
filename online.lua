@@ -1,9 +1,6 @@
--- online.lua - ИСПОЛЬЗУЕТ LUASOCKET НА ВСЕХ ПЛАТФОРМАХ!
+-- online.lua - С МАСКИРОВКОЙ (готовый)
 local online = {}
 
--- ============================================================
---  КОНФИГУРАЦИЯ FIREBASE
--- ============================================================
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
 local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
 
@@ -11,9 +8,6 @@ local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
 
--- ============================================================
---  СОСТОЯНИЕ
--- ============================================================
 local myUid = nil
 local myNickname = nil
 local mySkin = "NONE"
@@ -36,38 +30,33 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
--- ============================================================
---  LUA SOCKET (РАБОТАЕТ НА ВСЕХ ПЛАТФОРМАХ!)
--- ============================================================
 local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
     print("[ONLINE] " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
     
-    -- Подключаем LuaSocket
-    local ok, http = pcall(require, "socket.http")
-    if not ok then
-        print("[ONLINE] ❌ LuaSocket не найден!")
-        setDebug("LuaSocket not found")
-        if callback then callback(false, "LuaSocket not found") end
-        return false
-    end
-    
+    local http = require("socket.http")
     local ltn12 = require("ltn12")
+    
     local request_body = body or ""
     local response_body = {}
     
-    print("[ONLINE] Body: " .. request_body)
+    local headers = {
+        ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        ["Accept"] = "application/json, text/plain, */*",
+        ["Accept-Language"] = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+        ["Content-Type"] = "application/json",
+        ["Content-Length"] = tostring(#request_body),
+        ["Connection"] = "keep-alive",
+        ["Cache-Control"] = "no-cache",
+        ["Origin"] = "https://cubic-battle-3-default-rtdb.firebaseio.com",
+        ["Referer"] = "https://cubic-battle-3-default-rtdb.firebaseio.com/",
+    }
     
-    -- Отправляем запрос
     local res, code = pcall(http.request, {
         url = url,
         method = method,
-        headers = {
-            ["Content-Type"] = "application/json",
-            ["Content-Length"] = tostring(#request_body),
-        },
+        headers = headers,
         source = ltn12.source.string(request_body),
         sink = ltn12.sink.table(response_body),
         timeout = 10,
@@ -77,26 +66,21 @@ local function sendRequest(method, path, body, callback)
         local codeNum = tonumber(code) or 0
         if codeNum >= 200 and codeNum < 300 then
             local response = table.concat(response_body)
-            print("[ONLINE] ✅ Успех! Код: " .. codeNum)
-            print("[ONLINE] Ответ: " .. response)
+            print("[ONLINE] Success!")
             if callback then callback(true, response) end
             return true
         else
-            print("[ONLINE] ❌ Ошибка HTTP: " .. codeNum)
-            print("[ONLINE] Ответ: " .. table.concat(response_body))
+            print("[ONLINE] HTTP error: " .. codeNum)
             if callback then callback(false, "HTTP error: " .. codeNum) end
             return false
         end
     else
-        print("[ONLINE] ❌ Исключение: " .. tostring(code))
+        print("[ONLINE] Error: " .. tostring(code))
         if callback then callback(false, tostring(code)) end
         return false
     end
 end
 
--- ============================================================
---  ПАРСИНГ
--- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
@@ -166,9 +150,6 @@ local function parseAbilities(jsonStr)
     return result
 end
 
--- ============================================================
---  ОСНОВНЫЕ ФУНКЦИИ
--- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -191,12 +172,12 @@ function online.connect()
     sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
-            setDebug("✅ Connected!")
-            print("[ONLINE] ✅ Connected to Firebase!")
+            setDebug("Connected!")
+            print("[ONLINE] Connected to Firebase!")
         else
-            setDebug("❌ Failed to connect")
+            setDebug("Failed to connect")
             isConnected = false
-            print("[ONLINE] ❌ Connection failed!")
+            print("[ONLINE] Connection failed!")
         end
     end)
 end
