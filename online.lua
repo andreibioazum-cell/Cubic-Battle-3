@@ -1,4 +1,4 @@
--- online.lua - ГИБРИДНЫЙ (ПК = curl, Android = LuaSocket)
+-- online.lua - ИСПОЛЬЗУЕТ LUASOCKET НА ВСЕХ ПЛАТФОРМАХ!
 local online = {}
 
 -- ============================================================
@@ -27,9 +27,6 @@ local lastSentY = nil
 local lastSentTime = 0
 local fetchTimer = 0
 
-local isAndroid = (love.system.getOS() == "Android")
-local isWindows = (love.system.getOS() == "Windows")
-
 local function setDebug(text)
     debugText = text
     print("[ONLINE] " .. text)
@@ -40,17 +37,19 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ANDROID: ИСПОЛЬЗУЕМ ВСТРОЕННЫЙ LUASOCKET
+--  LUA SOCKET (РАБОТАЕТ НА ВСЕХ ПЛАТФОРМАХ!)
 -- ============================================================
-local function sendAndroidRequest(method, path, body, callback)
+local function sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    print("[ONLINE] Android request: " .. method .. " " .. path)
+    print("[ONLINE] " .. method .. " " .. path)
+    print("[ONLINE] URL: " .. url)
     
-    -- Пытаемся загрузить LuaSocket
+    -- Подключаем LuaSocket
     local ok, http = pcall(require, "socket.http")
     if not ok then
-        print("[ONLINE] ❌ LuaSocket not found on Android!")
+        print("[ONLINE] ❌ LuaSocket не найден!")
+        setDebug("LuaSocket not found")
         if callback then callback(false, "LuaSocket not found") end
         return false
     end
@@ -59,8 +58,10 @@ local function sendAndroidRequest(method, path, body, callback)
     local request_body = body or ""
     local response_body = {}
     
+    print("[ONLINE] Body: " .. request_body)
+    
     -- Отправляем запрос
-    local res, code, headers = pcall(http.request, {
+    local res, code = pcall(http.request, {
         url = url,
         method = method,
         headers = {
@@ -69,70 +70,27 @@ local function sendAndroidRequest(method, path, body, callback)
         },
         source = ltn12.source.string(request_body),
         sink = ltn12.sink.table(response_body),
+        timeout = 10,
     })
     
     if res then
         local codeNum = tonumber(code) or 0
         if codeNum >= 200 and codeNum < 300 then
             local response = table.concat(response_body)
-            print("[ONLINE] ✅ Android LuaSocket success!")
+            print("[ONLINE] ✅ Успех! Код: " .. codeNum)
+            print("[ONLINE] Ответ: " .. response)
             if callback then callback(true, response) end
             return true
         else
-            print("[ONLINE] ❌ Android LuaSocket error: " .. codeNum)
+            print("[ONLINE] ❌ Ошибка HTTP: " .. codeNum)
+            print("[ONLINE] Ответ: " .. table.concat(response_body))
             if callback then callback(false, "HTTP error: " .. codeNum) end
             return false
         end
     else
-        print("[ONLINE] ❌ Android LuaSocket exception: " .. tostring(code))
+        print("[ONLINE] ❌ Исключение: " .. tostring(code))
         if callback then callback(false, tostring(code)) end
         return false
-    end
-end
-
--- ============================================================
---  ПК: ИСПОЛЬЗУЕМ CURL
--- ============================================================
-local function sendPCRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] PC request: " .. method .. " " .. path)
-    
-    local data = body or "{}"
-    data = data:gsub('"', '\\"')
-    
-    local cmd
-    if method == "GET" then
-        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-    else
-        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-    end
-    
-    print("[ONLINE] CMD: " .. cmd)
-    
-    local handle = io.popen(cmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
-    
-    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
-        print("[ONLINE] ✅ PC curl success!")
-        if callback then callback(true, result) end
-        return true
-    else
-        print("[ONLINE] ❌ PC curl failed: " .. tostring(result))
-        if callback then callback(false, result or "Curl failed") end
-        return false
-    end
-end
-
--- ============================================================
---  ОТПРАВКА ЗАПРОСА (ВЫБОР ПО ПЛАТФОРМЕ)
--- ============================================================
-function online.sendRequest(method, path, body, callback)
-    if isAndroid then
-        return sendAndroidRequest(method, path, body, callback)
-    else
-        return sendPCRequest(method, path, body, callback)
     end
 end
 
@@ -230,7 +188,7 @@ function online.connect()
     
     setDebug("Connecting...")
     
-    online.sendRequest("PUT", path, data, function(ok, response)
+    sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
             setDebug("✅ Connected!")
@@ -285,7 +243,7 @@ function online.sendPosition(x, y)
     local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":%d,"y":%d,"nickname":"%s","skin":"%s"}', 
         newX, newY, myNickname, mySkin)
-    online.sendRequest("PATCH", path, data)
+    sendRequest("PATCH", path, data)
 end
 
 function online.sendBullet(x, y, dx, dy)
@@ -294,7 +252,7 @@ function online.sendBullet(x, y, dx, dy)
     local path = BULLETS_PATH .. bulletId
     local data = string.format('{"x":%d,"y":%d,"dx":%f,"dy":%f,"owner":"%s","time":%f}',
         math.floor(x), math.floor(y), dx, dy, myUid, love.timer.getTime())
-    online.sendRequest("PUT", path, data)
+    sendRequest("PUT", path, data)
 end
 
 function online.sendAbility(abilityType, x, y, dirX, dirY)
@@ -303,7 +261,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY)
     local path = ABILITIES_PATH .. abilityId
     local data = string.format('{"type":"%s","x":%d,"y":%d,"dirX":%f,"dirY":%f,"owner":"%s","time":%f}',
         abilityType, math.floor(x), math.floor(y), dirX or 0, dirY or 0, myUid, love.timer.getTime())
-    online.sendRequest("PUT", path, data)
+    sendRequest("PUT", path, data)
 end
 
 function online.updateSkin(skin)
@@ -311,14 +269,14 @@ function online.updateSkin(skin)
     if isConnected and myUid then
         local path = PLAYERS_PATH .. myUid
         local data = string.format('{"skin":"%s"}', skin)
-        online.sendRequest("PATCH", path, data)
+        sendRequest("PATCH", path, data)
     end
 end
 
 function online.fetchPlayers()
     if not isConnected then return end
 
-    online.sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
+    sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             local newPlayers = parsePlayers(res)
 
@@ -343,13 +301,13 @@ function online.fetchPlayers()
         end
     end)
 
-    online.sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
+    sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             bullets = parseBullets(res)
         end
     end)
 
-    online.sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
+    sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             abilities = parseAbilities(res)
         end
@@ -377,7 +335,7 @@ end
 
 function online.leave()
     if isConnected and myUid then
-        online.sendRequest("DELETE", PLAYERS_PATH .. myUid)
+        sendRequest("DELETE", PLAYERS_PATH .. myUid)
     end
     isConnected = false
     players = {}
