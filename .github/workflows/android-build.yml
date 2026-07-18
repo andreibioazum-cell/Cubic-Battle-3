@@ -31,6 +31,12 @@ jobs:
         run: |
           git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
+      - name: Add lua-https module
+        run: |
+          cd love-android
+          git clone --depth 1 https://github.com/love2d/lua-https.git love/src/jni/lua-modules/lua-https
+          echo "✅ lua-https added to build"
+
       - name: Set package name
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
@@ -51,16 +57,12 @@ jobs:
 
       - name: Fix AndroidManifest.xml - Add Internet Permission
         run: |
-          # Правильный способ добавить разрешение в AndroidManifest.xml
           MANIFEST="love-android/app/src/main/AndroidManifest.xml"
           
-          # Проверяем, есть ли уже разрешение
           if ! grep -q "INTERNET" "$MANIFEST"; then
-            # Вставляем после строки с <manifest
             sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
           fi
           
-          # Добавляем android:usesCleartextTraffic для HTTP (если нужно)
           if ! grep -q "usesCleartextTraffic" "$MANIFEST"; then
             sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
           fi
@@ -76,18 +78,6 @@ jobs:
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
-
-      - name: Download Lua modules (optional)
-        run: |
-          mkdir -p love-android/app/src/embed/assets/ssl
-          cd love-android/app/src/embed/assets
-          
-          # Скачиваем только если нужно (для LÖVE 12.0 не обязательно!)
-          # wget -q -O ssl/ssl.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/ssl.lua 2>/dev/null || true
-          # wget -q -O ssl/https.lua https://raw.githubusercontent.com/brunoos/luasec/master/src/https.lua 2>/dev/null || true
-          # wget -q -O ltn12.lua https://raw.githubusercontent.com/diegonehab/luasocket/master/src/ltn12.lua 2>/dev/null || true
-          
-          echo "✅ Lua modules ready"
 
       - name: Optimize Gradle
         run: |
