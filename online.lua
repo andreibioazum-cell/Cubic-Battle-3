@@ -1,4 +1,4 @@
--- online.lua - С МАСКИРОВКОЙ (готовый)
+-- online.lua - ГИБРИД (ПК = curl, Android = lua-https)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -21,6 +21,9 @@ local lastSentY = nil
 local lastSentTime = 0
 local fetchTimer = 0
 
+local isAndroid = (love.system.getOS() == "Android")
+local isWindows = (love.system.getOS() == "Windows")
+
 local function setDebug(text)
     debugText = text
     print("[ONLINE] " .. text)
@@ -30,57 +33,96 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
-local function sendRequest(method, path, body, callback)
+-- ============================================================
+--  ANDROID: lua-https (встроен в билд)
+-- ============================================================
+local function sendAndroidRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    print("[ONLINE] " .. method .. " " .. path)
+    print("[ONLINE] Android: " .. method .. " " .. path)
+    print("[ONLINE] URL: " .. url)
     
-    local http = require("socket.http")
-    local ltn12 = require("ltn12")
+    local https = require("https")
     
-    local request_body = body or ""
-    local response_body = {}
-    
-    local headers = {
-        ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        ["Accept"] = "application/json, text/plain, */*",
-        ["Accept-Language"] = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-        ["Content-Type"] = "application/json",
-        ["Content-Length"] = tostring(#request_body),
-        ["Connection"] = "keep-alive",
-        ["Cache-Control"] = "no-cache",
-        ["Origin"] = "https://cubic-battle-3-default-rtdb.firebaseio.com",
-        ["Referer"] = "https://cubic-battle-3-default-rtdb.firebaseio.com/",
+    local options = {
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json"
+        }
     }
     
-    local res, code = pcall(http.request, {
-        url = url,
-        method = method,
-        headers = headers,
-        source = ltn12.source.string(request_body),
-        sink = ltn12.sink.table(response_body),
-        timeout = 10,
-    })
+    if body then
+        options.data = body
+    end
     
-    if res then
-        local codeNum = tonumber(code) or 0
-        if codeNum >= 200 and codeNum < 300 then
-            local response = table.concat(response_body)
-            print("[ONLINE] Success!")
-            if callback then callback(true, response) end
-            return true
-        else
-            print("[ONLINE] HTTP error: " .. codeNum)
-            if callback then callback(false, "HTTP error: " .. codeNum) end
-            return false
-        end
+    local code, response = https.request(url, options)
+    
+    if code >= 200 and code < 300 then
+        print("[ONLINE] ✅ Android success! Code: " .. code)
+        if callback then callback(true, response) end
+        return true
     else
-        print("[ONLINE] Error: " .. tostring(code))
-        if callback then callback(false, tostring(code)) end
+        print("[ONLINE] ❌ Android error: " .. code)
+        if callback then callback(false, "HTTP error: " .. code) end
         return false
     end
 end
 
+-- ============================================================
+--  ПК: CURL (работает у тебя)
+-- ============================================================
+local function sendPCRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    
+    print("[ONLINE] PC: " .. method .. " " .. path)
+    print("[ONLINE] URL: " .. url)
+    
+    local data = body or "{}"
+    data = data:gsub('"', '\\"')
+    
+    local cmd
+    if method == "GET" then
+        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
+    else
+        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+    end
+    
+    print("[ONLINE] CMD: " .. cmd)
+    
+    local handle = io.popen(cmd)
+    local result = handle and handle:read("*a")
+    if handle then handle:close() end
+    
+    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
+        print("[ONLINE] ✅ PC curl success!")
+        if callback then callback(true, result) end
+        return true
+    else
+        print("[ONLINE] ❌ PC curl failed: " .. tostring(result))
+        if callback then callback(false, result or "Curl failed") end
+        return false
+    end
+end
+
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСА (выбор по платформе)
+-- ============================================================
+function online.sendRequest(method, path, body, callback)
+    print("[ONLINE] ========================================")
+    print("[ONLINE] Платформа: " .. love.system.getOS())
+    print("[ONLINE] Метод: " .. method)
+    print("[ONLINE] Путь: " .. path)
+    
+    if isAndroid then
+        return sendAndroidRequest(method, path, body, callback)
+    else
+        return sendPCRequest(method, path, body, callback)
+    end
+end
+
+-- ============================================================
+--  ПАРСИНГ
+-- ============================================================
 local function parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
@@ -150,6 +192,9 @@ local function parseAbilities(jsonStr)
     return result
 end
 
+-- ============================================================
+--  ОСНОВНЫЕ ФУНКЦИИ
+-- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -169,7 +214,7 @@ function online.connect()
     
     setDebug("Connecting...")
     
-    sendRequest("PUT", path, data, function(ok, response)
+    online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
             setDebug("Connected!")
@@ -224,7 +269,7 @@ function online.sendPosition(x, y)
     local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":%d,"y":%d,"nickname":"%s","skin":"%s"}', 
         newX, newY, myNickname, mySkin)
-    sendRequest("PATCH", path, data)
+    online.sendRequest("PATCH", path, data)
 end
 
 function online.sendBullet(x, y, dx, dy)
@@ -233,7 +278,7 @@ function online.sendBullet(x, y, dx, dy)
     local path = BULLETS_PATH .. bulletId
     local data = string.format('{"x":%d,"y":%d,"dx":%f,"dy":%f,"owner":"%s","time":%f}',
         math.floor(x), math.floor(y), dx, dy, myUid, love.timer.getTime())
-    sendRequest("PUT", path, data)
+    online.sendRequest("PUT", path, data)
 end
 
 function online.sendAbility(abilityType, x, y, dirX, dirY)
@@ -242,7 +287,7 @@ function online.sendAbility(abilityType, x, y, dirX, dirY)
     local path = ABILITIES_PATH .. abilityId
     local data = string.format('{"type":"%s","x":%d,"y":%d,"dirX":%f,"dirY":%f,"owner":"%s","time":%f}',
         abilityType, math.floor(x), math.floor(y), dirX or 0, dirY or 0, myUid, love.timer.getTime())
-    sendRequest("PUT", path, data)
+    online.sendRequest("PUT", path, data)
 end
 
 function online.updateSkin(skin)
@@ -250,14 +295,14 @@ function online.updateSkin(skin)
     if isConnected and myUid then
         local path = PLAYERS_PATH .. myUid
         local data = string.format('{"skin":"%s"}', skin)
-        sendRequest("PATCH", path, data)
+        online.sendRequest("PATCH", path, data)
     end
 end
 
 function online.fetchPlayers()
     if not isConnected then return end
 
-    sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
+    online.sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             local newPlayers = parsePlayers(res)
 
@@ -282,13 +327,13 @@ function online.fetchPlayers()
         end
     end)
 
-    sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
+    online.sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             bullets = parseBullets(res)
         end
     end)
 
-    sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
+    online.sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
             abilities = parseAbilities(res)
         end
@@ -316,7 +361,7 @@ end
 
 function online.leave()
     if isConnected and myUid then
-        sendRequest("DELETE", PLAYERS_PATH .. myUid)
+        online.sendRequest("DELETE", PLAYERS_PATH .. myUid)
     end
     isConnected = false
     players = {}
