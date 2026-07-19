@@ -1,4 +1,4 @@
--- online.lua - ГИБРИД (ПК = curl, Android = lua-https)
+-- online.lua - ИСПОЛЬЗУЕТ lua-https (ВСТРОЕН В LOVE-ANDROID)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -32,173 +32,52 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
--- ============================================================
---  ANDROID: lua-https (встроен в билд)
--- ============================================================
-local function sendAndroidRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] Android: " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
-    
-    local ok, https = pcall(require, "https")
-    if not ok then
-        print("[ONLINE] ❌ lua-https not found!")
-        if callback then callback(false, "https not found") end
-        return false
-    end
-    
-    local options = {
-        method = method,
-        headers = {
-            ["Content-Type"] = "application/json"
-        }
-    }
-    
-    if body then
-        options.data = body
-    end
-    
-    local code, response = https.request(url, options)
-    
-    if code >= 200 and code < 300 then
-        print("[ONLINE] ✅ Android success! Code: " .. code)
-        if callback then callback(true, response) end
-        return true
-    else
-        print("[ONLINE] ❌ Android error: " .. tostring(code))
-        if callback then callback(false, "HTTP error: " .. code) end
-        return false
-    end
-end
-
--- ============================================================
---  ПК: CURL (работает у тебя)
--- ============================================================
-local function sendPCRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] PC: " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
-    
-    local data = body or "{}"
-    data = data:gsub('"', '\\"')
-    
-    local cmd
-    if method == "GET" then
-        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-    else
-        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-    end
-    
-    print("[ONLINE] CMD: " .. cmd)
-    
-    local handle = io.popen(cmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
-    
-    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
-        print("[ONLINE] ✅ PC curl success!")
-        if callback then callback(true, result) end
-        return true
-    else
-        print("[ONLINE] ❌ PC curl failed: " .. tostring(result))
-        if callback then callback(false, result or "Curl failed") end
-        return false
-    end
-end
-
--- ============================================================
---  ОТПРАВКА ЗАПРОСА (выбор по платформе)
--- ============================================================
 function online.sendRequest(method, path, body, callback)
-    print("[ONLINE] ========================================")
-    print("[ONLINE] Платформа: " .. love.system.getOS())
-    print("[ONLINE] Метод: " .. method)
-    print("[ONLINE] Путь: " .. path)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    if isAndroid then
-        return sendAndroidRequest(method, path, body, callback)
+    print("[ONLINE] " .. method .. " " .. path)
+    print("[ONLINE] URL: " .. url)
+    
+    -- Пробуем lua-https
+    local ok, https = pcall(require, "https")
+    if ok then
+        local options = {
+            method = method,
+            headers = { ["Content-Type"] = "application/json" }
+        }
+        if body then options.data = body end
+        
+        local code, response = https.request(url, options)
+        if code >= 200 and code < 300 then
+            print("[ONLINE] ✅ Success! Code: " .. code)
+            if callback then callback(true, response) end
+            return true
+        else
+            print("[ONLINE] ❌ HTTP error: " .. code)
+            if callback then callback(false, "HTTP error: " .. code) end
+            return false
+        end
     else
-        return sendPCRequest(method, path, body, callback)
-    end
-end
-
--- ============================================================
---  ПАРСИНГ
--- ============================================================
-local function parsePlayers(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local nick = data:match('"nickname":%s*"([^"]+)"')
-        local skin = data:match('"skin":%s*"([^"]+)"')
-        if x and y then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                nickname = nick or "Player",
-                skin = skin or "NONE",
-                targetX = tonumber(x) or 0,
-                targetY = tonumber(y) or 0
-            }
+        print("[ONLINE] ❌ lua-https not found, falling back to curl")
+        -- Fallback: curl
+        local data = body or "{}"
+        data = data:gsub('"', '\\"')
+        local cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+        local handle = io.popen(cmd)
+        local result = handle and handle:read("*a")
+        if handle then handle:close() end
+        if result and result ~= "" then
+            print("[ONLINE] ✅ curl success!")
+            if callback then callback(true, result) end
+            return true
+        else
+            print("[ONLINE] ❌ All methods failed!")
+            if callback then callback(false, "All methods failed") end
+            return false
         end
     end
-    return result
 end
 
-local function parseBullets(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local dx = data:match('"dx":%s*([%d%.%-]+)')
-        local dy = data:match('"dy":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if x and y and dx and dy then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                dx = tonumber(dx) or 0,
-                dy = tonumber(dy) or 0,
-                owner = owner or "",
-                life = 3
-            }
-        end
-    end
-    return result
-end
-
-local function parseAbilities(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local typ = data:match('"type":%s*"([^"]+)"')
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if typ and x and y then
-            result[id] = {
-                type = typ,
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                owner = owner or "",
-                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
-                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
-                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
-            }
-        end
-    end
-    return result
-end
-
--- ============================================================
---  ОСНОВНЫЕ ФУНКЦИИ
--- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
