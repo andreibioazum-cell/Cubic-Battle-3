@@ -53,13 +53,11 @@ jobs:
       - name: Add lua-https module to correct location
         run: |
           cd love-android
-          # Клонируем в правильную папку
+          
+          # Клонируем в правильное место (НЕ в openal-soft!)
           git clone --depth 1 https://github.com/love2d/lua-https.git love/src/jni/lua-modules/lua-https
           
-          # Проверяем что путь правильный
-          echo "Checking path:"
-          ls -la love/src/jni/lua-modules/lua-https/ || echo "Folder not found!"
-          
+          # Создаём Android.mk
           cat > love/src/jni/lua-modules/lua-https/Android.mk << 'EOF'
           LOCAL_PATH := $(call my-dir)
           include $(CLEAR_VARS)
@@ -78,19 +76,15 @@ jobs:
       - name: Register lua-https in build
         run: |
           cd love-android
+          
+          # Проверяем, есть ли уже модуль в Android.mk
           if ! grep -q "lua-https" love/src/jni/Android.mk; then
-            echo "" >> love/src/jni/Android.mk
-            echo "include \$(LOCAL_PATH)/jni/lua-modules/lua-https/Android.mk" >> love/src/jni/Android.mk
+            # Добавляем перед openal-soft
+            sed -i '/openal-soft/i include $(LOCAL_PATH)\/jni\/lua-modules\/lua-https\/Android.mk' love/src/jni/Android.mk
             echo "✅ lua-https registered"
           else
             echo "ℹ️ lua-https already registered"
           fi
-
-      - name: Fix build.gradle for old Gradle
-        run: |
-          sed -i 's/compile /implementation /g' love-android/app/build.gradle
-          sed -i 's/testCompile /testImplementation /g' love-android/app/build.gradle
-          echo "✅ build.gradle fixed"
 
       - name: Set package name
         run: |
@@ -124,16 +118,12 @@ jobs:
 
       - name: Package game.love
         run: |
-          echo "📁 Files in current directory:"
-          ls -la | head -20
           zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml" -x "*.apk"
-          echo "✅ game.love created: $(ls -lh game.love | awk '{print $5}')"
 
       - name: Embed game
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
-          echo "✅ game.love embedded"
 
       - name: Optimize Gradle
         run: |
@@ -155,19 +145,13 @@ jobs:
 
       - name: Check and rename APK
         run: |
-          echo "🔍 Looking for APK files..."
-          find love-android -name "*.apk" -ls || true
-          
           APK_FILE=$(find love-android -name "*.apk" | head -1)
           if [ -z "$APK_FILE" ]; then
             echo "❌ No APK found!"
             find love-android -name "*.log" -exec cat {} \; || true
             exit 1
           fi
-          
-          echo "✅ Found APK: $APK_FILE"
           cp "$APK_FILE" "CubicBattle.apk"
-          echo "📦 APK size: $(ls -lh CubicBattle.apk | awk '{print $5}')"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
