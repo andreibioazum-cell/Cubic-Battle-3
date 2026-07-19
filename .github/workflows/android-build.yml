@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -22,20 +22,51 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android Licenses
+        run: |
+          mkdir -p ~/.android
+          echo "android.useAndroidX=true" >> ~/.android/repositories.cfg
+          yes | sdkmanager --licenses || true
+
       - name: Install Android SDK Components
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+          sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
 
       - name: Clone love-android
         run: |
-          git clone --recursive --depth 1 https://github.com/love2d/love-android.git
+          git clone --recursive --depth 1 --branch 11.5 https://github.com/love2d/love-android.git
 
       - name: Add lua-https module
         run: |
           cd love-android
           git clone --depth 1 https://github.com/love2d/lua-https.git love/src/jni/lua-modules/lua-https
-          echo "✅ lua-https added to build"
+          
+          cat > love/src/jni/lua-modules/lua-https/Android.mk << 'EOF'
+          LOCAL_PATH := $(call my-dir)
+          include $(CLEAR_VARS)
+          
+          LOCAL_MODULE := lua-https
+          LOCAL_C_INCLUDES := $(LOCAL_PATH)/src
+          LOCAL_SRC_FILES := src/https.c
+          LOCAL_CFLAGS := -O2 -Wall -Wextra -Wno-unused-parameter
+          LOCAL_LDLIBS := -lssl -lcrypto -lz
+          LOCAL_STATIC_LIBRARIES := love
+          
+          include $(BUILD_SHARED_LIBRARY)
+          EOF
+          
+          echo "lua-https added"
+
+      - name: Register lua-https in build
+        run: |
+          cd love-android
+          if ! grep -q "lua-https" love/src/jni/Android.mk; then
+            echo "" >> love/src/jni/Android.mk
+            echo "include \$(LOCAL_PATH)/jni/lua-modules/lua-https/Android.mk" >> love/src/jni/Android.mk
+            echo "lua-https registered"
+          else
+            echo "lua-https already registered"
+          fi
 
       - name: Set package name
         run: |
@@ -55,7 +86,7 @@ jobs:
           sed -i '/abiFilters/d' love-android/app/build.gradle
           sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a" }' love-android/app/build.gradle
 
-      - name: Fix AndroidManifest.xml - Add Internet Permission
+      - name: Fix AndroidManifest.xml
         run: |
           MANIFEST="love-android/app/src/main/AndroidManifest.xml"
           
@@ -67,41 +98,55 @@ jobs:
             sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
           fi
           
-          echo "✅ AndroidManifest.xml fixed:"
-          cat "$MANIFEST"
+          echo "AndroidManifest.xml fixed"
 
       - name: Package game.love
         run: |
-          zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml"
+          echo "Files in current directory:"
+          ls -la | head -20
+          zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml" -x "*.apk"
+          echo "game.love created: $(ls -lh game.love | awk '{print $5}')"
 
       - name: Embed game
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
+          echo "game.love embedded"
 
       - name: Optimize Gradle
         run: |
           cat >> love-android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx6g
+          org.gradle.jvmargs=-Xmx4g
           org.gradle.parallel=true
           org.gradle.caching=true
           org.gradle.daemon=false
+          android.enableJetifier=true
+          android.useAndroidX=true
           EOF
+          echo "Gradle optimized"
 
       - name: Build APK
         working-directory: love-android
-        run: ./gradlew assembleEmbedNoRecordDebug --no-daemon
-
-      - name: Rename APK
         run: |
+          echo "Starting build..."
+          ./gradlew assembleEmbedNoRecordRelease --no-daemon --stacktrace
+          echo "Build finished"
+
+      - name: Check and rename APK
+        run: |
+          echo "Looking for APK files..."
+          find love-android -name "*.apk" -ls || true
+          
           APK_FILE=$(find love-android -name "*.apk" | head -1)
           if [ -z "$APK_FILE" ]; then
             echo "No APK found!"
+            find love-android -name "*.log" -exec cat {} \; || true
             exit 1
           fi
-          NEW_NAME="CubicBattle.apk"
-          cp "$APK_FILE" "$NEW_NAME"
-          echo "✅ APK created: $NEW_NAME"
+          
+          echo "Found APK: $APK_FILE"
+          cp "$APK_FILE" "CubicBattle.apk"
+          echo "APK size: $(ls -lh CubicBattle.apk | awk '{print $5}')"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
