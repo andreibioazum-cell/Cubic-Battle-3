@@ -22,7 +22,6 @@ local lastSentTime = 0
 local fetchTimer = 0
 
 local isAndroid = (love.system.getOS() == "Android")
-local isWindows = (love.system.getOS() == "Windows")
 
 local function setDebug(text)
     debugText = text
@@ -42,7 +41,12 @@ local function sendAndroidRequest(method, path, body, callback)
     print("[ONLINE] Android: " .. method .. " " .. path)
     print("[ONLINE] URL: " .. url)
     
-    local https = require("https")
+    local ok, https = pcall(require, "https")
+    if not ok then
+        print("[ONLINE] ❌ lua-https not found!")
+        if callback then callback(false, "https not found") end
+        return false
+    end
     
     local options = {
         method = method,
@@ -62,7 +66,7 @@ local function sendAndroidRequest(method, path, body, callback)
         if callback then callback(true, response) end
         return true
     else
-        print("[ONLINE] ❌ Android error: " .. code)
+        print("[ONLINE] ❌ Android error: " .. tostring(code))
         if callback then callback(false, "HTTP error: " .. code) end
         return false
     end
