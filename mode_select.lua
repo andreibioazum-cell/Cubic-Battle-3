@@ -71,7 +71,7 @@ function mode_select.draw()
 
     drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
-    -- SINGLEPLAYER
+    -- SINGLEPLAYER (ОФФЛАЙН)
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnSingle.x + 5*scale, btnSingle.y + 6*scale, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -81,7 +81,7 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
 
-    -- MULTIPLAYER (ЗЕЛЁНЫЙ)
+    -- MULTIPLAYER (ОНЛАЙН)
     love.graphics.setColor(0.0, 0.3, 0.0, 0.5)
     love.graphics.rectangle("fill", btnMulti.x + 5*scale, btnMulti.y + 6*scale, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.8, 0.2, 1)
@@ -129,19 +129,20 @@ function mode_select.touchpressed(id, x, y)
         return
     end
 
+    -- ОФФЛАЙН
     if x >= btnSingle.x and x <= btnSingle.x + btnSingle.w and y >= btnSingle.y and y <= btnSingle.y + btnSingle.h then
         playButtonSound()
         GameState.current = "difficulty"
         return
     end
 
+    -- ОНЛАЙН
     if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
         playButtonSound()
-        -- ПОЛНЫЙ ЭКРАН НА ПК!
         if not isMobile then
             love.window.setFullscreen(true, "desktop")
         end
-        GameState.current = "game"
+        GameState.current = "game_online"
         return
     end
 end
