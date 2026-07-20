@@ -1,4 +1,4 @@
--- online.lua - ПК = Scrap-Mods/http, Android = Scrap-Mods/http
+-- online.lua - SCRAP-MODS/HTTP (БЫСТРО, БЕЗ CMD)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -80,7 +80,7 @@ function online.sendRequest(method, path, body, callback)
         
         return true
     else
-        -- Fallback на curl
+        -- Fallback на curl (если библиотека не загружена)
         local data = body or "{}"
         data = data:gsub('"', '\\"')
         
@@ -107,78 +107,6 @@ function online.sendRequest(method, path, body, callback)
             return false
         end
     end
-end
-
--- ============================================================
---  ПАРСИНГ
--- ============================================================
-local function parsePlayers(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local nick = data:match('"nickname":%s*"([^"]+)"')
-        local skin = data:match('"skin":%s*"([^"]+)"')
-        if x and y then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                nickname = nick or "Player",
-                skin = skin or "NONE",
-                targetX = tonumber(x) or 0,
-                targetY = tonumber(y) or 0
-            }
-        end
-    end
-    return result
-end
-
-local function parseBullets(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local dx = data:match('"dx":%s*([%d%.%-]+)')
-        local dy = data:match('"dy":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if x and y and dx and dy then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                dx = tonumber(dx) or 0,
-                dy = tonumber(dy) or 0,
-                owner = owner or "",
-                life = 3
-            }
-        end
-    end
-    return result
-end
-
-local function parseAbilities(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local typ = data:match('"type":%s*"([^"]+)"')
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if typ and x and y then
-            result[id] = {
-                type = typ,
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                owner = owner or "",
-                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
-                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
-                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
-            }
-        end
-    end
-    return result
 end
 
 function online.init(nickname)
