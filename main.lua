@@ -211,6 +211,8 @@ function love.update(dt)
             if difficulty.load then difficulty.load() end
         elseif GameState.current == "game" then
             if game.load then game.load() end
+        elseif GameState.current == "game_online" then
+            if game.load then game.load() end
         elseif GameState.current == "shop" then
             if shop.load then shop.load(SAVE_DATA) end
         elseif GameState.current == "credits" then
@@ -223,11 +225,11 @@ function love.update(dt)
 
     if GameState.current == "lobby" then
         lobby.update(dt)
-    elseif GameState.current == "game" then
+    elseif GameState.current == "game" or GameState.current == "game_online" then
         game.update(dt)
         controls.update(dt)
 
-        if online.isConnected() then
+        if GameState.current == "game_online" and online.isConnected() then
             online.update(dt)
             local px, py = game.getPlayerPosition()
             if px and py then
@@ -264,7 +266,7 @@ function love.draw()
         mode_select.draw()
     elseif GameState.current == "difficulty" then
         difficulty.draw()
-    elseif GameState.current == "game" then
+    elseif GameState.current == "game" or GameState.current == "game_online" then
         game.draw()
         controls.draw()
     elseif GameState.current == "shop" then
@@ -292,7 +294,7 @@ function love.resize(w, h)
 end
 
 function love.keypressed(key)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "game_online" then
         controls.keypressed(key)
     elseif GameState.current == "settings" and settings.keypressed then
         settings.keypressed(key)
@@ -300,6 +302,9 @@ function love.keypressed(key)
 
     if key == "escape" then
         if GameState.current == "game" then
+            GameState.current = "lobby"
+            playButtonSound()
+        elseif GameState.current == "game_online" then
             online.leave()
             GameState.current = "lobby"
             playButtonSound()
@@ -319,7 +324,7 @@ function love.keypressed(key)
 end
 
 function love.keyreleased(key)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "game_online" then
         controls.keyreleased(key)
     end
 end
@@ -339,6 +344,8 @@ local function dispatch(fn, ...)
     elseif s == "difficulty" and difficulty[fn] then
         difficulty[fn](...)
     elseif s == "game" and game[fn] then
+        game[fn](...)
+    elseif s == "game_online" and game[fn] then
         game[fn](...)
     elseif s == "shop" and shop[fn] then
         if fn == "touchpressed" then
@@ -369,7 +376,7 @@ function love.touchpressed(id, x, y)
         end
     end
 
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "game_online" then
         controls.touchpressed(id, x, y)
     end
 
@@ -377,14 +384,14 @@ function love.touchpressed(id, x, y)
 end
 
 function love.touchmoved(id, x, y)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "game_online" then
         controls.touchmoved(id, x, y)
     end
     dispatch("touchmoved", id, x, y)
 end
 
 function love.touchreleased(id, x, y)
-    if GameState.current == "game" then
+    if GameState.current == "game" or GameState.current == "game_online" then
         local shot, dx, dy = controls.touchreleased(id)
         if shot and game.spawnPlayerBullet then
             game.spawnPlayerBullet(dx, dy)
