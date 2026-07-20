@@ -1,12 +1,11 @@
+-- controls.lua - с адаптивным джойстиком
 local controls = {}
 
--- ========== ТАЧ УПРАВЛЕНИЕ ==========
 local joy  = { id = nil, cx = 0, cy = 0, sx = 0, sy = 0, r = 45, sr = 18 }
 local atk  = { id = nil, x = 0, y = 0, r = 52, hold = false, press = 0 }
 local back = { x = 20, y = 20, w = 140, h = 55 }
 local ability = { id = nil, x = 0, y = 0, r = 40, press = 0, triggered = false }
 
--- ========== КЛАВИАТУРА ==========
 local keys = { w = false, a = false, s = false, d = false, space = false, e = false }
 local font
 local aimDx, aimDy = 0, -1
@@ -15,6 +14,9 @@ local spaceJustPressed = false
 local abilityJustPressed = false
 local abilityAvailable = false
 
+-- ============================================================
+--  МАСШТАБИРОВАНИЕ (АДАПТИВНОЕ)
+-- ============================================================
 local function getScale()
     local w, h = love.graphics.getDimensions()
     local base = 1000
@@ -43,14 +45,15 @@ local function place()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    joy.r = 55 * scale
-    joy.sr = 22 * scale
-    atk.r = 60 * scale
-    ability.r = 48 * scale
-    back.w = 160 * scale
-    back.h = 60 * scale
+    -- ДЖОЙСТИК: размер зависит от экрана!
+    joy.r = math.max(35, 60 * scale)      -- минимум 35px
+    joy.sr = math.max(14, 22 * scale)     -- минимум 14px
+    atk.r = math.max(40, 65 * scale)
+    ability.r = math.max(30, 50 * scale)
+    back.w = math.max(100, 160 * scale)
+    back.h = math.max(40, 60 * scale)
 
-    local margin = 60 * scale
+    local margin = math.max(40, 60 * scale)
     joy.cx = margin
     joy.cy = h - margin
     if not joy.id then joy.sx, joy.sy = joy.cx, joy.cy end
@@ -67,7 +70,7 @@ end
 
 function controls.load()
     local scale = getScale()
-    local fontSize = math.max(18, 28 * scale)
+    local fontSize = math.max(16, 28 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
     place()
 end
@@ -75,7 +78,7 @@ end
 function controls.resize()
     place()
     local scale = getScale()
-    local fontSize = math.max(18, 28 * scale)
+    local fontSize = math.max(16, 28 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
 end
 
@@ -213,7 +216,7 @@ function controls.draw()
     local scale = getScale()
 
     if isMobile then
-        love.graphics.setLineWidth(2.8 * scale)
+        love.graphics.setLineWidth(math.max(2, 2.8 * scale))
 
         love.graphics.setColor(0, 0, 0, 0.25)
         love.graphics.circle("fill", joy.cx, joy.cy, joy.r)
@@ -229,7 +232,7 @@ function controls.draw()
         love.graphics.setColor(0.55 - press * 0.2, 0.20, 0.85 - press * 0.3, 1)
         love.graphics.circle("fill", atk.x, atk.y, r)
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(3.8 * scale)
+        love.graphics.setLineWidth(math.max(2, 3.8 * scale))
         love.graphics.circle("line", atk.x, atk.y, r)
 
         love.graphics.push()
@@ -248,7 +251,7 @@ function controls.draw()
             love.graphics.setColor(0.8, 0.2, 0.9, 1)
             love.graphics.circle("fill", ability.x, ability.y, abR)
             love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.setLineWidth(3.8 * scale)
+            love.graphics.setLineWidth(math.max(2, 3.8 * scale))
             love.graphics.circle("line", ability.x, ability.y, abR)
 
             love.graphics.setFont(font)
@@ -263,13 +266,13 @@ function controls.draw()
         end
     end
 
-    -- Кнопка Back (синяя, как в лобби)
+    -- Кнопка Back
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", back.x + 4*scale, back.y + 5*scale, back.w, back.h, 14*scale, 14*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
     love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.8 * scale)
+    love.graphics.setLineWidth(math.max(2, 3.8 * scale))
     love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
     drawSpacedText("Back", back.x, back.y + 16*scale, back.w, "center", font, nil, 1)
 
