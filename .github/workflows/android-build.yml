@@ -39,10 +39,9 @@ jobs:
       - name: Add Scrap-Mods/http module
         run: |
           cd love-android
-          # Клонируем библиотеку в папку lua-modules
           git clone --depth 1 https://github.com/Scrap-Mods/http.git love/src/jni/lua-modules/http
           
-          # Создаём Android.mk для сборки
+          # Создаём правильный Android.mk
           cat > love/src/jni/lua-modules/http/Android.mk << 'EOF'
           LOCAL_PATH := $(call my-dir)
           include $(CLEAR_VARS)
@@ -57,14 +56,16 @@ jobs:
           include $(BUILD_SHARED_LIBRARY)
           EOF
           
-          echo "✅ Scrap-Mods/http added to build"
+          echo "✅ Scrap-Mods/http added"
 
-      - name: Register http module in build
+      - name: Register http module
         run: |
           cd love-android
+          # Удаляем старые записи
           sed -i '/http/d' love/src/jni/Android.mk
+          # Добавляем в начало
           sed -i '1iinclude $(LOCAL_PATH)/jni/lua-modules/http/Android.mk' love/src/jni/Android.mk
-          echo "✅ http module registered"
+          echo "✅ http registered"
 
       - name: Set package name
         run: |
