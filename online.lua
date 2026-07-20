@@ -1,4 +1,4 @@
--- online.lua - ГИБРИД (ПК = curl, Android = https)
+-- online.lua - ТОЛЬКО LUA-HTTPS
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -21,8 +21,6 @@ local lastSentY = nil
 local lastSentTime = 0
 local fetchTimer = 0
 
-local isAndroid = (love.system.getOS() == "Android")
-
 local function setDebug(text)
     debugText = text
     print("[ONLINE] " .. text)
@@ -32,21 +30,13 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
--- ============================================================
---  ANDROID: HTTPS (LUA-HTTPS, ВСТРОЕН В LÖVE 12)
--- ============================================================
-local function sendAndroidRequest(method, path, body, callback)
+function online.sendRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    print("[ONLINE] Android: " .. method .. " " .. path)
+    print("[ONLINE] " .. method .. " " .. path)
     print("[ONLINE] URL: " .. url)
     
-    local ok, https = pcall(require, "https")
-    if not ok then
-        print("[ONLINE] ❌ https not found!")
-        if callback then callback(false, "https not found") end
-        return false
-    end
+    local https = require("https")
     
     local options = {
         method = method,
@@ -62,143 +52,16 @@ local function sendAndroidRequest(method, path, body, callback)
     local code, response = https.request(url, options)
     
     if code >= 200 and code < 300 then
-        print("[ONLINE] ✅ Android success! Code: " .. code)
+        print("[ONLINE] ✅ Success! Code: " .. code)
         if callback then callback(true, response) end
         return true
     else
-        print("[ONLINE] ❌ Android error: " .. tostring(code))
+        print("[ONLINE] ❌ HTTP error: " .. tostring(code))
         if callback then callback(false, "HTTP error: " .. code) end
         return false
     end
 end
 
--- ============================================================
---  ПК: CURL (РАБОТАЕТ НА ВСЕХ ПК)
--- ============================================================
-local function sendPCRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] PC: " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
-    
-    local data = body or "{}"
-    data = data:gsub('"', '\\"')
-    
-    local cmd
-    if method == "GET" then
-        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-    else
-        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-    end
-    
-    print("[ONLINE] CMD: " .. cmd)
-    
-    local handle = io.popen(cmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
-    
-    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
-        print("[ONLINE] ✅ PC curl success!")
-        if callback then callback(true, result) end
-        return true
-    else
-        print("[ONLINE] ❌ PC curl failed: " .. tostring(result))
-        if callback then callback(false, result or "Curl failed") end
-        return false
-    end
-end
-
--- ============================================================
---  ОТПРАВКА ЗАПРОСА
--- ============================================================
-function online.sendRequest(method, path, body, callback)
-    print("[ONLINE] ========================================")
-    print("[ONLINE] Платформа: " .. love.system.getOS())
-    print("[ONLINE] Метод: " .. method)
-    print("[ONLINE] Путь: " .. path)
-    
-    if isAndroid then
-        return sendAndroidRequest(method, path, body, callback)
-    else
-        return sendPCRequest(method, path, body, callback)
-    end
-end
-
--- ============================================================
---  ПАРСИНГ
--- ============================================================
-local function parsePlayers(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local nick = data:match('"nickname":%s*"([^"]+)"')
-        local skin = data:match('"skin":%s*"([^"]+)"')
-        if x and y then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                nickname = nick or "Player",
-                skin = skin or "NONE",
-                targetX = tonumber(x) or 0,
-                targetY = tonumber(y) or 0
-            }
-        end
-    end
-    return result
-end
-
-local function parseBullets(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local dx = data:match('"dx":%s*([%d%.%-]+)')
-        local dy = data:match('"dy":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if x and y and dx and dy then
-            result[id] = {
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                dx = tonumber(dx) or 0,
-                dy = tonumber(dy) or 0,
-                owner = owner or "",
-                life = 3
-            }
-        end
-    end
-    return result
-end
-
-local function parseAbilities(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
-    local result = {}
-    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
-        local typ = data:match('"type":%s*"([^"]+)"')
-        local x = data:match('"x":%s*([%d%.%-]+)')
-        local y = data:match('"y":%s*([%d%.%-]+)')
-        local owner = data:match('"owner":%s*"([^"]+)"')
-        if typ and x and y then
-            result[id] = {
-                type = typ,
-                x = tonumber(x) or 0,
-                y = tonumber(y) or 0,
-                owner = owner or "",
-                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
-                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
-                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
-            }
-        end
-    end
-    return result
-end
-
--- ============================================================
---  ОСНОВНЫЕ ФУНКЦИИ
--- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -221,12 +84,12 @@ function online.connect()
     online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
-            setDebug("Connected!")
-            print("[ONLINE] Connected to Firebase!")
+            setDebug("✅ Connected!")
+            print("[ONLINE] ✅ Connected to Firebase!")
         else
-            setDebug("Failed to connect")
+            setDebug("❌ Failed to connect")
             isConnected = false
-            print("[ONLINE] Connection failed!")
+            print("[ONLINE] ❌ Connection failed!")
         end
     end)
 end
