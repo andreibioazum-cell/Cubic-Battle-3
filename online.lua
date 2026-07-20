@@ -1,4 +1,4 @@
--- online.lua - Scrap-Mods/http на всех платформах
+-- online.lua - ПК = Scrap-Mods/http, ANDROID = lua-https
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -21,6 +21,8 @@ local lastSentY = nil
 local lastSentTime = 0
 local fetchTimer = 0
 
+local isAndroid = (love.system.getOS() == "Android")
+
 local function setDebug(text)
     debugText = text
     print("[ONLINE] " .. text)
@@ -31,7 +33,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  Scrap-Mods/http (быстрый, неблокирующий, без CMD)
+--  ПК: Scrap-Mods/http (быстрый, неблокирующий, без CMD)
 -- ============================================================
 local http = nil
 local httpLoaded = false
@@ -41,20 +43,22 @@ local function initHttp()
     if ok then
         http = result
         httpLoaded = true
-        print("[ONLINE] ✅ Scrap-Mods/http loaded!")
+        print("[ONLINE] ✅ Scrap-Mods/http loaded on PC!")
         return true
     else
-        print("[ONLINE] ❌ Scrap-Mods/http not found")
+        print("[ONLINE] ❌ Scrap-Mods/http not found on PC")
         return false
     end
 end
 
-initHttp()
+if not isAndroid then
+    initHttp()
+end
 
-function online.sendRequest(method, path, body, callback)
+local function sendPCRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
-    print("[ONLINE] " .. method .. " " .. path)
+    print("[ONLINE] PC: " .. method .. " " .. path)
     print("[ONLINE] URL: " .. url)
     
     if httpLoaded and http then
@@ -73,10 +77,10 @@ function online.sendRequest(method, path, body, callback)
         http.request(options, function(response)
             local code = response.status or 0
             if code >= 200 and code < 300 then
-                print("[ONLINE] ✅ HTTP success! Code: " .. code)
+                print("[ONLINE] ✅ Scrap-Mods/http success! Code: " .. code)
                 if callback then callback(true, response.body) end
             else
-                print("[ONLINE] ❌ HTTP error: " .. code)
+                print("[ONLINE] ❌ Scrap-Mods/http error: " .. code)
                 if callback then callback(false, "HTTP error: " .. code) end
             end
         end)
@@ -109,6 +113,57 @@ function online.sendRequest(method, path, body, callback)
             if callback then callback(false, result or "Curl failed") end
             return false
         end
+    end
+end
+
+-- ============================================================
+--  ANDROID: lua-https (встроен в билд)
+-- ============================================================
+local function sendAndroidRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    
+    print("[ONLINE] Android: " .. method .. " " .. path)
+    print("[ONLINE] URL: " .. url)
+    
+    local ok, https = pcall(require, "https")
+    if not ok then
+        print("[ONLINE] ❌ https not found on Android!")
+        if callback then callback(false, "https not found") end
+        return false
+    end
+    
+    local options = {
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json"
+        }
+    }
+    
+    if body then
+        options.data = body
+    end
+    
+    local code, response = https.request(url, options)
+    
+    if code >= 200 and code < 300 then
+        print("[ONLINE] ✅ Android success! Code: " .. code)
+        if callback then callback(true, response) end
+        return true
+    else
+        print("[ONLINE] ❌ Android error: " .. tostring(code))
+        if callback then callback(false, "HTTP error: " .. code) end
+        return false
+    end
+end
+
+-- ============================================================
+--  ОТПРАВКА ЗАПРОСА
+-- ============================================================
+function online.sendRequest(method, path, body, callback)
+    if isAndroid then
+        return sendAndroidRequest(method, path, body, callback)
+    else
+        return sendPCRequest(method, path, body, callback)
     end
 end
 
