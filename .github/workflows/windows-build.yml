@@ -14,8 +14,7 @@ jobs:
 
       - name: Download lua-https
         run: |
-          git clone https://github.com/love2d/lua-https.git
-          Copy-Item -Path lua-https\src\https.lua -Destination .\
+          curl -L -o https.lua https://raw.githubusercontent.com/love2d/lua-https/main/src/https.lua
           echo "✅ lua-https downloaded"
 
       - name: Package game.love
