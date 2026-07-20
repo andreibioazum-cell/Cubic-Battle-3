@@ -60,13 +60,17 @@ jobs:
       - name: Register lua-https in build
         run: |
           cd love-android
-          if ! grep -q "lua-https" love/src/jni/Android.mk; then
-            echo "" >> love/src/jni/Android.mk
-            echo "include \$(LOCAL_PATH)/jni/lua-modules/lua-https/Android.mk" >> love/src/jni/Android.mk
-            echo "✅ lua-https registered"
-          else
-            echo "ℹ️ lua-https already registered"
-          fi
+          # Удаляем старую неправильную запись, если она есть
+          sed -i '/lua-https/d' love/src/jni/Android.mk
+          # Добавляем правильный путь в самое начало списка модулей
+          sed -i '1iinclude $(LOCAL_PATH)/jni/lua-modules/lua-https/Android.mk' love/src/jni/Android.mk
+          echo "✅ lua-https registered with correct path"
+
+      - name: Remove -B flag from ndk-build
+        run: |
+          cd love-android
+          sed -i 's/-B//g' love/build.gradle
+          echo "✅ Removed -B flag"
 
       - name: Set package name
         run: |
