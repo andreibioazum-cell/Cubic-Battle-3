@@ -1,4 +1,4 @@
--- online.lua - ПК = Scrap-Mods/http, ANDROID = lua-https
+-- online.lua - ПК = Scrap-Mods/http, ANDROID = lua-https (LÖVE 12)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -33,7 +33,7 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ПК: Scrap-Mods/http (быстрый, неблокирующий, без CMD)
+--  ПК: Scrap-Mods/http
 -- ============================================================
 local http = nil
 local httpLoaded = false
@@ -116,7 +116,7 @@ local function sendPCRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  ANDROID: lua-https
+--  ANDROID: lua-https (LÖVE 12)
 -- ============================================================
 local function sendAndroidRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
@@ -126,9 +126,8 @@ local function sendAndroidRequest(method, path, body, callback)
     
     local ok, https = pcall(require, "https")
     if not ok then
-        print("[ONLINE] ❌ https not found on Android!")
-        if callback then callback(false, "https not found") end
-        return false
+        print("[ONLINE] ❌ https not found on Android! Trying curl...")
+        return sendAndroidCurl(method, path, body, callback)
     end
     
     local options = {
@@ -145,12 +144,47 @@ local function sendAndroidRequest(method, path, body, callback)
     local code, response = https.request(url, options)
     
     if code >= 200 and code < 300 then
-        print("[ONLINE] ✅ Android success! Code: " .. code)
+        print("[ONLINE] ✅ Android lua-https success! Code: " .. code)
         if callback then callback(true, response) end
         return true
     else
-        print("[ONLINE] ❌ Android error: " .. tostring(code))
+        print("[ONLINE] ❌ Android lua-https error: " .. tostring(code))
         if callback then callback(false, "HTTP error: " .. code) end
+        return false
+    end
+end
+
+-- ============================================================
+--  ANDROID FALLBACK: curl (если lua-https не работает)
+-- ============================================================
+local function sendAndroidCurl(method, path, body, callback)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    
+    print("[ONLINE] Android curl fallback: " .. method .. " " .. path)
+    
+    local data = body or "{}"
+    data = data:gsub('"', '\\"')
+    
+    local cmd
+    if method == "GET" then
+        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
+    else
+        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+    end
+    
+    print("[ONLINE] CMD: " .. cmd)
+    
+    local handle = io.popen(cmd)
+    local result = handle and handle:read("*a")
+    if handle then handle:close() end
+    
+    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
+        print("[ONLINE] ✅ Android curl success!")
+        if callback then callback(true, result) end
+        return true
+    else
+        print("[ONLINE] ❌ Android curl failed: " .. tostring(result))
+        if callback then callback(false, result or "Curl failed") end
         return false
     end
 end
