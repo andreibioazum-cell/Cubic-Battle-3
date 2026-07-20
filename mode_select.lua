@@ -1,4 +1,4 @@
--- mode_select.lua – выбор режима (без комнат)
+-- mode_select.lua – выбор режима
 local mode_select = {}
 
 local fontTitle, fontBtn
@@ -71,7 +71,7 @@ function mode_select.draw()
 
     drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
-    -- Кнопка SINGLEPLAYER
+    -- SINGLEPLAYER
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", btnSingle.x + 5*scale, btnSingle.y + 6*scale, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.5, 0.9, 1)
@@ -81,7 +81,7 @@ function mode_select.draw()
     love.graphics.rectangle("line", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
     drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
 
-    -- Кнопка MULTIPLAYER
+    -- MULTIPLAYER (ЗЕЛЁНЫЙ)
     love.graphics.setColor(0.0, 0.3, 0.0, 0.5)
     love.graphics.rectangle("fill", btnMulti.x + 5*scale, btnMulti.y + 6*scale, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     love.graphics.setColor(0.2, 0.8, 0.2, 1)
@@ -90,6 +90,16 @@ function mode_select.draw()
     love.graphics.setLineWidth(3.4 * scale)
     love.graphics.rectangle("line", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
     drawSpacedText("MULTIPLAYER", btnMulti.x, btnMulti.y + 22*scale, btnMulti.w, "center", fontBtn, nil, 1)
+
+    -- BACK
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
+    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
+    love.graphics.setColor(0.2, 0.5, 0.9, 1)
+    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(3.4 * scale)
+    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
+    drawSpacedText("BACK", btnBack.x, btnBack.y + 14*scale, btnBack.w, "center", fontBtn, nil, 1)
 
     -- ПЛАВАЮЩАЯ НАДПИСЬ
     local time = love.timer.getTime()
@@ -110,16 +120,6 @@ function mode_select.draw()
     love.graphics.setColor(1, 0.8, 0.2, 0.25)
     love.graphics.setLineWidth(1)
     love.graphics.line(w/2 - tw/2, y + 22, w/2 + tw/2, y + 22)
-
-    -- Кнопка BACK
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    drawSpacedText("BACK", btnBack.x, btnBack.y + 14*scale, btnBack.w, "center", fontBtn, nil, 1)
 end
 
 function mode_select.touchpressed(id, x, y)
@@ -137,6 +137,10 @@ function mode_select.touchpressed(id, x, y)
 
     if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
         playButtonSound()
+        -- ПОЛНЫЙ ЭКРАН НА ПК!
+        if not isMobile then
+            love.window.setFullscreen(true, "desktop")
+        end
         GameState.current = "game"
         return
     end
