@@ -12,13 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install wget
-        run: choco install wget -y
-
-      - name: Download lua-https
+      - name: Install build tools
         run: |
-          wget -O https.lua https://raw.githubusercontent.com/love2d/lua-https/main/https.lua
-          echo "✅ lua-https downloaded"
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          choco install wget -y
+
+      - name: Download and build lua-https
+        run: |
+          git clone https://github.com/love2d/lua-https.git
+          cd lua-https
+          cmake -Bbuild -S. -A x64 -DCMAKE_INSTALL_PREFIX=%CD%\install
+          cmake --build build --config Release --target install
+          cd install
+          copy bin\https.dll ..\..\
+          echo "✅ lua-https built and copied"
 
       - name: Package game.love
         run: |
@@ -34,6 +41,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist\CubicBattle
           Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
+          Copy-Item https.dll -Destination dist\CubicBattle\
           cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
           Remove-Item dist\CubicBattle\love.exe
 
