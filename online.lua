@@ -1,4 +1,4 @@
--- online.lua - SCRAP-MODS/HTTP (БЫСТРО, БЕЗ CMD)
+-- online.lua - Scrap-Mods/http на всех платформах
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -30,6 +30,9 @@ local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
 end
 
+-- ============================================================
+--  Scrap-Mods/http (быстрый, неблокирующий, без CMD)
+-- ============================================================
 local http = nil
 local httpLoaded = false
 
@@ -41,7 +44,7 @@ local function initHttp()
         print("[ONLINE] ✅ Scrap-Mods/http loaded!")
         return true
     else
-        print("[ONLINE] ❌ Scrap-Mods/http not found, using curl")
+        print("[ONLINE] ❌ Scrap-Mods/http not found")
         return false
     end
 end
@@ -80,7 +83,7 @@ function online.sendRequest(method, path, body, callback)
         
         return true
     else
-        -- Fallback на curl (если библиотека не загружена)
+        -- Fallback на curl
         local data = body or "{}"
         data = data:gsub('"', '\\"')
         
@@ -109,6 +112,81 @@ function online.sendRequest(method, path, body, callback)
     end
 end
 
+-- ============================================================
+--  ПАРСИНГ
+-- ============================================================
+function online.parsePlayers(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local nick = data:match('"nickname":%s*"([^"]+)"')
+        local skin = data:match('"skin":%s*"([^"]+)"')
+        if x and y then
+            result[id] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                nickname = nick or "Player",
+                skin = skin or "NONE",
+                targetX = tonumber(x) or 0,
+                targetY = tonumber(y) or 0
+            }
+        end
+    end
+    return result
+end
+
+function online.parseBullets(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local dx = data:match('"dx":%s*([%d%.%-]+)')
+        local dy = data:match('"dy":%s*([%d%.%-]+)')
+        local owner = data:match('"owner":%s*"([^"]+)"')
+        if x and y and dx and dy then
+            result[id] = {
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                dx = tonumber(dx) or 0,
+                dy = tonumber(dy) or 0,
+                owner = owner or "",
+                life = 3
+            }
+        end
+    end
+    return result
+end
+
+function online.parseAbilities(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
+    local result = {}
+    for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
+        local typ = data:match('"type":%s*"([^"]+)"')
+        local x = data:match('"x":%s*([%d%.%-]+)')
+        local y = data:match('"y":%s*([%d%.%-]+)')
+        local owner = data:match('"owner":%s*"([^"]+)"')
+        if typ and x and y then
+            result[id] = {
+                type = typ,
+                x = tonumber(x) or 0,
+                y = tonumber(y) or 0,
+                owner = owner or "",
+                dirX = tonumber(data:match('"dirX":%s*([%d%.%-]+)')) or 0,
+                dirY = tonumber(data:match('"dirY":%s*([%d%.%-]+)')) or 0,
+                time = tonumber(data:match('"time":%s*([%d%.%-]+)')) or 0
+            }
+        end
+    end
+    return result
+end
+
+-- ============================================================
+--  ОСНОВНЫЕ ФУНКЦИИ
+-- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -218,7 +296,7 @@ function online.fetchPlayers()
 
     online.sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
-            local newPlayers = parsePlayers(res)
+            local newPlayers = online.parsePlayers(res)
 
             for id, data in pairs(newPlayers) do
                 if id ~= myUid then
@@ -243,13 +321,13 @@ function online.fetchPlayers()
 
     online.sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
-            bullets = parseBullets(res)
+            bullets = online.parseBullets(res)
         end
     end)
 
     online.sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
         if ok and res and res ~= "null" then
-            abilities = parseAbilities(res)
+            abilities = online.parseAbilities(res)
         end
     end)
 end
