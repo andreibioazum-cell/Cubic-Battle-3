@@ -12,8 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Package game.love
+      - name: Download lua-https
         run: |
+          mkdir lua-https
+          cd lua-https
+          curl -L -o https.lua https://raw.githubusercontent.com/love2d/lua-https/main/https.lua
+          curl -L -o https.lua https://raw.githubusercontent.com/love2d/lua-https/main/https.lua
+          echo "✅ lua-https downloaded"
+
+      - name: Package game.love (with lua-https)
+        run: |
+          # Копируем lua-https в папку с игрой
+          Copy-Item -Path lua-https\https.lua -Destination .\
+          
+          # Упаковываем
           powershell Compress-Archive -Path * -DestinationPath game.zip -Force
           ren game.zip game.love
 
