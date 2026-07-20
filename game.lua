@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль (онлайн + офлайн, без комнат)
+-- game.lua – полный игровой модуль (онлайн + офлайн разделены)
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -21,7 +21,7 @@ local dead = false
 local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
-local isOnlineMode = false
+local isOnlineMode = false  -- <-- ОСНОВНОЙ ФЛАГ!
 
 local laserCooldown = 0
 local LASER_COOLDOWN = 15
@@ -274,17 +274,17 @@ end
 --  ЗАГРУЗКА
 -- ============================================================
 function game.load()
-    -- Определяем режим
-    isOnlineMode = (GameState.current == "game")  -- если пришли из MULTIPLAYER
+    -- Определяем режим по GameState
+    isOnlineMode = (GameState.current == "game_online")
     
     if isOnlineMode then
-        -- ОНЛАЙН РЕЖИМ
+        -- ОНЛАЙН
         online.init(SAVE_DATA.nickname or "Player")
         cube.speed = 420
         enemy.reset()
         game.addDebugMessage("ONLINE MODE ACTIVATED", {0.2, 0.8, 0.2, 1})
     else
-        -- ОФЛАЙН РЕЖИМ
+        -- ОФФЛАЙН
         currentDifficulty = _G.difficulty or "normal"
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
@@ -341,7 +341,7 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- ОНЛАЙН: отправка позиции
+    -- ОНЛАЙН: только если включён
     if isOnlineMode and online.isConnected() then
         online.update(dt)
         online.sendPosition(cube.x, cube.y)
@@ -450,6 +450,7 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
+    -- ОФФЛАЙН: только если не онлайн
     if not isOnlineMode then
         local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
         if enemyKilled then
@@ -539,7 +540,7 @@ function game.draw()
         end
     end
 
-    -- Враг (только офлайн)
+    -- ВРАГ: только офлайн
     if not isOnlineMode then
         enemy.drawBullets()
         enemy.draw()
