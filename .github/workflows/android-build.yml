@@ -50,14 +50,11 @@ jobs:
         run: |
           git clone --recursive --depth 1 --branch 11.5 https://github.com/love2d/love-android.git
 
-      - name: Add lua-https module to correct location
+      - name: Add lua-https module
         run: |
           cd love-android
-          
-          # Клонируем в правильное место (НЕ в openal-soft!)
           git clone --depth 1 https://github.com/love2d/lua-https.git love/src/jni/lua-modules/lua-https
           
-          # Создаём Android.mk
           cat > love/src/jni/lua-modules/lua-https/Android.mk << 'EOF'
           LOCAL_PATH := $(call my-dir)
           include $(CLEAR_VARS)
@@ -76,11 +73,8 @@ jobs:
       - name: Register lua-https in build
         run: |
           cd love-android
-          
-          # Проверяем, есть ли уже модуль в Android.mk
           if ! grep -q "lua-https" love/src/jni/Android.mk; then
-            # Добавляем перед openal-soft
-            sed -i '/openal-soft/i include $(LOCAL_PATH)\/jni\/lua-modules\/lua-https\/Android.mk' love/src/jni/Android.mk
+            sed -i '/include $(LOCAL_PATH)\/jni\/lua-modules\/lua-enet\/Android.mk/a\include $(LOCAL_PATH)\/jni\/lua-modules\/lua-https\/Android.mk' love/src/jni/Android.mk
             echo "✅ lua-https registered"
           else
             echo "ℹ️ lua-https already registered"
@@ -148,10 +142,10 @@ jobs:
           APK_FILE=$(find love-android -name "*.apk" | head -1)
           if [ -z "$APK_FILE" ]; then
             echo "❌ No APK found!"
-            find love-android -name "*.log" -exec cat {} \; || true
             exit 1
           fi
           cp "$APK_FILE" "CubicBattle.apk"
+          echo "✅ APK created: CubicBattle.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
