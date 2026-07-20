@@ -87,7 +87,6 @@ local function sendPCRequest(method, path, body, callback)
         
         return true
     else
-        -- Fallback на curl
         local data = body or "{}"
         data = data:gsub('"', '\\"')
         
@@ -117,7 +116,7 @@ local function sendPCRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  ANDROID: lua-https (встроен в билд)
+--  ANDROID: lua-https
 -- ============================================================
 local function sendAndroidRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
@@ -156,9 +155,6 @@ local function sendAndroidRequest(method, path, body, callback)
     end
 end
 
--- ============================================================
---  ОТПРАВКА ЗАПРОСА
--- ============================================================
 function online.sendRequest(method, path, body, callback)
     if isAndroid then
         return sendAndroidRequest(method, path, body, callback)
@@ -167,9 +163,6 @@ function online.sendRequest(method, path, body, callback)
     end
 end
 
--- ============================================================
---  ПАРСИНГ
--- ============================================================
 function online.parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
@@ -239,9 +232,6 @@ function online.parseAbilities(jsonStr)
     return result
 end
 
--- ============================================================
---  ОСНОВНЫЕ ФУНКЦИИ
--- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
