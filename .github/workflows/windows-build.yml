@@ -17,7 +17,7 @@ jobs:
 
       - name: Download lua-https
         run: |
-          wget -O https.lua https://raw.githubusercontent.com/love2d/lua-https/main/src/https.lua
+          wget -O https.lua https://raw.githubusercontent.com/love2d/lua-https/main/https.lua
           echo "✅ lua-https downloaded"
 
       - name: Package game.love
