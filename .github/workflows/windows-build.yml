@@ -12,9 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install wget
+        run: choco install wget -y
+
       - name: Download lua-https
         run: |
-          curl -L -o https.lua https://raw.githubusercontent.com/love2d/lua-https/main/src/https.lua
+          wget -O https.lua https://raw.githubusercontent.com/love2d/lua-https/main/src/https.lua
           echo "✅ lua-https downloaded"
 
       - name: Package game.love
@@ -24,7 +27,7 @@ jobs:
 
       - name: Download LÖVE Windows 64-bit (11.5)
         run: |
-          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
+          wget -O love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
           Expand-Archive -Path love-windows.zip -DestinationPath love-windows
 
       - name: Create Portable EXE (64-bit)
