@@ -1,4 +1,4 @@
--- game.lua – полный игровой модуль (онлайн + офлайн разделены)
+-- game.lua – все пули чёрные
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -21,7 +21,7 @@ local dead = false
 local equippedSkin = "NONE"
 local resurrectionUsed = false
 local currentDifficulty = "normal"
-local isOnlineMode = false  -- <-- ОСНОВНОЙ ФЛАГ!
+local isOnlineMode = false
 
 local laserCooldown = 0
 local LASER_COOLDOWN = 15
@@ -274,17 +274,14 @@ end
 --  ЗАГРУЗКА
 -- ============================================================
 function game.load()
-    -- Определяем режим по GameState
     isOnlineMode = (GameState.current == "game_online")
     
     if isOnlineMode then
-        -- ОНЛАЙН
         online.init(SAVE_DATA.nickname or "Player")
         cube.speed = 420
         enemy.reset()
         game.addDebugMessage("ONLINE MODE ACTIVATED", {0.2, 0.8, 0.2, 1})
     else
-        -- ОФФЛАЙН
         currentDifficulty = _G.difficulty or "normal"
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
@@ -341,7 +338,6 @@ function game.update(dt)
 
     controls.update(dt)
 
-    -- ОНЛАЙН: только если включён
     if isOnlineMode and online.isConnected() then
         online.update(dt)
         online.sendPosition(cube.x, cube.y)
@@ -450,7 +446,6 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
-    -- ОФФЛАЙН: только если не онлайн
     if not isOnlineMode then
         local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
         if enemyKilled then
@@ -500,6 +495,7 @@ function game.draw()
 
     drawSnow()
 
+    -- ВСЕ ПУЛИ ЧЁРНЫЕ (СВОИ)
     for _, b in ipairs(bullets) do
         if b.isDash then
             love.graphics.setColor(0, 0, 0, 1)
@@ -512,30 +508,45 @@ function game.draw()
         end
     end
 
-    -- ОНЛАЙН: пули других игроков
+    -- ВСЕ ПУЛИ ЧЁРНЫЕ (ЧУЖИЕ)
     if isOnlineMode then
-        for id, b in pairs(online.getBullets()) do
+        local onlineBullets = online.getBullets()
+        for id, b in pairs(onlineBullets) do
             if b.owner ~= online.getMyUid() then
-                love.graphics.setColor(1, 0.2, 0.2, 1)
-                love.graphics.circle("fill", b.x, b.y, 6)
+                love.graphics.setColor(0, 0, 0, 1)
+                love.graphics.circle("fill", b.x, b.y, 8)
+                love.graphics.setColor(0, 0, 0, 0.3)
+                love.graphics.circle("line", b.x, b.y, 12)
             end
         end
     end
 
-    -- ОНЛАЙН: способности
+    -- ОНЛАЙН: СПОСОБНОСТИ ДРУГИХ ИГРОКОВ
     if isOnlineMode then
         local onlineAbilities = online.getAbilities() or {}
         for aid, ab in pairs(onlineAbilities) do
-            if ab.type == "laser" then
-                love.graphics.setColor(1, 0, 0, 0.6)
-                love.graphics.setLineWidth(5)
-                love.graphics.line(ab.x, ab.y, ab.x + ab.dirX * 800, ab.y + ab.dirY * 800)
-            elseif ab.type == "dash" then
-                love.graphics.setColor(1, 1, 1, 0.3)
-                love.graphics.circle("fill", ab.x, ab.y, 30)
-            elseif ab.type == "revive" then
-                love.graphics.setColor(0, 1, 0, 0.3)
-                love.graphics.circle("fill", ab.x, ab.y, 40)
+            if ab.owner ~= online.getMyUid() then
+                if ab.type == "laser" then
+                    love.graphics.setColor(0, 0.5, 1, 0.6)
+                    love.graphics.setLineWidth(5)
+                    love.graphics.line(ab.x, ab.y, ab.x + ab.dirX * 800, ab.y + ab.dirY * 800)
+                    love.graphics.setColor(0, 0.5, 1, 0.2)
+                    love.graphics.setLineWidth(15)
+                    love.graphics.line(ab.x, ab.y, ab.x + ab.dirX * 800, ab.y + ab.dirY * 800)
+                    love.graphics.setLineWidth(1)
+                elseif ab.type == "dash" then
+                    love.graphics.setColor(1, 1, 1, 0.3)
+                    love.graphics.circle("fill", ab.x, ab.y, 30)
+                    love.graphics.setColor(1, 1, 1, 0.6)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.circle("line", ab.x, ab.y, 30)
+                elseif ab.type == "revive" then
+                    love.graphics.setColor(0, 1, 0, 0.3)
+                    love.graphics.circle("fill", ab.x, ab.y, 40)
+                    love.graphics.setColor(0, 1, 0, 0.6)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.circle("line", ab.x, ab.y, 40)
+                end
             end
         end
     end
