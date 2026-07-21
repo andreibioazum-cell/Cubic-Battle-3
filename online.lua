@@ -1,4 +1,4 @@
--- online.lua - ПК = Scrap-Mods/http, ANDROID = lua-https (LÖVE 12)
+-- online.lua - С ХП И УРОНОМ
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -7,6 +7,7 @@ local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
+local DAMAGE_PATH = "damage/"  -- НОВЫЙ ПУТЬ ДЛЯ УРОНА
 
 local myUid = nil
 local myNickname = nil
@@ -30,6 +31,72 @@ end
 
 local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
+end
+
+-- ============================================================
+--  ANDROID: lua-https (LÖVE 12)
+-- ============================================================
+local function sendAndroidRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    
+    print("[ONLINE] Android: " .. method .. " " .. path)
+    
+    local ok, https = pcall(require, "https")
+    if not ok then
+        print("[ONLINE] ❌ https not found, trying curl...")
+        return sendAndroidCurl(method, path, body, callback)
+    end
+    
+    local options = {
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json"
+        }
+    }
+    
+    if body then
+        options.data = body
+    end
+    
+    local code, response = https.request(url, options)
+    
+    if code >= 200 and code < 300 then
+        print("[ONLINE] ✅ Android success! Code: " .. code)
+        if callback then callback(true, response) end
+        return true
+    else
+        print("[ONLINE] ❌ Android error: " .. tostring(code))
+        if callback then callback(false, "HTTP error: " .. code) end
+        return false
+    end
+end
+
+local function sendAndroidCurl(method, path, body, callback)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    
+    local data = body or "{}"
+    data = data:gsub('"', '\\"')
+    
+    local cmd
+    if method == "GET" then
+        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
+    else
+        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
+    end
+    
+    local handle = io.popen(cmd)
+    local result = handle and handle:read("*a")
+    if handle then handle:close() end
+    
+    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
+        print("[ONLINE] ✅ Android curl success!")
+        if callback then callback(true, result) end
+        return true
+    else
+        print("[ONLINE] ❌ Android curl failed")
+        if callback then callback(false, "Curl failed") end
+        return false
+    end
 end
 
 -- ============================================================
@@ -59,7 +126,6 @@ local function sendPCRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
     print("[ONLINE] PC: " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
     
     if httpLoaded and http then
         local options = {
@@ -97,8 +163,6 @@ local function sendPCRequest(method, path, body, callback)
             cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
         end
         
-        print("[ONLINE] CMD (fallback): " .. cmd)
-        
         local handle = io.popen(cmd)
         local result = handle and handle:read("*a")
         if handle then handle:close() end
@@ -108,87 +172,16 @@ local function sendPCRequest(method, path, body, callback)
             if callback then callback(true, result) end
             return true
         else
-            print("[ONLINE] ❌ Curl failed: " .. tostring(result))
-            if callback then callback(false, result or "Curl failed") end
+            print("[ONLINE] ❌ Curl failed")
+            if callback then callback(false, "Curl failed") end
             return false
         end
     end
 end
 
 -- ============================================================
---  ANDROID: lua-https (LÖVE 12)
+--  ОТПРАВКА ЗАПРОСА
 -- ============================================================
-local function sendAndroidRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] Android: " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
-    
-    local ok, https = pcall(require, "https")
-    if not ok then
-        print("[ONLINE] ❌ https not found on Android! Trying curl...")
-        return sendAndroidCurl(method, path, body, callback)
-    end
-    
-    local options = {
-        method = method,
-        headers = {
-            ["Content-Type"] = "application/json"
-        }
-    }
-    
-    if body then
-        options.data = body
-    end
-    
-    local code, response = https.request(url, options)
-    
-    if code >= 200 and code < 300 then
-        print("[ONLINE] ✅ Android lua-https success! Code: " .. code)
-        if callback then callback(true, response) end
-        return true
-    else
-        print("[ONLINE] ❌ Android lua-https error: " .. tostring(code))
-        if callback then callback(false, "HTTP error: " .. code) end
-        return false
-    end
-end
-
--- ============================================================
---  ANDROID FALLBACK: curl (если lua-https не работает)
--- ============================================================
-local function sendAndroidCurl(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] Android curl fallback: " .. method .. " " .. path)
-    
-    local data = body or "{}"
-    data = data:gsub('"', '\\"')
-    
-    local cmd
-    if method == "GET" then
-        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-    else
-        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-    end
-    
-    print("[ONLINE] CMD: " .. cmd)
-    
-    local handle = io.popen(cmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
-    
-    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
-        print("[ONLINE] ✅ Android curl success!")
-        if callback then callback(true, result) end
-        return true
-    else
-        print("[ONLINE] ❌ Android curl failed: " .. tostring(result))
-        if callback then callback(false, result or "Curl failed") end
-        return false
-    end
-end
-
 function online.sendRequest(method, path, body, callback)
     if isAndroid then
         return sendAndroidRequest(method, path, body, callback)
@@ -197,6 +190,72 @@ function online.sendRequest(method, path, body, callback)
     end
 end
 
+-- ============================================================
+--  НОВЫЕ ФУНКЦИИ ДЛЯ УРОНА И ХП
+-- ============================================================
+
+-- Отправить урон игроку
+function online.sendDamage(targetUid, damage, attackerUid)
+    if not isConnected or not myUid then return end
+    
+    local path = DAMAGE_PATH .. targetUid
+    local data = string.format('{"damage":%d,"attacker":"%s","time":%f}', 
+        damage, attackerUid or myUid, love.timer.getTime())
+    online.sendRequest("PUT", path, data)
+    print("[ONLINE] 💥 Damage sent to " .. targetUid .. ": " .. damage)
+end
+
+-- Получить урон для игрока
+function online.fetchDamage(callback)
+    if not isConnected or not myUid then return end
+    
+    local path = DAMAGE_PATH .. myUid
+    online.sendRequest("GET", path, nil, function(ok, res)
+        if ok and res and res ~= "null" then
+            local damageData = parseDamage(res)
+            if damageData and damageData.damage then
+                print("[ONLINE] 💥 Received damage: " .. damageData.damage)
+                if callback then callback(damageData) end
+                -- Удаляем урон после получения
+                online.sendRequest("DELETE", path, nil, function() end)
+            end
+        end
+    end)
+end
+
+local function parseDamage(jsonStr)
+    if not jsonStr or jsonStr == "" or jsonStr == "null" then return nil end
+    local damage = jsonStr:match('"damage":%s*(%d+)')
+    local attacker = jsonStr:match('"attacker":%s*"([^"]+)"')
+    local time = jsonStr:match('"time":%s*([%d%.]+)')
+    
+    if damage then
+        return {
+            damage = tonumber(damage) or 0,
+            attacker = attacker or "",
+            time = tonumber(time) or 0
+        }
+    end
+    return nil
+end
+
+-- Обновить ХП игрока в Firebase
+function online.updateHP(hp)
+    if not isConnected or not myUid then return end
+    local path = PLAYERS_PATH .. myUid
+    local data = string.format('{"hp":%d}', hp)
+    online.sendRequest("PATCH", path, data)
+end
+
+-- Получить ХП игрока
+function online.getPlayerHP(uid)
+    if not players[uid] then return 5 end
+    return players[uid].hp or 5
+end
+
+-- ============================================================
+--  ПАРСИНГ (ОБНОВЛЁННЫЙ)
+-- ============================================================
 function online.parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
@@ -206,12 +265,14 @@ function online.parsePlayers(jsonStr)
         local y = data:match('"y":%s*([%d%.%-]+)')
         local nick = data:match('"nickname":%s*"([^"]+)"')
         local skin = data:match('"skin":%s*"([^"]+)"')
+        local hp = data:match('"hp":%s*([%d]+)')
         if x and y then
             result[id] = {
                 x = tonumber(x) or 0,
                 y = tonumber(y) or 0,
                 nickname = nick or "Player",
                 skin = skin or "NONE",
+                hp = tonumber(hp) or 5,
                 targetX = tonumber(x) or 0,
                 targetY = tonumber(y) or 0
             }
@@ -229,6 +290,7 @@ function online.parseBullets(jsonStr)
         local dx = data:match('"dx":%s*([%d%.%-]+)')
         local dy = data:match('"dy":%s*([%d%.%-]+)')
         local owner = data:match('"owner":%s*"([^"]+)"')
+        local isDash = data:match('"isDash":%s*([%a]+)')
         if x and y and dx and dy then
             result[id] = {
                 x = tonumber(x) or 0,
@@ -236,6 +298,7 @@ function online.parseBullets(jsonStr)
                 dx = tonumber(dx) or 0,
                 dy = tonumber(dy) or 0,
                 owner = owner or "",
+                isDash = (isDash == "true"),
                 life = 3
             }
         end
@@ -266,6 +329,9 @@ function online.parseAbilities(jsonStr)
     return result
 end
 
+-- ============================================================
+--  ОСНОВНЫЕ ФУНКЦИИ
+-- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -281,7 +347,7 @@ function online.connect()
     if not myUid then return end
     
     local path = PLAYERS_PATH .. myUid
-    local data = string.format('{"x":400,"y":300,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
+    local data = string.format('{"x":400,"y":300,"hp":5,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
     
     setDebug("Connecting...")
     
@@ -343,12 +409,12 @@ function online.sendPosition(x, y)
     online.sendRequest("PATCH", path, data)
 end
 
-function online.sendBullet(x, y, dx, dy)
+function online.sendBullet(x, y, dx, dy, isDash)
     if not isConnected or not myUid then return end
     local bulletId = myUid .. "_" .. os.time() .. "_" .. math.random(1000, 9999)
     local path = BULLETS_PATH .. bulletId
-    local data = string.format('{"x":%d,"y":%d,"dx":%f,"dy":%f,"owner":"%s","time":%f}',
-        math.floor(x), math.floor(y), dx, dy, myUid, love.timer.getTime())
+    local data = string.format('{"x":%d,"y":%d,"dx":%f,"dy":%f,"owner":"%s","isDash":%s,"time":%f}',
+        math.floor(x), math.floor(y), dx, dy, myUid, isDash and "true" or "false", love.timer.getTime())
     online.sendRequest("PUT", path, data)
 end
 
@@ -386,6 +452,7 @@ function online.fetchPlayers()
                         players[id].targetY = data.y
                         players[id].nickname = data.nickname
                         players[id].skin = data.skin
+                        players[id].hp = data.hp or 5
                     end
                 end
             end
@@ -420,6 +487,7 @@ function online.update(dt)
             p.y = p.y or p.targetY
             p.x = p.x + (p.targetX - p.x) * math.min(1, dt * 8)
             p.y = p.y + (p.targetY - p.y) * math.min(1, dt * 8)
+            p.hp = p.hp or 5
         end
     end
 
