@@ -1,4 +1,4 @@
--- chat.lua - С поддержкой Roboto
+-- chat.lua - Чат только в онлайне
 local chat = {}
 
 local messages = {}
@@ -20,9 +20,10 @@ local colors = {
     system = {0.4, 0.8, 1, 1},
     player = {1, 1, 1, 1},
     admin = {1, 0.8, 0, 1},
-    enemy = {1, 0.3, 0.3, 1},
-    whisper = {0.8, 0.4, 1, 1}
 }
+
+local isOnline = false
+local isGameState = false
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -36,11 +37,27 @@ end
 function chat.load()
     local scale = getScale()
     local fontSize = math.max(16, 20 * scale)
-    -- Используем Roboto для чата
     font = love.graphics.newFont("Roboto-Regular.ttf", fontSize)
     messages = {}
     inputText = ""
     isInputActive = false
+    isOnline = false
+    isGameState = false
+    chat.forceClose()
+end
+
+function chat.setOnlineMode(online)
+    isOnline = online
+    if not isOnline then
+        chat.forceClose()
+    end
+end
+
+function chat.setGameState(state)
+    isGameState = (state == "game_online")
+    if not isGameState then
+        chat.forceClose()
+    end
 end
 
 function chat.resize()
@@ -54,13 +71,10 @@ function chat.addMessage(text, sender, color)
         sender = sender or "System",
         color = color or colors.player,
         time = timestamp,
-        id = #messages + 1
     })
-    
     if #messages > MAX_MESSAGES then
         table.remove(messages, 1)
     end
-    
     scrollOffset = 0
 end
 
@@ -73,6 +87,10 @@ function chat.addAdminMessage(text)
 end
 
 function chat.toggleInput()
+    if not isOnline or not isGameState then
+        chat.forceClose()
+        return
+    end
     isInputActive = not isInputActive
     if isInputActive then
         love.keyboard.setTextInput(true)
@@ -87,8 +105,18 @@ function chat.toggleInput()
     end
 end
 
+function chat.forceClose()
+    if isInputActive then
+        isInputActive = false
+        love.keyboard.setTextInput(false)
+        love.keyboard.setKeyRepeat(false)
+        inputText = ""
+    end
+end
+
 function chat.sendMessage(text)
     if text == "" then return end
+    if not isOnline or not isGameState then return end
     
     local filtered = text
     local badWords = {"хуй", "пизда", "бля", "еба", "сука", "гондон", "пидор", "мудак", "залупа"}
@@ -97,11 +125,9 @@ function chat.sendMessage(text)
     end
     
     local sender = SAVE_DATA.nickname or "Player"
-    
     if adminNicknames[sender] then
         sender = "Admin"
     end
-    
     if sender == SAVE_DATA.nickname then
         sender = "Anonymous"
     end
@@ -120,13 +146,13 @@ end
 
 function chat.fetchMessages()
     if not online or not online.isConnected() then return end
+    if not isOnline or not isGameState then return end
     
     online.sendRequest("GET", "chat.json", nil, function(ok, res)
         if ok and res and res ~= "null" then
             for id, data in res:gmatch('"([^"]+)":%s*({[^{}]+})') do
                 local text = data:match('"text":%s*"([^"]+)"')
                 local sender = data:match('"sender":%s*"([^"]+)"')
-                local time = data:match('"time":%s*([%d%.]+)')
                 if text and sender then
                     local exists = false
                     for _, msg in ipairs(messages) do
@@ -148,6 +174,7 @@ function chat.fetchMessages()
 end
 
 function chat.update(dt)
+    if not isOnline or not isGameState then return end
     if online and online.isConnected() then
         fetchTimer = fetchTimer + dt
         if fetchTimer >= 3 then
@@ -158,14 +185,14 @@ function chat.update(dt)
 end
 
 function chat.draw()
+    if not isOnline or not isGameState then return end
+    
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
-    
     if not font then chat.load() end
     
     love.graphics.setColor(0, 0, 0, 0.6)
     love.graphics.rectangle("fill", 10, h - chatHeight - 50, w - 20, chatHeight, 8, 8)
-    
     love.graphics.setColor(0.2, 0.4, 0.8, 0.3)
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", 10, h - chatHeight - 50, w - 20, chatHeight, 8, 8)
@@ -173,12 +200,11 @@ function chat.draw()
     love.graphics.setFont(font)
     local y = h - chatHeight - 40 + scrollOffset
     local maxMessages = math.floor(chatHeight / 22) - 1
-    
     local startIdx = math.max(1, #messages - maxMessages + 1)
+    
     for i = startIdx, #messages do
         local msg = messages[i]
-        local alpha = 1
-        if i == startIdx then alpha = 0.5 end
+        local alpha = (i == startIdx) and 0.5 or 1
         
         love.graphics.setColor(0.6, 0.6, 0.6, alpha * 0.7)
         love.graphics.print(msg.time .. " ", 20, y)
@@ -191,27 +217,20 @@ function chat.draw()
         
         love.graphics.setColor(1, 1, 1, alpha)
         love.graphics.print(msg.text, 20 + timeW + senderW, y)
-        
         y = y + 22
     end
     
     if isInputActive then
         local inputY = h - 20
         local inputW = w - 40
-        
         love.graphics.setColor(0.1, 0.1, 0.2, 0.8)
         love.graphics.rectangle("fill", 20, inputY - 22, inputW, 28, 6, 6)
         love.graphics.setColor(0.3, 0.5, 0.9, 0.5)
         love.graphics.setLineWidth(2)
         love.graphics.rectangle("line", 20, inputY - 22, inputW, 28, 6, 6)
-        
         love.graphics.setColor(1, 1, 1, 1)
-        local displayText = inputText
-        if love.timer.getTime() % 1 < 0.5 then
-            displayText = displayText .. "_"
-        end
+        local displayText = inputText .. ((love.timer.getTime() % 1 < 0.5) and "_" or "")
         love.graphics.print(displayText, 28, inputY - 18)
-        
         love.graphics.setColor(0.6, 0.6, 0.6, 0.5)
         love.graphics.print("Press Enter to send | ESC to close", 28, h - 60)
     else
@@ -222,6 +241,8 @@ function chat.draw()
 end
 
 function chat.keypressed(key)
+    if not isOnline or not isGameState then return false end
+    
     if key == "t" or key == "т" then
         chat.toggleInput()
         return true
@@ -232,10 +253,7 @@ function chat.keypressed(key)
             chat.toggleInput()
             return true
         elseif key == "escape" then
-            isInputActive = false
-            love.keyboard.setTextInput(false)
-            love.keyboard.setKeyRepeat(false)
-            inputText = ""
+            chat.forceClose()
             return true
         elseif key == "backspace" then
             inputText = inputText:sub(1, -2)
@@ -246,6 +264,7 @@ function chat.keypressed(key)
 end
 
 function chat.textinput(t)
+    if not isOnline or not isGameState then return end
     if isInputActive then
         local filtered = ""
         for i = 1, #t do
@@ -261,6 +280,7 @@ function chat.textinput(t)
 end
 
 function chat.mousepressed(x, y, button)
+    if not isOnline or not isGameState then return false end
     local w, h = love.graphics.getDimensions()
     if button == 1 and x >= 10 and x <= w - 10 and y >= h - chatHeight - 50 and y <= h - 50 then
         chat.toggleInput()
@@ -270,6 +290,7 @@ function chat.mousepressed(x, y, button)
 end
 
 function chat.touchpressed(x, y)
+    if not isOnline or not isGameState then return false end
     local w, h = love.graphics.getDimensions()
     if x >= 10 and x <= w - 10 and y >= h - chatHeight - 50 and y <= h - 50 then
         chat.toggleInput()
