@@ -1,4 +1,4 @@
-name: Build Cubic Battle Android
+name: Build Cubic Battle Android (Universal)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 35
 
     steps:
       - uses: actions/checkout@v4
@@ -32,9 +32,37 @@ jobs:
         run: |
           sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
 
-      - name: Clone love-android (12.0 development)
+      - name: Cache love-android
+        id: cache-love
+        uses: actions/cache@v3
+        with:
+          path: love-android
+          key: ${{ runner.os }}-love-android-${{ hashFiles('love-android/**') }}
+          restore-keys: |
+            ${{ runner.os }}-love-android-
+
+      - name: Clone love-android
+        if: steps.cache-love.outputs.cache-hit != 'true'
         run: |
-          git clone --recursive --depth 1 https://github.com/love2d/love-android.git
+          git clone --recursive --depth 1 --branch 11.5 https://github.com/love2d/love-android.git
+
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches/
+            ~/.gradle/wrapper/
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Cache NDK
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ${{ runner.os }}-ndk-23.1.7779620
+          restore-keys: |
+            ${{ runner.os }}-ndk-
 
       - name: Set package name
         run: |
@@ -49,10 +77,10 @@ jobs:
           </resources>
           EOF
 
-      - name: Force universal (all ABIs)
+      - name: Set universal ABIs (arm64 + armv7)
         run: |
           sed -i '/abiFilters/d' love-android/app/build.gradle
-          echo "✅ Universal build (all ABIs)"
+          sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a", "armeabi-v7a" }' love-android/app/build.gradle
 
       - name: Fix AndroidManifest.xml
         run: |
@@ -82,14 +110,19 @@ jobs:
           org.gradle.parallel=true
           org.gradle.caching=true
           org.gradle.daemon=false
+          android.enableJetifier=true
+          android.useAndroidX=true
           EOF
 
       - name: Build APK
         working-directory: love-android
         run: |
-          ./gradlew assembleEmbedNoRecordRelease --no-daemon --stacktrace
+          ./gradlew assembleEmbedNoRecordRelease --no-daemon \
+            -Dorg.gradle.parallel=true \
+            -Dorg.gradle.caching=true \
+            -Dorg.gradle.jvmargs=-Xmx4g
 
-      - name: Check and rename APK
+      - name: Rename APK
         run: |
           APK_FILE=$(find love-android -name "*.apk" | head -1)
           if [ -z "$APK_FILE" ]; then
@@ -97,6 +130,7 @@ jobs:
             exit 1
           fi
           cp "$APK_FILE" "CubicBattle.apk"
+          echo "✅ APK size: $(ls -lh CubicBattle.apk | awk '{print $5}')"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
