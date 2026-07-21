@@ -89,14 +89,19 @@ jobs:
         run: |
           ./gradlew assembleEmbedNoRecordRelease --no-daemon
 
-      - name: Check and rename APK
+      - name: Sign APK
         run: |
-          APK_FILE=$(find love-android -name "*.apk" | head -1)
-          if [ -z "$APK_FILE" ]; then
-            echo "No APK found!"
-            exit 1
-          fi
-          cp "$APK_FILE" "CubicBattle.apk"
+          # Генерируем ключ
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" -noprompt
+          
+          # Находим APK
+          APK_UNSIGNED=$(find love-android -name "*.apk" | head -1)
+          echo "Unsigned APK: $APK_UNSIGNED"
+          
+          # Подписываем
+          ${ANDROID_SDK_ROOT}/build-tools/33.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --out CubicBattle.apk "$APK_UNSIGNED"
+          
+          echo "✅ APK signed successfully"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
