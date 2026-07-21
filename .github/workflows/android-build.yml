@@ -8,6 +8,111 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android Licenses
+        run: |
+          mkdir -p ~/.android
+          echo "android.useAndroidX=true" >> ~/.android/repositories.cfg
+          yes | sdkmanager --licenses || true
+
+      - name: Install Android SDK Components
+        run: |
+          sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
+
+      - name: Clone love-android
+        run: |
+          git clone --recursive --depth 1 https://github.com/love2d/love-android.git
+
+      - name: Set package name
+        run: |
+          sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
+
+      - name: Create app name
+        run: |
+          mkdir -p love-android/app/src/main/res/values
+          cat > love-android/app/src/main/res/values/strings.xml << 'EOF'
+          <resources>
+              <string name="app_name">Cubic Battle</string>
+          </resources>
+          EOF
+
+      - name: Force universal (all ABIs)
+        run: |
+          sed -i '/abiFilters/d' love-android/app/build.gradle
+          echo "Universal build (all ABIs)"
+
+      - name: Fix AndroidManifest.xml
+        run: |
+          MANIFEST="love-android/app/src/main/AndroidManifest.xml"
+          
+          if ! grep -q "INTERNET" "$MANIFEST"; then
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+          fi
+          
+          if ! grep -q "usesCleartextTraffic" "$MANIFEST"; then
+            sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
+          fi
+
+      - name: Package game.love
+        run: |
+          zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml" -x "*.apk"
+
+      - name: Embed game
+        run: |
+          mkdir -p love-android/app/src/embed/assets
+          cp game.love love-android/app/src/embed/assets/game.love
+
+      - name: Optimize Gradle
+        run: |
+          cat >> love-android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.daemon=false
+          EOF
+
+      - name: Build APK
+        working-directory: love-android
+        run: |
+          ./gradlew assembleEmbedNoRecordRelease --no-daemon --stacktrace
+
+      - name: Check and rename APK
+        run: |
+          APK_FILE=$(find love-android -name "*.apk" | head -1)
+          if [ -z "$APK_FILE" ]; then
+            echo "No APK found!"
+            exit 1
+          fi
+          cp "$APK_FILE" "CubicBattle.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CubicBattle-Android
+          path: "CubicBattle.apk"
+          compression-level: 0name: Build Cubic Battle Android
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
     timeout-minutes: 35
 
     steps:
