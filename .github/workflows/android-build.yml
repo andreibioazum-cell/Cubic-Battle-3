@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -32,37 +32,9 @@ jobs:
         run: |
           sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
 
-      - name: Cache love-android
-        id: cache-love
-        uses: actions/cache@v3
-        with:
-          path: love-android
-          key: ${{ runner.os }}-love-android-${{ hashFiles('love-android/**') }}
-          restore-keys: |
-            ${{ runner.os }}-love-android-
-
-      - name: Clone love-android (12.0)
-        if: steps.cache-love.outputs.cache-hit != 'true'
+      - name: Clone love-android
         run: |
           git clone --recursive --depth 1 https://github.com/love2d/love-android.git
-
-      - name: Cache Gradle
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches/
-            ~/.gradle/wrapper/
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Cache NDK
-        uses: actions/cache@v3
-        with:
-          path: /usr/local/lib/android/sdk/ndk
-          key: ${{ runner.os }}-ndk-23.1.7779620
-          restore-keys: |
-            ${{ runner.os }}-ndk-
 
       - name: Set package name
         run: |
@@ -77,10 +49,10 @@ jobs:
           </resources>
           EOF
 
-      - name: Set universal ABIs (arm64 + armv7)
+      - name: Force universal (all ABIs)
         run: |
           sed -i '/abiFilters/d' love-android/app/build.gradle
-          sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a", "armeabi-v7a" }' love-android/app/build.gradle
+          echo "Universal build (all ABIs)"
 
       - name: Fix AndroidManifest.xml
         run: |
@@ -110,17 +82,12 @@ jobs:
           org.gradle.parallel=true
           org.gradle.caching=true
           org.gradle.daemon=false
-          android.enableJetifier=true
-          android.useAndroidX=true
           EOF
 
       - name: Build APK
         working-directory: love-android
         run: |
-          ./gradlew assembleEmbedNoRecordRelease --no-daemon \
-            -Dorg.gradle.parallel=true \
-            -Dorg.gradle.caching=true \
-            -Dorg.gradle.jvmargs=-Xmx4g
+          ./gradlew assembleEmbedNoRecordRelease --no-daemon
 
       - name: Check and rename APK
         run: |
@@ -130,7 +97,6 @@ jobs:
             exit 1
           fi
           cp "$APK_FILE" "CubicBattle.apk"
-          echo "APK size: $(ls -lh CubicBattle.apk | awk '{print $5}')"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
