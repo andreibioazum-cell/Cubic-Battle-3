@@ -1,4 +1,4 @@
--- main.lua – с поддержкой шрифтов
+-- main.lua – с поддержкой онлайн-режима, обновлений и чата
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -185,7 +185,7 @@ function love.load()
     controls.load()
     loadMusic()
     online.init()
-    chat.load()  -- Загружаем чат
+    chat.load()
     
     love.window.setFullscreen(false)
     love.window.setMode(1024, 640, {resizable=true, vsync=1, minwidth=800, minheight=600})
@@ -205,6 +205,16 @@ function love.update(dt)
 
     if GameState.current ~= lastState then
         print("Switch to: " .. tostring(GameState.current))
+        
+        -- Обновляем состояние чата
+        chat.setGameState(GameState.current)
+        if GameState.current == "game_online" then
+            chat.setOnlineMode(true)
+        else
+            chat.setOnlineMode(false)
+            chat.forceClose()
+        end
+        
         if GameState.current == "lobby" then
             if lobby.load then lobby.load() end
         elseif GameState.current == "mode_select" then
@@ -225,7 +235,7 @@ function love.update(dt)
         lastState = GameState.current
     end
 
-    -- Обновляем чат всегда
+    -- Обновляем чат
     chat.update(dt)
 
     if GameState.current == "lobby" then
@@ -282,8 +292,8 @@ function love.draw()
         settings.draw()
     end
     
-    -- Рисуем чат поверх всего (кроме обновлений)
-    if GameState.current == "game" or GameState.current == "game_online" then
+    -- Рисуем чат только в онлайне
+    if GameState.current == "game_online" then
         chat.draw()
     end
     
@@ -305,9 +315,11 @@ function love.resize(w, h)
 end
 
 function love.keypressed(key)
-    -- Чат перехватывает клавиши в первую очередь
-    if chat.keypressed(key) then
-        return
+    -- Чат перехватывает клавиши только в онлайне
+    if GameState.current == "game_online" then
+        if chat.keypressed(key) then
+            return
+        end
     end
     
     if GameState.current == "game" or GameState.current == "game_online" then
@@ -322,6 +334,8 @@ function love.keypressed(key)
             playButtonSound()
         elseif GameState.current == "game_online" then
             online.leave()
+            chat.setOnlineMode(false)
+            chat.forceClose()
             GameState.current = "lobby"
             playButtonSound()
         elseif GameState.current == "mode_select" then
@@ -346,8 +360,10 @@ function love.keyreleased(key)
 end
 
 function love.textinput(t)
-    -- Чат получает ввод первым
-    chat.textinput(t)
+    -- Чат получает ввод только в онлайне
+    if GameState.current == "game_online" then
+        chat.textinput(t)
+    end
     
     if GameState.current == "settings" and settings.textinput then
         settings.textinput(t)
@@ -389,9 +405,11 @@ function love.touchpressed(id, x, y)
     if now - lastTap < 0.05 then return end
     lastTap = now
 
-    -- Чат обрабатывает касания
-    if chat.touchpressed(x, y) then
-        return
+    -- Чат обрабатывает касания только в онлайне
+    if GameState.current == "game_online" then
+        if chat.touchpressed(x, y) then
+            return
+        end
     end
 
     if showUpdateNotice and updatePopupVisible then
@@ -427,8 +445,10 @@ end
 function love.mousepressed(x, y, button, istouch)
     if isMobile or istouch then return end
     if button == 1 then
-        if chat.mousepressed(x, y, button) then
-            return
+        if GameState.current == "game_online" then
+            if chat.mousepressed(x, y, button) then
+                return
+            end
         end
         if showUpdateNotice and updatePopupVisible then
             if version_check.touchpressed(x, y) then
