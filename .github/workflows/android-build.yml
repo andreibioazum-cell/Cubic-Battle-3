@@ -37,14 +37,14 @@ jobs:
         uses: actions/cache@v3
         with:
           path: love-android
-          key: ${{ runner.os }}-love-android-12-${{ hashFiles('love-android/**') }}
+          key: ${{ runner.os }}-love-android-${{ hashFiles('love-android/**') }}
           restore-keys: |
-            ${{ runner.os }}-love-android-12-
+            ${{ runner.os }}-love-android-
 
       - name: Clone love-android (12.0)
         if: steps.cache-love.outputs.cache-hit != 'true'
         run: |
-          git clone --recursive --depth 1 --branch 12.0-experimental https://github.com/love2d/love-android.git
+          git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
       - name: Cache Gradle
         uses: actions/cache@v3
