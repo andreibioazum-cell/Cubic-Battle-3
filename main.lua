@@ -1,4 +1,4 @@
--- main.lua – с поддержкой онлайн-режима, обновлений
+-- main.lua – с поддержкой шрифтов
 local lobby = require("lobby")
 local game = require("game")
 local controls = require("controls")
@@ -9,6 +9,7 @@ local mode_select = require("mode_select")
 local difficulty = require("difficulty")
 local online = require("online")
 local version_check = require("version_check")
+local chat = require("chat")
 
 GameState = { current = "lobby" }
 
@@ -184,6 +185,7 @@ function love.load()
     controls.load()
     loadMusic()
     online.init()
+    chat.load()  -- Загружаем чат
     
     love.window.setFullscreen(false)
     love.window.setMode(1024, 640, {resizable=true, vsync=1, minwidth=800, minheight=600})
@@ -222,6 +224,9 @@ function love.update(dt)
         end
         lastState = GameState.current
     end
+
+    -- Обновляем чат всегда
+    chat.update(dt)
 
     if GameState.current == "lobby" then
         lobby.update(dt)
@@ -277,6 +282,11 @@ function love.draw()
         settings.draw()
     end
     
+    -- Рисуем чат поверх всего (кроме обновлений)
+    if GameState.current == "game" or GameState.current == "game_online" then
+        chat.draw()
+    end
+    
     if showUpdateNotice and updatePopupVisible then
         version_check.drawPopup()
     end
@@ -291,9 +301,15 @@ function love.resize(w, h)
     if credits.resize then credits.resize() end
     if settings.resize then settings.resize() end
     controls.resize()
+    chat.resize()
 end
 
 function love.keypressed(key)
+    -- Чат перехватывает клавиши в первую очередь
+    if chat.keypressed(key) then
+        return
+    end
+    
     if GameState.current == "game" or GameState.current == "game_online" then
         controls.keypressed(key)
     elseif GameState.current == "settings" and settings.keypressed then
@@ -330,6 +346,9 @@ function love.keyreleased(key)
 end
 
 function love.textinput(t)
+    -- Чат получает ввод первым
+    chat.textinput(t)
+    
     if GameState.current == "settings" and settings.textinput then
         settings.textinput(t)
     end
@@ -370,6 +389,11 @@ function love.touchpressed(id, x, y)
     if now - lastTap < 0.05 then return end
     lastTap = now
 
+    -- Чат обрабатывает касания
+    if chat.touchpressed(x, y) then
+        return
+    end
+
     if showUpdateNotice and updatePopupVisible then
         if version_check.touchpressed(x, y) then
             return
@@ -403,6 +427,9 @@ end
 function love.mousepressed(x, y, button, istouch)
     if isMobile or istouch then return end
     if button == 1 then
+        if chat.mousepressed(x, y, button) then
+            return
+        end
         if showUpdateNotice and updatePopupVisible then
             if version_check.touchpressed(x, y) then
                 return
