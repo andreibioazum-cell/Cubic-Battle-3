@@ -1,4 +1,4 @@
-name: Build Cubic Battle Windows
+name: Build CB3 Nightly (Love2D 12.0)
 
 on:
   push:
@@ -6,32 +6,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Package game.love
+      - name: Скачать свежую сборку Love2D 12.0 (из ночных артефактов)
         run: |
-          7z a -tzip game.zip * -r -x!".git/*" -x!".github/*"
-          ren game.zip game.love
-
-      - name: Download LÖVE Windows 64-bit (12.0)
-        run: |
-          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/12.0/love-12.0-win64.zip
+          curl -L -o love-windows.zip https://nightly.link/love2d/love/workflows/build/master/love-windows-x86_64.zip
           7z x love-windows.zip -olove-windows
 
-      - name: Create Portable EXE (64-bit)
+      - name: Упаковать игру в game.love
+        run: |
+          7z a -tzip game.zip * -r -x!".git/*" -x!".github/*" -x!"love-windows/*"
+          ren game.zip game.love
+
+      - name: Собрать портативный EXE
         run: |
           mkdir dist\CubicBattle
           copy love-windows\* dist\CubicBattle\
           copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
           del dist\CubicBattle\love.exe
 
-      - name: Upload Portable ZIP
+      - name: Загрузить артефакт
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle_Windows
+          name: CubicBattle_12.0
           path: dist\CubicBattle
