@@ -15,20 +15,20 @@ jobs:
 
       - name: Package game.love
         run: |
-          powershell Compress-Archive -Path * -DestinationPath game.zip -Force
+          7z a -tzip game.zip * -r -x!".git/*" -x!".github/*"
           ren game.zip game.love
 
       - name: Download LÖVE Windows 64-bit (12.0)
         run: |
           curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/12.0/love-12.0-win64.zip
-          Expand-Archive -Path love-windows.zip -DestinationPath love-windows
+          7z x love-windows.zip -olove-windows
 
       - name: Create Portable EXE (64-bit)
         run: |
-          New-Item -ItemType Directory -Force -Path dist\CubicBattle
-          Copy-Item love-windows\love-12.0-win64\* -Destination dist\CubicBattle\
-          cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
-          Remove-Item dist\CubicBattle\love.exe
+          mkdir dist\CubicBattle
+          copy love-windows\* dist\CubicBattle\
+          copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
+          del dist\CubicBattle\love.exe
 
       - name: Upload Portable ZIP
         uses: actions/upload-artifact@v4
