@@ -1,4 +1,4 @@
--- chat.lua - Чат в правом верхнем углу
+-- chat.lua - Чат для ПК и телефона
 local chat = {}
 
 local messages = {}
@@ -26,20 +26,19 @@ local colors = {
 
 local isOnline = false
 local isGameState = false
+local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
     local base = 1000
-    if love.system.getOS() == "Android" or love.system.getOS() == "iOS" then
-        base = 600
-    end
+    if isMobile then base = 600 end
     return math.min(w, h) / base
 end
 
 function chat.load()
     local scale = getScale()
     local fontSize = math.max(12, 14 * scale)
-    font = love.graphics.newFont(fontSize)
+    font = love.graphics.newFont("Roboto-Regular.ttf", fontSize)
     messages = {}
     inputText = ""
     isInputActive = false
@@ -220,8 +219,8 @@ function chat.draw()
     local scale = getScale()
     if not font then chat.load() end
     
-    -- КНОПКА ЧАТА (В ПРАВОМ ВЕРХНЕМ УГЛУ)
-    local btnSize = 30 * scale
+    -- КНОПКА ЧАТА (в правом верхнем углу)
+    local btnSize = 34 * scale
     local btnX = w - btnSize - 10
     local btnY = 10
     
@@ -242,7 +241,6 @@ function chat.draw()
     chat._btnY = btnY
     chat._btnSize = btnSize
     
-    -- ОКНО ЧАТА (если открыто)
     if not isChatOpen then return end
     
     local chatX = w - chatWidth * scale - 10
@@ -302,7 +300,7 @@ function chat.draw()
         love.graphics.print(displayText:sub(1, 50), chatX + 6, inputY + 3)
     else
         love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
-        love.graphics.print("Enter to chat", chatX + 4, chatY + chatHeight * scale - 18)
+        love.graphics.print(isMobile and "Tap to chat" or "Press T to chat", chatX + 4, chatY + chatHeight * scale - 18)
     end
 end
 
@@ -349,10 +347,14 @@ function chat.textinput(t)
     end
 end
 
-function chat.mousepressed(x, y, button)
+-- ============================================================
+--  ТОЛЬКО ДЛЯ ТЕЛЕФОНА (касания)
+-- ============================================================
+function chat.touchpressed(x, y)
     if not isOnline or not isGameState then return false end
     
-    if button == 1 and chat._btnX and chat._btnY then
+    -- Кнопка чата
+    if chat._btnX and chat._btnY then
         local s = chat._btnSize
         if x >= chat._btnX and x <= chat._btnX + s and
            y >= chat._btnY and y <= chat._btnY + s then
@@ -361,13 +363,29 @@ function chat.mousepressed(x, y, button)
         end
     end
     
+    -- Клик по окну чата = открыть клавиатуру
+    if isChatOpen then
+        local w, h = love.graphics.getDimensions()
+        local scale = getScale()
+        local chatX = w - chatWidth * scale - 10
+        local chatY = 10 + 34 * scale + 5
+        if x >= chatX and x <= chatX + chatWidth * scale and
+           y >= chatY and y <= chatY + chatHeight * scale then
+            if not isInputActive then
+                chat.toggleInput()
+            end
+            return true
+        end
+    end
+    
     return false
 end
 
-function chat.touchpressed(x, y)
+function chat.mousepressed(x, y, button)
     if not isOnline or not isGameState then return false end
+    if isMobile then return false end
     
-    if chat._btnX and chat._btnY then
+    if button == 1 and chat._btnX and chat._btnY then
         local s = chat._btnSize
         if x >= chat._btnX and x <= chat._btnX + s and
            y >= chat._btnY and y <= chat._btnY + s then
