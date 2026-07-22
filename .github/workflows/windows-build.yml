@@ -1,7 +1,8 @@
-name: Build_Cubic_Battle_Windows
+name: Build Cubic Battle Windows
 
 on:
   push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -12,26 +13,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Scrap-Mods HTTP library
-        run: |
-          curl -L -o http.dll https://github.com/Scrap-Mods/http/releases/latest/download/http.dll
-          echo "✅ http.dll downloaded"
-
       - name: Package game.love
         run: |
           powershell Compress-Archive -Path * -DestinationPath game.zip -Force
           ren game.zip game.love
 
-      - name: Download LÖVE Windows 64-bit (11.5)
+      - name: Download LÖVE Windows 64-bit (12.0)
         run: |
-          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
+          curl -L -o love-windows.zip https://github.com/love2d/love/releases/download/12.0/love-12.0-win64.zip
           Expand-Archive -Path love-windows.zip -DestinationPath love-windows
 
       - name: Create Portable EXE (64-bit)
         run: |
           New-Item -ItemType Directory -Force -Path dist\CubicBattle
-          Copy-Item love-windows\love-11.5-win64\* -Destination dist\CubicBattle\
-          Copy-Item http.dll -Destination dist\CubicBattle\
+          Copy-Item love-windows\love-12.0-win64\* -Destination dist\CubicBattle\
           cmd /c copy /b dist\CubicBattle\love.exe + game.love dist\CubicBattle\CubicBattle.exe
           Remove-Item dist\CubicBattle\love.exe
 
