@@ -1,4 +1,4 @@
--- game.lua - С УРОНОМ И ХП
+-- game.lua – полный игровой модуль (онлайн + офлайн)
 local controls = require("controls")
 local enemy = require("enemy")
 local online = require("online")
@@ -30,7 +30,7 @@ local laserTimer = 0
 local LASER_DURATION = 0.15
 local laserEndX, laserEndY = 0, 0
 local LASER_RANGE = 800
-local LASER_DAMAGE = 2  -- Урон лазера
+local LASER_DAMAGE = 2
 
 local dashCooldown = 0
 local dashTimer = 0
@@ -180,6 +180,8 @@ end
 -- ============================================================
 --  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 -- ============================================================
+local BULLETS_PATH = "bullets/"
+
 local function spawnBullet(x, y, dx, dy, isDash)
     table.insert(bullets, {
         x = x, y = y,
@@ -214,7 +216,6 @@ local function onHitPlayer(dmg, attacker)
     if _G.playHitSound then _G.playHitSound() end
     
     if isOnlineMode and online.isConnected() and attacker and attacker ~= online.getMyUid() then
-        -- Отправляем урон в Firebase
         online.sendDamage(online.getMyUid(), dmg, attacker)
     end
     
@@ -235,7 +236,6 @@ local function fireLaser(px, py, aimX, aimY)
         aimX, aimY = aimX/len, aimY/len
     end
     
-    -- В онлайн режиме лазер бьёт игроков
     if isOnlineMode then
         local players = online.getPlayers()
         for uid, p in pairs(players) do
@@ -258,7 +258,6 @@ local function fireLaser(px, py, aimX, aimY)
         end
     end
     
-    -- Оффлайн режим: бьёт врага
     if not isOnlineMode then
         local e, _, _ = enemy.get()
         if e then
@@ -366,7 +365,6 @@ function game.update(dt)
         online.update(dt)
         online.sendPosition(cube.x, cube.y)
         
-        -- Проверяем урон каждые 0.1 секунды
         damageCheckTimer = damageCheckTimer + dt
         if damageCheckTimer >= 0.1 then
             damageCheckTimer = 0
@@ -432,7 +430,6 @@ function game.update(dt)
             dashTimer = DASH_DURATION
             dashCooldown = DASH_COOLDOWN
             controls.setAbilityAvailable(false)
-            -- БЕЛАЯ ПУЛЯ ПРИ РЫВКЕ
             local whiteBullet = {
                 x = cube.x, y = cube.y,
                 vx = dashDirX * BULLET_SPEED * 1.5,
@@ -486,7 +483,6 @@ function game.update(dt)
     cam.x = cam.x + (targetX - cam.x) * k
     cam.y = cam.y + (targetY - cam.y) * k
 
-    -- ОБНОВЛЕНИЕ ПУЛЬ (СВОИ)
     for i = #bullets, 1, -1 do
         local b = bullets[i]
         b.x = b.x + b.vx * dt
@@ -495,7 +491,6 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
-    -- ОНЛАЙН: УРОН ОТ ПУЛЬ ДРУГИХ ИГРОКОВ
     if isOnlineMode and online.isConnected() then
         local onlineBullets = online.getBullets()
         for id, b in pairs(onlineBullets) do
@@ -505,14 +500,12 @@ function game.update(dt)
                 if bx * bx + by * by <= (PLAYER_SIZE * 0.5) ^ 2 then
                     local damage = b.isDash and 3 or 1
                     onHitPlayer(damage, b.owner)
-                    -- Удаляем пулю
                     online.sendRequest("DELETE", BULLETS_PATH .. id, nil, function() end)
                 end
             end
         end
     end
 
-    -- ОФФЛАЙН: враг
     if not isOnlineMode then
         local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
         if enemyKilled then
@@ -562,10 +555,8 @@ function game.draw()
 
     drawSnow()
 
-    -- СВОИ ПУЛИ
     for _, b in ipairs(bullets) do
         if b.isDash and b.isWhiteDash then
-            -- БЕЛАЯ ПУЛЯ (РЫВОК BUK)
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.circle("fill", b.x, b.y, 12)
             love.graphics.setColor(1, 1, 1, 0.5)
@@ -581,7 +572,6 @@ function game.draw()
         end
     end
 
-    -- ОНЛАЙН: ПУЛИ ДРУГИХ ИГРОКОВ
     if isOnlineMode then
         local onlineBullets = online.getBullets()
         for id, b in pairs(onlineBullets) do
@@ -597,13 +587,11 @@ function game.draw()
         end
     end
 
-    -- ОНЛАЙН: СПОСОБНОСТИ
     if isOnlineMode then
         local onlineAbilities = online.getAbilities() or {}
         for aid, ab in pairs(onlineAbilities) do
             if ab.owner ~= online.getMyUid() then
                 if ab.type == "laser" then
-                    -- ЧУЖОЙ ЛАЗЕР (КРАСНЫЙ)
                     love.graphics.setColor(1, 0, 0, 0.6)
                     love.graphics.setLineWidth(5)
                     love.graphics.line(ab.x, ab.y, ab.x + ab.dirX * 800, ab.y + ab.dirY * 800)
@@ -628,13 +616,11 @@ function game.draw()
         end
     end
 
-    -- ВРАГ: только офлайн
     if not isOnlineMode then
         enemy.drawBullets()
         enemy.draw()
     end
 
-    -- ОНЛАЙН: другие игроки с ХП
     if isOnlineMode then
         for id, p in pairs(online.getPlayers()) do
             if id ~= online.getMyUid() then
@@ -655,7 +641,6 @@ function game.draw()
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.draw(imgToDraw, p.x - PLAYER_SIZE/2, p.y - PLAYER_SIZE/2, 0, 1, 1)
 
-                -- ПОЛОСКА ХП НАД ИГРОКОМ
                 local hp = p.hp or 5
                 local hpW = 40
                 local hpH = 4
@@ -685,7 +670,6 @@ function game.draw()
         love.graphics.line(cube.x, cube.y, cube.x + ax * 180, cube.y + ay * 180)
     end
 
-    -- СВОЙ ЛАЗЕР (КРАСНЫЙ ДЛЯ НАСТИ)
     if laserActive then
         love.graphics.setLineWidth(8)
         love.graphics.setColor(1, 0, 0, 0.8)
@@ -735,7 +719,6 @@ function game.draw()
 
     love.graphics.pop()
 
-    -- HUD
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)
     local barW, barH = 200, 18
