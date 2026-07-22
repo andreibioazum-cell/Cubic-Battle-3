@@ -206,7 +206,6 @@ function love.update(dt)
     if GameState.current ~= lastState then
         print("Switch to: " .. tostring(GameState.current))
         
-        -- Обновляем состояние чата
         chat.setGameState(GameState.current)
         if GameState.current == "game_online" then
             chat.setOnlineMode(true)
@@ -235,7 +234,6 @@ function love.update(dt)
         lastState = GameState.current
     end
 
-    -- Обновляем чат
     chat.update(dt)
 
     if GameState.current == "lobby" then
@@ -292,7 +290,6 @@ function love.draw()
         settings.draw()
     end
     
-    -- Рисуем чат только в онлайне
     if GameState.current == "game_online" then
         chat.draw()
     end
@@ -315,7 +312,6 @@ function love.resize(w, h)
 end
 
 function love.keypressed(key)
-    -- Чат перехватывает клавиши только в онлайне
     if GameState.current == "game_online" then
         if chat.keypressed(key) then
             return
@@ -360,7 +356,6 @@ function love.keyreleased(key)
 end
 
 function love.textinput(t)
-    -- Чат получает ввод только в онлайне
     if GameState.current == "game_online" then
         chat.textinput(t)
     end
@@ -405,7 +400,6 @@ function love.touchpressed(id, x, y)
     if now - lastTap < 0.05 then return end
     lastTap = now
 
-    -- Чат обрабатывает касания только в онлайне
     if GameState.current == "game_online" then
         if chat.touchpressed(x, y) then
             return
