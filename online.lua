@@ -1,4 +1,4 @@
--- online.lua - С ХП И УРОНОМ
+-- online.lua - ПК = Scrap-Mods/http, ANDROID = lua-https
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -7,7 +7,7 @@ local API_KEY = "AIzaSyCe25SaGWfaQsPyje10wi_Wsmr5yHz3HE4"
 local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
-local DAMAGE_PATH = "damage/"  -- НОВЫЙ ПУТЬ ДЛЯ УРОНА
+local DAMAGE_PATH = "damage/"
 
 local myUid = nil
 local myNickname = nil
@@ -31,72 +31,6 @@ end
 
 local function generateUuid()
     return "p" .. os.time() .. math.random(1000, 9999)
-end
-
--- ============================================================
---  ANDROID: lua-https (LÖVE 12)
--- ============================================================
-local function sendAndroidRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] Android: " .. method .. " " .. path)
-    
-    local ok, https = pcall(require, "https")
-    if not ok then
-        print("[ONLINE] ❌ https not found, trying curl...")
-        return sendAndroidCurl(method, path, body, callback)
-    end
-    
-    local options = {
-        method = method,
-        headers = {
-            ["Content-Type"] = "application/json"
-        }
-    }
-    
-    if body then
-        options.data = body
-    end
-    
-    local code, response = https.request(url, options)
-    
-    if code >= 200 and code < 300 then
-        print("[ONLINE] ✅ Android success! Code: " .. code)
-        if callback then callback(true, response) end
-        return true
-    else
-        print("[ONLINE] ❌ Android error: " .. tostring(code))
-        if callback then callback(false, "HTTP error: " .. code) end
-        return false
-    end
-end
-
-local function sendAndroidCurl(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    local data = body or "{}"
-    data = data:gsub('"', '\\"')
-    
-    local cmd
-    if method == "GET" then
-        cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-    else
-        cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-    end
-    
-    local handle = io.popen(cmd)
-    local result = handle and handle:read("*a")
-    if handle then handle:close() end
-    
-    if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
-        print("[ONLINE] ✅ Android curl success!")
-        if callback then callback(true, result) end
-        return true
-    else
-        print("[ONLINE] ❌ Android curl failed")
-        if callback then callback(false, "Curl failed") end
-        return false
-    end
 end
 
 -- ============================================================
@@ -126,6 +60,7 @@ local function sendPCRequest(method, path, body, callback)
     local url = DB_URL .. path .. ".json?auth=" .. API_KEY
     
     print("[ONLINE] PC: " .. method .. " " .. path)
+    print("[ONLINE] URL: " .. url)
     
     if httpLoaded and http then
         local options = {
@@ -153,35 +88,52 @@ local function sendPCRequest(method, path, body, callback)
         
         return true
     else
-        local data = body or "{}"
-        data = data:gsub('"', '\\"')
-        
-        local cmd
-        if method == "GET" then
-            cmd = 'curl -s -m 10 -X GET "' .. url .. '"'
-        else
-            cmd = 'curl -s -m 10 -X ' .. method .. ' -H "Content-Type: application/json" -d "' .. data .. '" "' .. url .. '"'
-        end
-        
-        local handle = io.popen(cmd)
-        local result = handle and handle:read("*a")
-        if handle then handle:close() end
-        
-        if result and result ~= "" and not result:match("curl:") and not result:match("Failed") then
-            print("[ONLINE] ✅ Curl success!")
-            if callback then callback(true, result) end
-            return true
-        else
-            print("[ONLINE] ❌ Curl failed")
-            if callback then callback(false, "Curl failed") end
-            return false
-        end
+        print("[ONLINE] ❌ No HTTP client available on PC!")
+        if callback then callback(false, "No HTTP client") end
+        return false
     end
 end
 
 -- ============================================================
---  ОТПРАВКА ЗАПРОСА
+--  ANDROID: lua-https
 -- ============================================================
+local function sendAndroidRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    
+    print("[ONLINE] Android: " .. method .. " " .. path)
+    print("[ONLINE] URL: " .. url)
+    
+    local ok, https = pcall(require, "https")
+    if not ok then
+        print("[ONLINE] ❌ https not found on Android!")
+        if callback then callback(false, "https not found") end
+        return false
+    end
+    
+    local options = {
+        method = method,
+        headers = {
+            ["Content-Type"] = "application/json"
+        }
+    }
+    
+    if body then
+        options.data = body
+    end
+    
+    local code, response = https.request(url, options)
+    
+    if code >= 200 and code < 300 then
+        print("[ONLINE] ✅ Android success! Code: " .. code)
+        if callback then callback(true, response) end
+        return true
+    else
+        print("[ONLINE] ❌ Android error: " .. tostring(code))
+        if callback then callback(false, "HTTP error: " .. code) end
+        return false
+    end
+end
+
 function online.sendRequest(method, path, body, callback)
     if isAndroid then
         return sendAndroidRequest(method, path, body, callback)
@@ -191,70 +143,7 @@ function online.sendRequest(method, path, body, callback)
 end
 
 -- ============================================================
---  НОВЫЕ ФУНКЦИИ ДЛЯ УРОНА И ХП
--- ============================================================
-
--- Отправить урон игроку
-function online.sendDamage(targetUid, damage, attackerUid)
-    if not isConnected or not myUid then return end
-    
-    local path = DAMAGE_PATH .. targetUid
-    local data = string.format('{"damage":%d,"attacker":"%s","time":%f}', 
-        damage, attackerUid or myUid, love.timer.getTime())
-    online.sendRequest("PUT", path, data)
-    print("[ONLINE] 💥 Damage sent to " .. targetUid .. ": " .. damage)
-end
-
--- Получить урон для игрока
-function online.fetchDamage(callback)
-    if not isConnected or not myUid then return end
-    
-    local path = DAMAGE_PATH .. myUid
-    online.sendRequest("GET", path, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            local damageData = parseDamage(res)
-            if damageData and damageData.damage then
-                print("[ONLINE] 💥 Received damage: " .. damageData.damage)
-                if callback then callback(damageData) end
-                -- Удаляем урон после получения
-                online.sendRequest("DELETE", path, nil, function() end)
-            end
-        end
-    end)
-end
-
-local function parseDamage(jsonStr)
-    if not jsonStr or jsonStr == "" or jsonStr == "null" then return nil end
-    local damage = jsonStr:match('"damage":%s*(%d+)')
-    local attacker = jsonStr:match('"attacker":%s*"([^"]+)"')
-    local time = jsonStr:match('"time":%s*([%d%.]+)')
-    
-    if damage then
-        return {
-            damage = tonumber(damage) or 0,
-            attacker = attacker or "",
-            time = tonumber(time) or 0
-        }
-    end
-    return nil
-end
-
--- Обновить ХП игрока в Firebase
-function online.updateHP(hp)
-    if not isConnected or not myUid then return end
-    local path = PLAYERS_PATH .. myUid
-    local data = string.format('{"hp":%d}', hp)
-    online.sendRequest("PATCH", path, data)
-end
-
--- Получить ХП игрока
-function online.getPlayerHP(uid)
-    if not players[uid] then return 5 end
-    return players[uid].hp or 5
-end
-
--- ============================================================
---  ПАРСИНГ (ОБНОВЛЁННЫЙ)
+--  ПАРСИНГ
 -- ============================================================
 function online.parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
@@ -329,9 +218,6 @@ function online.parseAbilities(jsonStr)
     return result
 end
 
--- ============================================================
---  ОСНОВНЫЕ ФУНКЦИИ
--- ============================================================
 function online.init(nickname)
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
@@ -510,6 +396,44 @@ function online.leave()
     myNickname = nil
     lastSentX = nil
     lastSentY = nil
+end
+
+-- ============================================================
+--  ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ
+-- ============================================================
+function online.sendDamage(targetUid, damage, attackerUid)
+    if not isConnected or not myUid then return end
+    local path = DAMAGE_PATH .. targetUid
+    local data = string.format('{"damage":%d,"attacker":"%s","time":%f}', 
+        damage, attackerUid or myUid, love.timer.getTime())
+    online.sendRequest("PUT", path, data)
+end
+
+function online.fetchDamage(callback)
+    if not isConnected or not myUid then return end
+    local path = DAMAGE_PATH .. myUid
+    online.sendRequest("GET", path, nil, function(ok, res)
+        if ok and res and res ~= "null" then
+            local damage = res:match('"damage":%s*(%d+)')
+            local attacker = res:match('"attacker":%s*"([^"]+)"')
+            if damage then
+                if callback then callback({damage=tonumber(damage), attacker=attacker}) end
+                online.sendRequest("DELETE", path, nil, function() end)
+            end
+        end
+    end)
+end
+
+function online.updateHP(hp)
+    if not isConnected or not myUid then return end
+    local path = PLAYERS_PATH .. myUid
+    local data = string.format('{"hp":%d}', hp)
+    online.sendRequest("PATCH", path, data)
+end
+
+function online.getPlayerHP(uid)
+    if not players[uid] then return 5 end
+    return players[uid].hp or 5
 end
 
 return online
