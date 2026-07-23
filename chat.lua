@@ -1,4 +1,4 @@
--- chat.lua - Чат для ПК и телефона
+-- chat.lua - Чат для ПК и телефона (исправлен)
 local chat = {}
 
 local messages = {}
@@ -35,6 +35,50 @@ local function getScale()
     return math.min(w, h) / base
 end
 
+-- ============================================================
+--  ЗАЩИТА ОТ БИТЫХ UTF-8
+-- ============================================================
+local function sanitize_utf8(str)
+    if not str then return "" end
+    -- Удаляем все байты, которые не являются валидным UTF-8
+    local result = {}
+    local i = 1
+    while i <= #str do
+        local byte = str:byte(i)
+        if byte < 0x80 then
+            -- ASCII (0x00-0x7F)
+            if byte >= 0x20 and byte < 0x7F then
+                table.insert(result, string.char(byte))
+            elseif byte == 0x0A or byte == 0x0D then
+                table.insert(result, string.char(byte))
+            end
+            i = i + 1
+        elseif byte >= 0xC2 and byte <= 0xDF then
+            -- 2-байтовый UTF-8
+            if i+1 <= #str and str:byte(i+1) >= 0x80 and str:byte(i+1) <= 0xBF then
+                table.insert(result, str:sub(i, i+1))
+            end
+            i = i + 2
+        elseif byte >= 0xE0 and byte <= 0xEF then
+            -- 3-байтовый UTF-8
+            if i+2 <= #str and str:byte(i+1) >= 0x80 and str:byte(i+1) <= 0xBF and str:byte(i+2) >= 0x80 and str:byte(i+2) <= 0xBF then
+                table.insert(result, str:sub(i, i+2))
+            end
+            i = i + 3
+        elseif byte >= 0xF0 and byte <= 0xF4 then
+            -- 4-байтовый UTF-8
+            if i+3 <= #str and str:byte(i+1) >= 0x80 and str:byte(i+1) <= 0xBF and str:byte(i+2) >= 0x80 and str:byte(i+2) <= 0xBF and str:byte(i+3) >= 0x80 and str:byte(i+3) <= 0xBF then
+                table.insert(result, str:sub(i, i+3))
+            end
+            i = i + 4
+        else
+            -- Некорректный байт, пропускаем
+            i = i + 1
+        end
+    end
+    return table.concat(result)
+end
+
 function chat.load()
     local scale = getScale()
     local fontSize = math.max(12, 14 * scale)
@@ -69,15 +113,18 @@ end
 function chat.addMessage(text, sender, color)
     if not text or text == "" then return end
     
-    local safeText = text
+    local safeText = sanitize_utf8(text)
     if #safeText > 100 then
         safeText = safeText:sub(1, 100)
     end
     
+    local safeSender = sanitize_utf8(sender or "System")
+    if #safeSender > 20 then safeSender = safeSender:sub(1, 20) end
+    
     local timestamp = os.date("%H:%M")
     table.insert(messages, {
         text = safeText,
-        sender = sender or "System",
+        sender = safeSender,
         color = color or colors.player,
         time = timestamp,
         id = os.time() .. "_" .. math.random(1000, 9999)
@@ -136,7 +183,7 @@ function chat.sendMessage(text)
     if text == "" then return end
     if not isOnline or not isGameState then return end
     
-    local filtered = text
+    local filtered = sanitize_utf8(text)
     local badWords = {"хуй", "пизда", "бля", "еба", "сука", "гондон", "пидор", "мудак", "залупа"}
     for _, word in ipairs(badWords) do
         filtered = filtered:gsub(word, "***")
@@ -185,8 +232,8 @@ function chat.fetchMessages()
                         if sender == "Admin" then color = colors.admin end
                         if sender == "System" then color = colors.system end
                         table.insert(messages, {
-                            text = text,
-                            sender = sender,
+                            text = sanitize_utf8(text),
+                            sender = sanitize_utf8(sender),
                             color = color,
                             time = os.date("%H:%M"),
                             id = id
@@ -261,25 +308,34 @@ function chat.draw()
         local msg = messages[i]
         local alpha = (i == startIdx) and 0.5 or 1
         
+        -- Время
         love.graphics.setColor(0.6, 0.6, 0.6, alpha * 0.6)
         local timeText = msg.time .. " "
         love.graphics.print(timeText, chatX + 4, y)
         local timeW = font:getWidth(timeText)
         
+        -- Ник
         love.graphics.setColor(msg.color[1], msg.color[2], msg.color[3], alpha)
         local senderText = msg.sender .. ": "
         love.graphics.print(senderText, chatX + 4 + timeW, y)
         local senderW = font:getWidth(senderText)
         
+        -- Текст (с защитой от битых символов)
         love.graphics.setColor(1, 1, 1, alpha)
         local text = msg.text or ""
+        -- Обрезаем длинный текст
         if font:getWidth(text) > (chatWidth * scale - 20 - timeW - senderW) then
             while font:getWidth(text .. "...") > (chatWidth * scale - 20 - timeW - senderW) and #text > 1 do
                 text = text:sub(1, -2)
             end
             text = text .. "..."
         end
-        love.graphics.print(text, chatX + 4 + timeW + senderW, y)
+        -- Используем pcall для защиты от ошибок UTF-8 при печати
+        local ok, err = pcall(love.graphics.print, text, chatX + 4 + timeW + senderW, y)
+        if not ok then
+            -- Если ошибка, печатаем только безопасные символы
+            love.graphics.print(sanitize_utf8(text), chatX + 4 + timeW + senderW, y)
+        end
         
         y = y + 16
     end
@@ -293,7 +349,7 @@ function chat.draw()
         love.graphics.rectangle("line", chatX + 2, inputY, chatWidth * scale - 4, 20, 4 * scale, 4 * scale)
         
         love.graphics.setColor(1, 1, 1, 1)
-        local displayText = inputText
+        local displayText = sanitize_utf8(inputText)
         if love.timer.getTime() % 1 < 0.5 then
             displayText = displayText .. "_"
         end
@@ -334,26 +390,16 @@ end
 function chat.textinput(t)
     if not isOnline or not isGameState then return end
     if isInputActive then
-        local filtered = ""
-        for i = 1, #t do
-            local byte = t:byte(i)
-            if (byte >= 32 and byte <= 126) or byte >= 192 then
-                filtered = filtered .. string.char(byte)
-            end
-        end
+        local filtered = sanitize_utf8(t)
         if #inputText + #filtered <= 100 then
             inputText = inputText .. filtered
         end
     end
 end
 
--- ============================================================
---  ТОЛЬКО ДЛЯ ТЕЛЕФОНА (касания)
--- ============================================================
 function chat.touchpressed(x, y)
     if not isOnline or not isGameState then return false end
     
-    -- Кнопка чата
     if chat._btnX and chat._btnY then
         local s = chat._btnSize
         if x >= chat._btnX and x <= chat._btnX + s and
@@ -363,7 +409,6 @@ function chat.touchpressed(x, y)
         end
     end
     
-    -- Клик по окну чата = открыть клавиатуру
     if isChatOpen then
         local w, h = love.graphics.getDimensions()
         local scale = getScale()
