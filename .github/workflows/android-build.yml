@@ -8,12 +8,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
 
-      # Включаем автоматическое кэширование Gradle-зависимостей
+      # 1. СНАЧАЛА клонируем love-android, чтобы появились файлы .gradle
+      - name: Clone love-android
+        run: |
+          git clone --recursive --depth 1 https://github.com
+
+      # 2. ТЕПЕРЬ запускаем Java и кэш (он без проблем найдет все файлы внутри love-android)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -21,9 +26,11 @@ jobs:
           java-version: '17'
           cache: 'gradle' 
 
+      # Игнорируем предупреждение о Node 20 (оно информационное, сборку не ломает)
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # Все ваши оригинальные шаги без изменений:
       - name: Accept Android Licenses
         run: |
           mkdir -p ~/.android
@@ -33,11 +40,6 @@ jobs:
       - name: Install Android SDK Components
         run: |
           sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
-
-      # Полный оригинальный шаг клонирования репозитория LÖVE со всеми подмодулями
-      - name: Clone love-android
-        run: |
-          git clone --recursive --depth 1 https://github.com
 
       - name: Set package name
         run: |
@@ -52,7 +54,7 @@ jobs:
           </resources>
           EOF
 
-      # Возвращаем ваш оригинальный шаг для сборки под ВСЕ архитектуры (32 и 64 бит)
+      # Сохраняем универсальную сборку под ВСЕ архитектуры (32 и 64 бит), как вам нужно
       - name: Force universal (all ABIs)
         run: |
           sed -i '/abiFilters/d' love-android/app/build.gradle
@@ -74,13 +76,12 @@ jobs:
         run: |
           zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml" -x "*.apk"
 
-      # Оригинальный шаг копирования вашей игры внутрь ассетов LÖVE
+      # Копирование игры на место
       - name: Embed game
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
 
-      # Оптимизация параметров сборки без выключения daemon (чтобы не ломать логику LÖVE)
       - name: Optimize Gradle
         run: |
           cat >> love-android/gradle.properties << 'EOF'
@@ -90,7 +91,7 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      # Сборка APK с отключением ресурсоемких проверок кода (Lint), что экономит время
+      # Сборка APK с ускорением за счет пропуска проверок Lint
       - name: Build APK
         working-directory: love-android
         run: |
