@@ -8,38 +8,48 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
 
-      # 1. СНАЧАЛА клонируем love-android, чтобы появились файлы .gradle
-      - name: Clone love-android
-        run: |
-          git clone --recursive --depth 1 https://github.com
-
-      # 2. ТЕПЕРЬ запускаем Java и кэш (он без проблем найдет все файлы внутри love-android)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
-          cache: 'gradle' 
+          cache: 'gradle'   # кэш для Gradle Wrapper и зависимостей
 
-      # Игнорируем предупреждение о Node 20 (оно информационное, сборку не ломает)
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Все ваши оригинальные шаги без изменений:
+      # Кэш для всего Android SDK (платформы, build-tools, NDK)
+      - name: Cache Android SDK
+        id: cache-android
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}
+          key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/build.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-
+
+      # Устанавливаем SDK только если кэш не восстановлен
       - name: Accept Android Licenses
+        if: steps.cache-android.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/.android
           echo "android.useAndroidX=true" >> ~/.android/repositories.cfg
           yes | sdkmanager --licenses || true
 
       - name: Install Android SDK Components
+        if: steps.cache-android.outputs.cache-hit != 'true'
         run: |
           sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
+
+      # Клонирование love-android (уже с --depth 1)
+      - name: Clone love-android
+        run: |
+          git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
       - name: Set package name
         run: |
@@ -50,11 +60,10 @@ jobs:
           mkdir -p love-android/app/src/main/res/values
           cat > love-android/app/src/main/res/values/strings.xml << 'EOF'
           <resources>
-              <string name="app_name">Cubic Battle</string>
+            <string name="app_name">Cubic Battle</string>
           </resources>
           EOF
 
-      # Сохраняем универсальную сборку под ВСЕ архитектуры (32 и 64 бит), как вам нужно
       - name: Force universal (all ABIs)
         run: |
           sed -i '/abiFilters/d' love-android/app/build.gradle
@@ -63,20 +72,17 @@ jobs:
       - name: Fix AndroidManifest.xml
         run: |
           MANIFEST="love-android/app/src/main/AndroidManifest.xml"
-          
           if ! grep -q "INTERNET" "$MANIFEST"; then
-            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+            sed -i '/<manifest /a\ <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
           fi
-          
           if ! grep -q "usesCleartextTraffic" "$MANIFEST"; then
-            sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
+            sed -i '/<application /a\ android:usesCleartextTraffic="true"' "$MANIFEST"
           fi
 
       - name: Package game.love
         run: |
           zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml" -x "*.apk"
 
-      # Копирование игры на место
       - name: Embed game
         run: |
           mkdir -p love-android/app/src/embed/assets
@@ -85,17 +91,16 @@ jobs:
       - name: Optimize Gradle
         run: |
           cat >> love-android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4g -XX:+UseParallelGC
+          org.gradle.jvmargs=-Xmx4g
           org.gradle.parallel=true
           org.gradle.caching=true
           org.gradle.daemon=false
           EOF
 
-      # Сборка APK с ускорением за счет пропуска проверок Lint
       - name: Build APK
         working-directory: love-android
         run: |
-          ./gradlew assembleEmbedNoRecordRelease -x lint -x lintVitalEmbedNoRecordRelease --no-daemon --stacktrace
+          ./gradlew assembleEmbedNoRecordRelease --no-daemon --stacktrace
 
       - name: Check and rename APK
         run: |
