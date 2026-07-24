@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  # Подавляет предупреждение о Node 20
+  # Подавляет предупреждение о Node 20 (временное решение)
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
@@ -15,18 +15,22 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v4
+      # 1. Клонирование репозитория
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # 2. Установка Java 17
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
+      # 3. Установка Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Кэш Android SDK
+      # 4. Кэширование Android SDK (сохраняет платформы, build-tools, NDK)
       - name: Cache Android SDK
         id: cache-android
         uses: actions/cache@v4
@@ -36,21 +40,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-android-sdk-
 
+      # 5. Принятие лицензий Android
       - name: Accept Android Licenses
         run: |
           mkdir -p ~/.android
           echo "android.useAndroidX=true" >> ~/.android/repositories.cfg
           yes | sdkmanager --licenses || true
 
+      # 6. Установка необходимых компонентов SDK (платформа 33, build-tools 33.0.0, NDK 26.3)
       - name: Install Android SDK Components
         run: |
           sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;26.3.11579264"
 
+      # 7. Клонирование love-android с веткой 12.0
       - name: Clone love-android (12.0)
         run: |
           git clone --recursive --depth 1 --branch 12.0 https://github.com/love2d/love-android.git
 
-      # Кэш Gradle
+      # 8. Кэширование Gradle (зависимости и собранные файлы)
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -62,10 +69,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      # 9. Изменение package name на com.CB3
       - name: Set package name
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
 
+      # 10. Установка имени приложения "Cubic Battle"
       - name: Create app name
         run: |
           mkdir -p love-android/app/src/main/res/values
@@ -75,11 +84,13 @@ jobs:
           </resources>
           EOF
 
+      # 11. Сборка для всех ABI (универсальный APK)
       - name: Force universal (all ABIs)
         run: |
           sed -i '/abiFilters/d' love-android/app/build.gradle
           echo "Universal build (all ABIs)"
 
+      # 12. Добавление разрешения INTERNET и usesCleartextTraffic в AndroidManifest.xml
       - name: Fix AndroidManifest.xml
         run: |
           MANIFEST="love-android/app/src/main/AndroidManifest.xml"
@@ -90,15 +101,18 @@ jobs:
             sed -i '/<application /a\ android:usesCleartextTraffic="true"' "$MANIFEST"
           fi
 
+      # 13. Упаковка игровых файлов в game.love (исключая служебные папки)
       - name: Package game.love
         run: |
           zip -9 -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml" -x "*.apk"
 
+      # 14. Встраивание game.love в assets
       - name: Embed game
         run: |
           mkdir -p love-android/app/src/embed/assets
           cp game.love love-android/app/src/embed/assets/game.love
 
+      # 15. Оптимизация Gradle (увеличение памяти, параллельная сборка)
       - name: Optimize Gradle
         run: |
           cat >> love-android/gradle.properties << 'EOF'
@@ -108,11 +122,13 @@ jobs:
           org.gradle.daemon=false
           EOF
 
+      # 16. Сборка APK (релизная версия без записи)
       - name: Build APK
         working-directory: love-android
         run: |
           ./gradlew assembleEmbedNoRecordRelease --no-daemon --stacktrace
 
+      # 17. Поиск собранного APK и переименование в CubicBattle.apk
       - name: Check and rename APK
         run: |
           APK_FILE=$(find love-android -name "*.apk" | head -1)
@@ -122,6 +138,7 @@ jobs:
           fi
           cp "$APK_FILE" "CubicBattle.apk"
 
+      # 18. Загрузка APK как артефакта сборки
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
