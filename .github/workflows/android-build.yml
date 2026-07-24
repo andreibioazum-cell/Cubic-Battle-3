@@ -1,17 +1,14 @@
-name: Build Cubic Battle Android
+name: Build Cubic Battle Android (Universal)
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 35
 
     steps:
       - uses: actions/checkout@v4
@@ -25,15 +22,6 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Cache Android SDK
-        id: cache-android
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.ANDROID_HOME }}
-          key: ${{ runner.os }}-android-sdk-v2-${{ hashFiles('**/build.gradle') }}
-          restore-keys: |
-            ${{ runner.os }}-android-sdk-v2-
-
       - name: Accept Android Licenses
         run: |
           mkdir -p ~/.android
@@ -42,23 +30,42 @@ jobs:
 
       - name: Install Android SDK Components
         run: |
-          sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;26.3.11579264"
+          sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
+
+      # === КЭШИРОВАНИЕ ===
+      - name: Cache love-android
+        id: cache-love
+        uses: actions/cache@v3
+        with:
+          path: love-android
+          key: ${{ runner.os }}-love-android-${{ hashFiles('love-android/**') }}
+          restore-keys: |
+            ${{ runner.os }}-love-android-
 
       - name: Clone love-android (12.0)
+        if: steps.cache-love.outputs.cache-hit != 'true'
         run: |
-          git clone --recursive --depth 1 --branch 12.x https://github.com/love2d/love-android.git
+          git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
       - name: Cache Gradle
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           path: |
             ~/.gradle/caches/
             ~/.gradle/wrapper/
-            love-android/.gradle/
-          key: ${{ runner.os }}-gradle-v2-${{ hashFiles('love-android/**/*.gradle*', 'love-android/**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
           restore-keys: |
-            ${{ runner.os }}-gradle-v2-
+            ${{ runner.os }}-gradle-
 
+      - name: Cache NDK
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ${{ runner.os }}-ndk-23.1.7779620
+          restore-keys: |
+            ${{ runner.os }}-ndk-
+
+      # === УНИВЕРСАЛЬНАЯ СБОРКА (ARMv7 + ARM64) ===
       - name: Set package name
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
@@ -68,23 +75,25 @@ jobs:
           mkdir -p love-android/app/src/main/res/values
           cat > love-android/app/src/main/res/values/strings.xml << 'EOF'
           <resources>
-            <string name="app_name">Cubic Battle</string>
+              <string name="app_name">Cubic Battle</string>
           </resources>
           EOF
 
-      # Сборка для двух архитектур: armeabi-v7a и arm64-v8a
-      - name: Set ABIs (armeabi-v7a + arm64-v8a)
+      - name: Set universal ABIs (arm64-v8a + armeabi-v7a)
         run: |
-          sed -i '/abiFilters/c\        abiFilters "armeabi-v7a", "arm64-v8a"' love-android/app/build.gradle
+          sed -i '/abiFilters/d' love-android/app/build.gradle
+          sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a", "armeabi-v7a" }' love-android/app/build.gradle
 
       - name: Fix AndroidManifest.xml
         run: |
           MANIFEST="love-android/app/src/main/AndroidManifest.xml"
+          
           if ! grep -q "INTERNET" "$MANIFEST"; then
-            sed -i '/<manifest /a\ <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
           fi
+          
           if ! grep -q "usesCleartextTraffic" "$MANIFEST"; then
-            sed -i '/<application /a\ android:usesCleartextTraffic="true"' "$MANIFEST"
+            sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
           fi
 
       - name: Package game.love
@@ -105,10 +114,13 @@ jobs:
           org.gradle.daemon=false
           EOF
 
-      - name: Build APK
+      - name: Build APK (универсальный)
         working-directory: love-android
         run: |
-          ./gradlew assembleEmbedNoRecordRelease --no-daemon --stacktrace
+          ./gradlew assembleEmbedNoRecordRelease --no-daemon \
+            -Dorg.gradle.parallel=true \
+            -Dorg.gradle.caching=true \
+            -Dorg.gradle.jvmargs=-Xmx4g
 
       - name: Check and rename APK
         run: |
@@ -118,6 +130,7 @@ jobs:
             exit 1
           fi
           cp "$APK_FILE" "CubicBattle.apk"
+          echo "APK size: $(ls -lh CubicBattle.apk | awk '{print $5}')"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
