@@ -12,22 +12,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
-          # cache: 'gradle' - убрано, т.к. gradle-файлы появятся позже
+          # cache: 'gradle' убран, т.к. build.gradle появится позже
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Кэш Android SDK (платформы, build-tools, NDK)
+      # Кэш для Android SDK (сохраняет платформы, build-tools, NDK)
       - name: Cache Android SDK
-        id: cache-android
         uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_HOME }}
@@ -36,14 +33,12 @@ jobs:
             ${{ runner.os }}-android-sdk-
 
       - name: Accept Android Licenses
-        if: steps.cache-android.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/.android
           echo "android.useAndroidX=true" >> ~/.android/repositories.cfg
           yes | sdkmanager --licenses || true
 
       - name: Install Android SDK Components
-        if: steps.cache-android.outputs.cache-hit != 'true'
         run: |
           sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
 
@@ -51,7 +46,7 @@ jobs:
         run: |
           git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
-      # Кэш Gradle (после клонирования, чтобы использовать build.gradle)
+      # Кэш для Gradle (зависимости и сборка)
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
