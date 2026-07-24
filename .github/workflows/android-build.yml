@@ -25,14 +25,15 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # Кэш Android SDK – обновлённый ключ, чтобы пересоздать кэш
       - name: Cache Android SDK
         id: cache-android
         uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_HOME }}
-          key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/build.gradle') }}
+          key: ${{ runner.os }}-android-sdk-v2-${{ hashFiles('**/build.gradle') }}
           restore-keys: |
-            ${{ runner.os }}-android-sdk-
+            ${{ runner.os }}-android-sdk-v2-
 
       - name: Accept Android Licenses
         run: |
@@ -44,11 +45,11 @@ jobs:
         run: |
           sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;26.3.11579264"
 
-      # Клонируем LÖVE 12.0 (ветка 12.x) — содержит Lua 5.4 и встроенный lua-https
       - name: Clone love-android (12.0)
         run: |
           git clone --recursive --depth 1 --branch 12.x https://github.com/love2d/love-android.git
 
+      # Кэш Gradle – также с новым ключом
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -56,9 +57,9 @@ jobs:
             ~/.gradle/caches/
             ~/.gradle/wrapper/
             love-android/.gradle/
-          key: ${{ runner.os }}-gradle-${{ hashFiles('love-android/**/*.gradle*', 'love-android/**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-v2-${{ hashFiles('love-android/**/*.gradle*', 'love-android/**/gradle-wrapper.properties') }}
           restore-keys: |
-            ${{ runner.os }}-gradle-
+            ${{ runner.os }}-gradle-v2-
 
       - name: Set package name
         run: |
