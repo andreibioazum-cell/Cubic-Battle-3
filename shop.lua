@@ -1,4 +1,4 @@
--- shop.lua – магазин с обновлением скина в онлайне
+-- shop.lua – магазин
 local shop = {}
 
 local fontTitle, fontBtn
@@ -17,6 +17,8 @@ local currentSkinIndex = 1
 local ownedSkins = {}
 local equippedSkin = "NONE"
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+local hoverBtn = nil
+local animTime = 0
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -78,6 +80,10 @@ function shop.resize()
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
 
+function shop.update(dt)
+    animTime = animTime + dt
+end
+
 function shop.draw(coins)
     coins = coins or 0
     love.graphics.setColor(0.02, 0.05, 0.2, 1)
@@ -109,6 +115,34 @@ function shop.draw(coins)
         drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
     end
 
+    local function drawButton(btn, text, color, isHover)
+        local r, g, b = color[1], color[2], color[3]
+        if isHover then
+            r = math.min(1, r + 0.15)
+            g = math.min(1, g + 0.15)
+            b = math.min(1, b + 0.15)
+        end
+        
+        local shadowOffset = isHover and 4 or 5
+        love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
+        love.graphics.rectangle("fill", btn.x + shadowOffset * scale, btn.y + (shadowOffset + 1) * scale, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(r, g, b, 1)
+        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(3.4 * scale)
+        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        if isHover then
+            love.graphics.setColor(0.6, 0.8, 1, 0.3 + 0.3 * math.sin(animTime * 3))
+            love.graphics.setLineWidth(2 * scale)
+            love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 14*scale, 14*scale)
+        end
+        
+        drawSpacedText(text, btn.x, btn.y + 20*scale, btn.w, "center", fontBtn, nil, 1)
+    end
+
     local btnText, btnColor
     if not isOwned then
         btnText = "BUY"; btnColor = {0.2, 0.5, 0.9}
@@ -118,41 +152,31 @@ function shop.draw(coins)
         btnText = "UNEQUIP"; btnColor = {0.8, 0.2, 0.2}
     end
 
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnMain.x + 5*scale, btnMain.y + 6*scale, btnMain.w, btnMain.h, 16*scale, 16*scale)
-    love.graphics.setColor(btnColor[1], btnColor[2], btnColor[3], 1)
-    love.graphics.rectangle("fill", btnMain.x, btnMain.y, btnMain.w, btnMain.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnMain.x, btnMain.y, btnMain.w, btnMain.h, 16*scale, 16*scale)
-    drawSpacedText(btnText, btnMain.x, btnMain.y + 20*scale, btnMain.w, "center", fontBtn, nil, 1)
+    drawButton(btnMain, btnText, btnColor, hoverBtn == "main")
+    drawButton(btnLeft, "<", {0.2, 0.5, 0.9}, hoverBtn == "left")
+    drawButton(btnRight, ">", {0.2, 0.5, 0.9}, hoverBtn == "right")
+    drawButton(btnBack, "BACK", {0.2, 0.5, 0.9}, hoverBtn == "back")
+end
 
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnLeft.x + 4*scale, btnLeft.y + 4*scale, btnLeft.w, btnLeft.h, 10*scale, 10*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, 10*scale, 10*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3)
-    love.graphics.rectangle("line", btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, 10*scale, 10*scale)
-    drawSpacedText("<", btnLeft.x, btnLeft.y + 12*scale, btnLeft.w, "center", fontBtn, nil, 1)
-
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnRight.x + 4*scale, btnRight.y + 4*scale, btnRight.w, btnRight.h, 10*scale, 10*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnRight.x, btnRight.y, btnRight.w, btnRight.h, 10*scale, 10*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3)
-    love.graphics.rectangle("line", btnRight.x, btnRight.y, btnRight.w, btnRight.h, 10*scale, 10*scale)
-    drawSpacedText(">", btnRight.x, btnRight.y + 12*scale, btnRight.w, "center", fontBtn, nil, 1)
-
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    drawSpacedText("BACK", btnBack.x, btnBack.y + 14*scale, btnBack.w, "center", fontBtn, nil, 1)
+function shop.mousemoved(x, y)
+    if isMobile then return end
+    
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnMain) then
+        hoverBtn = "main"
+    elseif isInside(btnLeft) then
+        hoverBtn = "left"
+    elseif isInside(btnRight) then
+        hoverBtn = "right"
+    elseif isInside(btnBack) then
+        hoverBtn = "back"
+    else
+        hoverBtn = nil
+    end
 end
 
 function shop.touchpressed(id, x, y, coins, saveData)
@@ -163,28 +187,33 @@ function shop.touchpressed(id, x, y, coins, saveData)
     end
 
     local changed = false
+    
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
 
-    if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
+    if isInside(btnBack) then
         playButtonSound()
         GameState.current = "lobby"
         return coins, changed
     end
 
-    if x >= btnLeft.x and x <= btnLeft.x + btnLeft.w and y >= btnLeft.y and y <= btnLeft.y + btnLeft.h then
+    if isInside(btnLeft) then
         playButtonSound()
         currentSkinIndex = currentSkinIndex - 1
         if currentSkinIndex < 1 then currentSkinIndex = #SKINS end
         return coins, false
     end
 
-    if x >= btnRight.x and x <= btnRight.x + btnRight.w and y >= btnRight.y and y <= btnRight.y + btnRight.h then
+    if isInside(btnRight) then
         playButtonSound()
         currentSkinIndex = currentSkinIndex + 1
         if currentSkinIndex > #SKINS then currentSkinIndex = 1 end
         return coins, false
     end
 
-    if x >= btnMain.x and x <= btnMain.x + btnMain.w and y >= btnMain.y and y <= btnMain.y + btnMain.h then
+    if isInside(btnMain) then
         playButtonSound()
         local skin = SKINS[currentSkinIndex]
         local isOwned = false
@@ -206,7 +235,6 @@ function shop.touchpressed(id, x, y, coins, saveData)
             equippedSkin = skin.name
             changed = true
             print("✅ Надет " .. skin.name)
-            -- ОБНОВЛЯЕМ СКИН В ОНЛАЙНЕ
             if online.isConnected and online.isConnected() then
                 online.updateSkin(skin.name)
             end
@@ -229,7 +257,31 @@ function shop.touchpressed(id, x, y, coins, saveData)
     return coins, changed
 end
 
-function shop.touchmoved() end
-function shop.touchreleased() end
+function shop.touchmoved(id, x, y)
+    if isMobile then
+        local function isInside(btn)
+            return x >= btn.x and x <= btn.x + btn.w and
+                   y >= btn.y and y <= btn.y + btn.h
+        end
+        
+        if isInside(btnMain) then
+            hoverBtn = "main"
+        elseif isInside(btnLeft) then
+            hoverBtn = "left"
+        elseif isInside(btnRight) then
+            hoverBtn = "right"
+        elseif isInside(btnBack) then
+            hoverBtn = "back"
+        else
+            hoverBtn = nil
+        end
+    end
+end
+
+function shop.touchreleased(id, x, y)
+    if isMobile then
+        hoverBtn = nil
+    end
+end
 
 return shop
