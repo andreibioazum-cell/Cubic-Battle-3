@@ -1,4 +1,4 @@
--- lobby.lua – с реальными снежинками (6 лучей)
+-- lobby.lua – главное меню (с эффектом наведения)
 local lobby = {}
 
 local btns = {
@@ -12,6 +12,8 @@ local backgroundImage
 local snowflakes = {}
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+local hoverBtn = nil
+local animTime = 0
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -60,9 +62,6 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     love.graphics.print(text, startX, y)
 end
 
--- ============================================================
---  РЕАЛЬНЫЕ СНЕЖИНКИ (6 лучей)
--- ============================================================
 local function drawRealSnowflake(x, y, size, alpha, rotation, twinkle)
     size = size or 3
     alpha = alpha or 1
@@ -140,6 +139,7 @@ function lobby.resize(w, h)
 end
 
 function lobby.update(dt)
+    animTime = animTime + dt
     local w, h = love.graphics.getDimensions()
     for _, s in ipairs(snowflakes) do
         s.y = s.y + s.speed * dt
@@ -171,37 +171,97 @@ function lobby.draw()
     drawSpacedText("Cubic Battle", 0, love.graphics.getHeight()/2 - 180*scale, w, "center", fontTitle)
     drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 80*scale, w, "center", fontSub)
 
-    for name, btn in pairs(btns) do
-        local label = name:gsub("^%l", string.upper)
-
+    local function drawButton(btn, label, isHover)
+        local r, g, b = 0.2, 0.5, 0.9
+        if isHover then
+            r, g, b = 0.3, 0.6, 1.0
+        end
+        
+        local shadowOffset = isHover and 4 or 5
         love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-        love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
-        love.graphics.setColor(0.2, 0.5, 0.9, 1)
+        love.graphics.rectangle("fill", btn.x + shadowOffset * scale, btn.y + (shadowOffset + 1) * scale, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.setLineWidth(3.8 * scale)
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        if isHover then
+            love.graphics.setColor(0.6, 0.8, 1, 0.3 + 0.3 * math.sin(animTime * 3))
+            love.graphics.setLineWidth(2 * scale)
+            love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 14*scale, 14*scale)
+        end
+        
         drawSpacedText(label, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn)
     end
+
+    drawButton(btns.play, "PLAY", hoverBtn == "play")
+    drawButton(btns.shop, "SHOP", hoverBtn == "shop")
+    drawButton(btns.settings, "SETTINGS", hoverBtn == "settings")
+    drawButton(btns.credits, "CREDITS", hoverBtn == "credits")
+end
+
+function lobby.mousemoved(x, y)
+    if isMobile then return end
+    
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    for name, btn in pairs(btns) do
+        if isInside(btn) then
+            hoverBtn = name
+            return
+        end
+    end
+    hoverBtn = nil
 end
 
 function lobby.touchpressed(id, x, y)
-    if x >= btns.play.x and x <= btns.play.x + btns.play.w and y >= btns.play.y and y <= btns.play.y + btns.play.h then
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btns.play) then
         playButtonSound()
         GameState.current = "mode_select"
-    elseif x >= btns.shop.x and x <= btns.shop.x + btns.shop.w and y >= btns.shop.y and y <= btns.shop.y + btns.shop.h then
+    elseif isInside(btns.shop) then
         playButtonSound()
         GameState.current = "shop"
-    elseif x >= btns.settings.x and x <= btns.settings.x + btns.settings.w and y >= btns.settings.y and y <= btns.settings.y + btns.settings.h then
+    elseif isInside(btns.settings) then
         playButtonSound()
         GameState.current = "settings"
-    elseif x >= btns.credits.x and x <= btns.credits.x + btns.credits.w and y >= btns.credits.y and y <= btns.credits.y + btns.credits.h then
+    elseif isInside(btns.credits) then
         playButtonSound()
         GameState.current = "credits"
     end
 end
 
-function lobby.touchmoved() end
-function lobby.touchreleased() end
+function lobby.touchmoved(id, x, y)
+    if isMobile then
+        local function isInside(btn)
+            return x >= btn.x and x <= btn.x + btn.w and
+                   y >= btn.y and y <= btn.y + btn.h
+        end
+        
+        for name, btn in pairs(btns) do
+            if isInside(btn) then
+                hoverBtn = name
+                return
+            end
+        end
+        hoverBtn = nil
+    end
+end
+
+function lobby.touchreleased(id, x, y)
+    if isMobile then
+        hoverBtn = nil
+    end
+end
 
 return lobby
