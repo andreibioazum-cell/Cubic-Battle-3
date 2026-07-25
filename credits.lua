@@ -1,9 +1,12 @@
+-- credits.lua – кредиты
 local credits = {}
 
 local fontTitle, fontText, fontBtn
 local btnBack = { w = 200, h = 60, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+local hoverBtn = nil
+local animTime = 0
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -30,11 +33,11 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
 end
 
 function credits.load()
+    local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
     btnBack.w = 220 * scale
     btnBack.h = 65 * scale
-    local w, h = love.graphics.getDimensions()
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - 120 * scale
 
@@ -48,11 +51,11 @@ function credits.load()
 end
 
 function credits.resize()
+    local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
     btnBack.w = 220 * scale
     btnBack.h = 65 * scale
-    local w, h = love.graphics.getDimensions()
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - 120 * scale
 
@@ -63,6 +66,10 @@ function credits.resize()
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontText  = love.graphics.newFont("Fredoka-Bold.ttf", textSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
+end
+
+function credits.update(dt)
+    animTime = animTime + dt
 end
 
 function credits.draw()
@@ -82,27 +89,81 @@ function credits.draw()
     y = y + 50 * scale
     drawSpacedText("Dima Gustenyov – Owner (11 years)", 0, y, w, "center", fontText)
 
-    -- Раздел музыки УДАЛЁН
+    local function drawButton(btn, text, isHover)
+        local r, g, b = 0.2, 0.5, 0.9
+        if isHover then
+            r, g, b = 0.3, 0.6, 1.0
+        end
+        
+        local shadowOffset = isHover and 4 or 5
+        love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
+        love.graphics.rectangle("fill", btn.x + shadowOffset * scale, btn.y + (shadowOffset + 1) * scale, btn.w, btn.h, 14*scale, 14*scale)
+        
+        love.graphics.setColor(r, g, b, 1)
+        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 14*scale, 14*scale)
+        
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(3.8 * scale)
+        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 14*scale, 14*scale)
+        
+        if isHover then
+            love.graphics.setColor(0.6, 0.8, 1, 0.3 + 0.3 * math.sin(animTime * 3))
+            love.graphics.setLineWidth(2 * scale)
+            love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 12*scale, 12*scale)
+        end
+        
+        drawSpacedText(text, btn.x, btn.y + 18*scale, btn.w, "center", fontBtn, nil, 1)
+    end
 
-    -- Кнопка Back (синяя, как везде)
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.8 * scale)
-    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    drawSpacedText("Back", btnBack.x, btnBack.y + 18*scale, btnBack.w, "center", fontBtn)
+    drawButton(btnBack, "BACK", hoverBtn == "back")
+end
+
+function credits.mousemoved(x, y)
+    if isMobile then return end
+    
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnBack) then
+        hoverBtn = "back"
+    else
+        hoverBtn = nil
+    end
 end
 
 function credits.touchpressed(id, x, y)
-    if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnBack) then
         playButtonSound()
         GameState.current = "lobby"
     end
 end
 
-function credits.touchmoved() end
-function credits.touchreleased() end
+function credits.touchmoved(id, x, y)
+    if isMobile then
+        local function isInside(btn)
+            return x >= btn.x and x <= btn.x + btn.w and
+                   y >= btn.y and y <= btn.y + btn.h
+        end
+        
+        if isInside(btnBack) then
+            hoverBtn = "back"
+        else
+            hoverBtn = nil
+        end
+    end
+end
+
+function credits.touchreleased(id, x, y)
+    if isMobile then
+        hoverBtn = nil
+    end
+end
 
 return credits
