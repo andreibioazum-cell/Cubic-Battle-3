@@ -1,4 +1,4 @@
--- mode_select.lua – выбор режима
+-- mode_select.lua – выбор режима (с эффектом наведения)
 local mode_select = {}
 
 local fontTitle, fontBtn
@@ -7,6 +7,8 @@ local btnMulti  = { w = 220, h = 75, x = 0, y = 0 }
 local btnBack   = { w = 140, h = 55, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+local hoverBtn = nil
+local animTime = 0
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -62,6 +64,10 @@ function mode_select.resize()
     mode_select.load()
 end
 
+function mode_select.update(dt)
+    animTime = animTime + dt
+end
+
 function mode_select.draw()
     love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
@@ -71,39 +77,38 @@ function mode_select.draw()
 
     drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
-    -- SINGLEPLAYER (ОФФЛАЙН)
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnSingle.x + 5*scale, btnSingle.y + 6*scale, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnSingle.x, btnSingle.y, btnSingle.w, btnSingle.h, 16*scale, 16*scale)
-    drawSpacedText("SINGLEPLAYER", btnSingle.x, btnSingle.y + 22*scale, btnSingle.w, "center", fontBtn, nil, 1)
+    local function drawButton(btn, text, isHover)
+        local r, g, b = 0.2, 0.5, 0.9
+        if isHover then
+            r, g, b = 0.3, 0.6, 1.0
+        end
+        
+        local shadowOffset = isHover and 4 or 5
+        love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
+        love.graphics.rectangle("fill", btn.x + shadowOffset * scale, btn.y + (shadowOffset + 1) * scale, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(r, g, b, 1)
+        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(3.4 * scale)
+        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        if isHover then
+            love.graphics.setColor(0.6, 0.8, 1, 0.3 + 0.3 * math.sin(animTime * 3))
+            love.graphics.setLineWidth(2 * scale)
+            love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 14*scale, 14*scale)
+        end
+        
+        drawSpacedText(text, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn, nil, 1)
+    end
 
-    -- MULTIPLAYER (ОНЛАЙН)
-    love.graphics.setColor(0.0, 0.3, 0.0, 0.5)
-    love.graphics.rectangle("fill", btnMulti.x + 5*scale, btnMulti.y + 6*scale, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
-    love.graphics.setColor(0.2, 0.8, 0.2, 1)
-    love.graphics.rectangle("fill", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnMulti.x, btnMulti.y, btnMulti.w, btnMulti.h, 16*scale, 16*scale)
-    drawSpacedText("MULTIPLAYER", btnMulti.x, btnMulti.y + 22*scale, btnMulti.w, "center", fontBtn, nil, 1)
+    drawButton(btnSingle, "SINGLEPLAYER", hoverBtn == "single")
+    drawButton(btnMulti, "MULTIPLAYER", hoverBtn == "multi")
+    drawButton(btnBack, "BACK", hoverBtn == "back")
 
-    -- BACK
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    drawSpacedText("BACK", btnBack.x, btnBack.y + 14*scale, btnBack.w, "center", fontBtn, nil, 1)
-
-    -- ПЛАВАЮЩАЯ НАДПИСЬ
     local time = love.timer.getTime()
-    local yOffset = math.sin(time * 1.5) * 2
+    local yOffset = math.sin(time * 1.2) * 1.5
 
     local text = "Online is still being developed, it may be very weak, so don't throw slippers at us."
     love.graphics.setFont(fontBtn)
@@ -111,33 +116,59 @@ function mode_select.draw()
     local x = w/2 - tw/2
     local y = btnMulti.y + btnMulti.h + 30 * scale + yOffset
 
-    love.graphics.setColor(0, 0, 0, 0.6)
+    local pad = 12 * scale
+    local btnW = tw + pad * 2
+    local btnH = 30 * scale
+    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
+    love.graphics.rectangle("fill", x - pad, y - 4*scale, btnW, btnH, 8*scale, 8*scale)
+    love.graphics.setColor(0.15, 0.35, 0.7, 1)
+    love.graphics.rectangle("fill", x - pad, y - 4*scale, btnW, btnH, 8*scale, 8*scale)
+
+    love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.print(text, x + 2, y + 2)
 
-    love.graphics.setColor(1, 0.8, 0.2, 0.85)
+    love.graphics.setColor(1, 1, 1, 0.8)
     love.graphics.print(text, x, y)
+end
 
-    love.graphics.setColor(1, 0.8, 0.2, 0.25)
-    love.graphics.setLineWidth(1)
-    love.graphics.line(w/2 - tw/2, y + 22, w/2 + tw/2, y + 22)
+function mode_select.mousemoved(x, y)
+    if isMobile then return end
+    
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnSingle) then
+        hoverBtn = "single"
+    elseif isInside(btnMulti) then
+        hoverBtn = "multi"
+    elseif isInside(btnBack) then
+        hoverBtn = "back"
+    else
+        hoverBtn = nil
+    end
 end
 
 function mode_select.touchpressed(id, x, y)
-    if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnBack) then
         playButtonSound()
         GameState.current = "lobby"
         return
     end
 
-    -- ОФФЛАЙН
-    if x >= btnSingle.x and x <= btnSingle.x + btnSingle.w and y >= btnSingle.y and y <= btnSingle.y + btnSingle.h then
+    if isInside(btnSingle) then
         playButtonSound()
         GameState.current = "difficulty"
         return
     end
 
-    -- ОНЛАЙН
-    if x >= btnMulti.x and x <= btnMulti.x + btnMulti.w and y >= btnMulti.y and y <= btnMulti.y + btnMulti.h then
+    if isInside(btnMulti) then
         playButtonSound()
         if not isMobile then
             love.window.setFullscreen(true, "desktop")
@@ -147,7 +178,29 @@ function mode_select.touchpressed(id, x, y)
     end
 end
 
-function mode_select.touchmoved() end
-function mode_select.touchreleased() end
+function mode_select.touchmoved(id, x, y)
+    if isMobile then
+        local function isInside(btn)
+            return x >= btn.x and x <= btn.x + btn.w and
+                   y >= btn.y and y <= btn.y + btn.h
+        end
+        
+        if isInside(btnSingle) then
+            hoverBtn = "single"
+        elseif isInside(btnMulti) then
+            hoverBtn = "multi"
+        elseif isInside(btnBack) then
+            hoverBtn = "back"
+        else
+            hoverBtn = nil
+        end
+    end
+end
+
+function mode_select.touchreleased(id, x, y)
+    if isMobile then
+        hoverBtn = nil
+    end
+end
 
 return mode_select
