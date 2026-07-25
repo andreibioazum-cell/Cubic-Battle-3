@@ -238,6 +238,16 @@ function love.update(dt)
 
     if GameState.current == "lobby" then
         lobby.update(dt)
+    elseif GameState.current == "mode_select" then
+        mode_select.update(dt)
+    elseif GameState.current == "difficulty" then
+        difficulty.update(dt)
+    elseif GameState.current == "shop" then
+        shop.update(dt)
+    elseif GameState.current == "credits" then
+        credits.update(dt)
+    elseif GameState.current == "settings" then
+        settings.update(dt)
     elseif GameState.current == "game" or GameState.current == "game_online" then
         game.update(dt)
         controls.update(dt)
@@ -279,15 +289,15 @@ function love.draw()
         mode_select.draw()
     elseif GameState.current == "difficulty" then
         difficulty.draw()
-    elseif GameState.current == "game" or GameState.current == "game_online" then
-        game.draw()
-        controls.draw()
     elseif GameState.current == "shop" then
         shop.draw(SAVE_DATA.coins)
     elseif GameState.current == "credits" then
         credits.draw()
     elseif GameState.current == "settings" then
         settings.draw()
+    elseif GameState.current == "game" or GameState.current == "game_online" then
+        game.draw()
+        controls.draw()
     end
     
     if GameState.current == "game_online" then
@@ -455,6 +465,20 @@ end
 
 function love.mousemoved(x, y)
     if isMobile then return end
+    
+    if GameState.current == "lobby" then
+        lobby.mousemoved(x, y)
+    elseif GameState.current == "mode_select" then
+        mode_select.mousemoved(x, y)
+    elseif GameState.current == "difficulty" then
+        difficulty.mousemoved(x, y)
+    elseif GameState.current == "shop" then
+        shop.mousemoved(x, y)
+    elseif GameState.current == "credits" then
+        credits.mousemoved(x, y)
+    elseif GameState.current == "settings" then
+        settings.mousemoved(x, y)
+    end
 end
 
 function love.mousereleased(x, y, button, istouch)
