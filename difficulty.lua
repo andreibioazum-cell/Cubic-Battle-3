@@ -1,3 +1,4 @@
+-- difficulty.lua – выбор сложности (с эффектом наведения)
 local difficulty = {}
 
 local fontTitle, fontBtn
@@ -8,6 +9,8 @@ local btnImpossible = { w = 200, h = 70, x = 0, y = 0 }
 local btnBack = { w = 140, h = 55, x = 0, y = 0 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+local hoverBtn = nil
+local animTime = 0
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -76,6 +79,10 @@ function difficulty.resize()
     difficulty.load()
 end
 
+function difficulty.update(dt)
+    animTime = animTime + dt
+end
+
 function difficulty.draw()
     love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
@@ -85,63 +92,91 @@ function difficulty.draw()
 
     drawSpacedText("SELECT DIFFICULTY", 0, 60 * scale, w, "center", fontTitle, nil, 1)
 
-    local function drawBtn(btn, label, color)
+    local function drawButton(btn, label, color, isHover)
+        local r, g, b = color[1], color[2], color[3]
+        if isHover then
+            r = math.min(1, r + 0.15)
+            g = math.min(1, g + 0.15)
+            b = math.min(1, b + 0.15)
+        end
+        
+        local shadowOffset = isHover and 4 or 5
         love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-        love.graphics.rectangle("fill", btn.x + 5*scale, btn.y + 6*scale, btn.w, btn.h, 16*scale, 16*scale)
-        love.graphics.setColor(color[1], color[2], color[3], 1)
+        love.graphics.rectangle("fill", btn.x + shadowOffset * scale, btn.y + (shadowOffset + 1) * scale, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.setLineWidth(3.4 * scale)
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        if isHover then
+            love.graphics.setColor(0.6, 0.8, 1, 0.3 + 0.3 * math.sin(animTime * 3))
+            love.graphics.setLineWidth(2 * scale)
+            love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 14*scale, 14*scale)
+        end
+        
         drawSpacedText(label, btn.x, btn.y + 20*scale, btn.w, "center", fontBtn, nil, 1)
     end
 
-    -- Цвета кнопок сложности оставим разными для наглядности, но основу сделаем синей
-    drawBtn(btnEasy, "EASY", {0.2, 0.6, 0.2})
-    drawBtn(btnNormal, "NORMAL", {0.2, 0.5, 0.9})
-    drawBtn(btnHard, "HARD", {0.8, 0.2, 0.2})
-    drawBtn(btnImpossible, "IMPOSSIBLE", {0.9, 0.0, 0.0})
+    drawButton(btnEasy, "EASY", {0.2, 0.6, 0.2}, hoverBtn == "easy")
+    drawButton(btnNormal, "NORMAL", {0.2, 0.5, 0.9}, hoverBtn == "normal")
+    drawButton(btnHard, "HARD", {0.8, 0.2, 0.2}, hoverBtn == "hard")
+    drawButton(btnImpossible, "IMPOSSIBLE", {0.9, 0.0, 0.0}, hoverBtn == "impossible")
+    drawButton(btnBack, "BACK", {0.2, 0.5, 0.9}, hoverBtn == "back")
+end
 
-    -- Back
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    drawSpacedText("BACK", btnBack.x, btnBack.y + 14*scale, btnBack.w, "center", fontBtn, nil, 1)
+function difficulty.mousemoved(x, y)
+    if isMobile then return end
+    
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnEasy) then hoverBtn = "easy"
+    elseif isInside(btnNormal) then hoverBtn = "normal"
+    elseif isInside(btnHard) then hoverBtn = "hard"
+    elseif isInside(btnImpossible) then hoverBtn = "impossible"
+    elseif isInside(btnBack) then hoverBtn = "back"
+    else hoverBtn = nil end
 end
 
 function difficulty.touchpressed(id, x, y)
-    if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnBack) then
         playButtonSound()
         GameState.current = "mode_select"
         return
     end
 
-    if x >= btnEasy.x and x <= btnEasy.x + btnEasy.w and y >= btnEasy.y and y <= btnEasy.y + btnEasy.h then
+    if isInside(btnEasy) then
         playButtonSound()
         _G.difficulty = "easy"
         GameState.current = "game"
         return
     end
 
-    if x >= btnNormal.x and x <= btnNormal.x + btnNormal.w and y >= btnNormal.y and y <= btnNormal.y + btnNormal.h then
+    if isInside(btnNormal) then
         playButtonSound()
         _G.difficulty = "normal"
         GameState.current = "game"
         return
     end
 
-    if x >= btnHard.x and x <= btnHard.x + btnHard.w and y >= btnHard.y and y <= btnHard.y + btnHard.h then
+    if isInside(btnHard) then
         playButtonSound()
         _G.difficulty = "hard"
         GameState.current = "game"
         return
     end
 
-    if x >= btnImpossible.x and x <= btnImpossible.x + btnImpossible.w and y >= btnImpossible.y and y <= btnImpossible.y + btnImpossible.h then
+    if isInside(btnImpossible) then
         playButtonSound()
         _G.difficulty = "impossible"
         GameState.current = "game"
@@ -149,7 +184,26 @@ function difficulty.touchpressed(id, x, y)
     end
 end
 
-function difficulty.touchmoved() end
-function difficulty.touchreleased() end
+function difficulty.touchmoved(id, x, y)
+    if isMobile then
+        local function isInside(btn)
+            return x >= btn.x and x <= btn.x + btn.w and
+                   y >= btn.y and y <= btn.y + btn.h
+        end
+        
+        if isInside(btnEasy) then hoverBtn = "easy"
+        elseif isInside(btnNormal) then hoverBtn = "normal"
+        elseif isInside(btnHard) then hoverBtn = "hard"
+        elseif isInside(btnImpossible) then hoverBtn = "impossible"
+        elseif isInside(btnBack) then hoverBtn = "back"
+        else hoverBtn = nil end
+    end
+end
+
+function difficulty.touchreleased(id, x, y)
+    if isMobile then
+        hoverBtn = nil
+    end
+end
 
 return difficulty
