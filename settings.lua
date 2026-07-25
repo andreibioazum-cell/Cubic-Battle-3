@@ -1,3 +1,4 @@
+-- settings.lua – настройки
 local settings = {}
 
 local fontTitle, fontBtn, fontInput
@@ -10,6 +11,8 @@ local inputActive = false
 local inputField = { x = 0, y = 0, w = 250, h = 50 }
 
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+local hoverBtn = nil
+local animTime = 0
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -74,6 +77,10 @@ function settings.resize()
     settings.load()
 end
 
+function settings.update(dt)
+    animTime = animTime + dt
+end
+
 function settings.draw()
     love.graphics.setColor(0.02, 0.05, 0.2, 1)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
@@ -83,27 +90,41 @@ function settings.draw()
 
     drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, nil, 1)
 
+    local function drawButton(btn, text, color, isHover)
+        local r, g, b = color[1], color[2], color[3]
+        if isHover then
+            r = math.min(1, r + 0.15)
+            g = math.min(1, g + 0.15)
+            b = math.min(1, b + 0.15)
+        end
+        
+        local shadowOffset = isHover and 4 or 5
+        love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
+        love.graphics.rectangle("fill", btn.x + shadowOffset * scale, btn.y + (shadowOffset + 1) * scale, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(r, g, b, 1)
+        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(3.4 * scale)
+        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        
+        if isHover then
+            love.graphics.setColor(0.6, 0.8, 1, 0.3 + 0.3 * math.sin(animTime * 3))
+            love.graphics.setLineWidth(2 * scale)
+            love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 14*scale, 14*scale)
+        end
+        
+        drawSpacedText(text, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn, nil, 1)
+    end
+
     local musicText = musicOn and "MUSIC: ON" or "MUSIC: OFF"
     local musicColor = musicOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnMusic.x + 5*scale, btnMusic.y + 6*scale, btnMusic.w, btnMusic.h, 16*scale, 16*scale)
-    love.graphics.setColor(musicColor[1], musicColor[2], musicColor[3], 1)
-    love.graphics.rectangle("fill", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnMusic.x, btnMusic.y, btnMusic.w, btnMusic.h, 16*scale, 16*scale)
-    drawSpacedText(musicText, btnMusic.x, btnMusic.y + 22*scale, btnMusic.w, "center", fontBtn, nil, 1)
+    drawButton(btnMusic, musicText, musicColor, hoverBtn == "music")
 
     local sfxText = sfxOn and "SOUNDS: ON" or "SOUNDS: OFF"
     local sfxColor = sfxOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnSfx.x + 5*scale, btnSfx.y + 6*scale, btnSfx.w, btnSfx.h, 16*scale, 16*scale)
-    love.graphics.setColor(sfxColor[1], sfxColor[2], sfxColor[3], 1)
-    love.graphics.rectangle("fill", btnSfx.x, btnSfx.y, btnSfx.w, btnSfx.h, 16*scale, 16*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnSfx.x, btnSfx.y, btnSfx.w, btnSfx.h, 16*scale, 16*scale)
-    drawSpacedText(sfxText, btnSfx.x, btnSfx.y + 22*scale, btnSfx.w, "center", fontBtn, nil, 1)
+    drawButton(btnSfx, sfxText, sfxColor, hoverBtn == "sfx")
 
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", inputField.x + 3*scale, inputField.y + 3*scale, inputField.w, inputField.h, 8*scale, 8*scale)
@@ -131,18 +152,35 @@ function settings.draw()
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf("NICKNAME", inputField.x, inputField.y - 35*scale, inputField.w, "center")
 
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnBack.x + 4*scale, btnBack.y + 5*scale, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3.4 * scale)
-    love.graphics.rectangle("line", btnBack.x, btnBack.y, btnBack.w, btnBack.h, 14*scale, 14*scale)
-    drawSpacedText("BACK", btnBack.x, btnBack.y + 14*scale, btnBack.w, "center", fontBtn, nil, 1)
+    drawButton(btnBack, "BACK", {0.2, 0.5, 0.9}, hoverBtn == "back")
+end
+
+function settings.mousemoved(x, y)
+    if isMobile then return end
+    
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnMusic) then
+        hoverBtn = "music"
+    elseif isInside(btnSfx) then
+        hoverBtn = "sfx"
+    elseif isInside(btnBack) then
+        hoverBtn = "back"
+    else
+        hoverBtn = nil
+    end
 end
 
 function settings.touchpressed(id, x, y)
-    if x >= btnBack.x and x <= btnBack.x + btnBack.w and y >= btnBack.y and y <= btnBack.y + btnBack.h then
+    local function isInside(btn)
+        return x >= btn.x and x <= btn.x + btn.w and
+               y >= btn.y and y <= btn.y + btn.h
+    end
+    
+    if isInside(btnBack) then
         playButtonSound()
         GameState.current = "lobby"
         SAVE_DATA.nickname = nickname
@@ -150,21 +188,22 @@ function settings.touchpressed(id, x, y)
         return
     end
 
-    if x >= btnMusic.x and x <= btnMusic.x + btnMusic.w and y >= btnMusic.y and y <= btnMusic.y + btnMusic.h then
+    if isInside(btnMusic) then
         playButtonSound()
         toggleMusic()
         SAVE_SAVE()
         return
     end
 
-    if x >= btnSfx.x and x <= btnSfx.x + btnSfx.w and y >= btnSfx.y and y <= btnSfx.y + btnSfx.h then
+    if isInside(btnSfx) then
         playButtonSound()
         toggleSfx()
         SAVE_SAVE()
         return
     end
 
-    if x >= inputField.x and x <= inputField.x + inputField.w and y >= inputField.y and y <= inputField.y + inputField.h then
+    if x >= inputField.x and x <= inputField.x + inputField.w and
+       y >= inputField.y and y <= inputField.y + inputField.h then
         inputActive = not inputActive
         if inputActive then
             love.keyboard.setTextInput(true)
@@ -178,11 +217,33 @@ function settings.touchpressed(id, x, y)
     end
 end
 
-function settings.touchmoved() end
-function settings.touchreleased() end
+function settings.touchmoved(id, x, y)
+    if isMobile then
+        local function isInside(btn)
+            return x >= btn.x and x <= btn.x + btn.w and
+                   y >= btn.y and y <= btn.y + btn.h
+        end
+        
+        if isInside(btnMusic) then
+            hoverBtn = "music"
+        elseif isInside(btnSfx) then
+            hoverBtn = "sfx"
+        elseif isInside(btnBack) then
+            hoverBtn = "back"
+        else
+            hoverBtn = nil
+        end
+    end
+end
+
+function settings.touchreleased(id, x, y)
+    if isMobile then
+        hoverBtn = nil
+    end
+end
 
 function settings.keypressed(key)
-    if not inputActive then return end
+    if not inputActive then return
     if key == "return" or key == "kpenter" then
         inputActive = false
         love.keyboard.setTextInput(false)
