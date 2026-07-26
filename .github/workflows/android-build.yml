@@ -36,7 +36,30 @@ jobs:
         run: |
           git clone --recursive --depth 1 https://github.com/love2d/love-android.git
 
-      - name: Set package name
+      - name: Fix AndroidManifest.xml
+        run: |
+          MANIFEST="love-android/app/src/main/AndroidManifest.xml"
+          
+          # Меняем пакет
+          sed -i 's/package="org.love2d.android"/package="com.CB3"/g' "$MANIFEST"
+          
+          # Добавляем INTERNET
+          if ! grep -q "INTERNET" "$MANIFEST"; then
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+          fi
+          
+          # Добавляем usesCleartextTraffic
+          if ! grep -q "usesCleartextTraffic" "$MANIFEST"; then
+            sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
+          fi
+          
+          # Меняем название приложения
+          sed -i 's/android:label="[^"]*"/android:label="Cubic Battle"/g' "$MANIFEST"
+          
+          echo "✅ AndroidManifest.xml fixed"
+          cat "$MANIFEST"
+
+      - name: Set package name in build.gradle
         run: |
           sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
 
@@ -47,49 +70,6 @@ jobs:
           <resources>
               <string name="app_name">Cubic Battle</string>
           </resources>
-          EOF
-
-      - name: Create AndroidManifest.xml
-        run: |
-          cat > love-android/app/src/main/AndroidManifest.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.CB3"
-              android:versionCode="1"
-              android:versionName="1.0">
-
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-              <uses-feature android:glEsVersion="0x00020000" android:required="true" />
-              <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
-              <uses-feature android:name="android.hardware.screen.landscape" android:required="false" />
-
-              <application
-                  android:label="Cubic Battle"
-                  android:icon="@drawable/ic_launcher"
-                  android:allowBackup="true"
-                  android:hasCode="false"
-                  android:usesCleartextTraffic="true"
-                  android:extractNativeLibs="true">
-
-                  <activity
-                      android:name="android.app.NativeActivity"
-                      android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout"
-                      android:screenOrientation="sensorLandscape"
-                      android:exported="true">
-
-                      <meta-data
-                          android:name="android.app.lib_name"
-                          android:value="love" />
-
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
           EOF
 
       - name: Set ABIs (arm64-v8a + armeabi-v7a)
