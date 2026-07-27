@@ -1,4 +1,4 @@
--- settings.lua – настройки
+-- settings.lua – настройки (исправлен)
 local settings = {}
 
 local fontTitle, fontBtn, fontInput
@@ -21,7 +21,7 @@ local function getScale()
     return math.min(w, h) / base
 end
 
-local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
+local function drawSpacedText(text, x, y, w, align, font, alpha)
     alpha = alpha or 1
     love.graphics.setFont(font)
     local tw = font:getWidth(text)
@@ -88,8 +88,9 @@ function settings.draw()
     local w = love.graphics.getWidth()
     local scale = getScale()
 
-    drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, nil, 1)
+    drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, 1)
 
+    -- Отрисовка кнопок с эффектом наведения
     local function drawButton(btn, text, color, isHover)
         local r, g, b = color[1], color[2], color[3]
         if isHover then
@@ -115,7 +116,7 @@ function settings.draw()
             love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 14*scale, 14*scale)
         end
         
-        drawSpacedText(text, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn, nil, 1)
+        drawSpacedText(text, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn, 1)
     end
 
     local musicText = musicOn and "MUSIC: ON" or "MUSIC: OFF"
@@ -126,6 +127,7 @@ function settings.draw()
     local sfxColor = sfxOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
     drawButton(btnSfx, sfxText, sfxColor, hoverBtn == "sfx")
 
+    -- Поле ввода никнейма
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", inputField.x + 3*scale, inputField.y + 3*scale, inputField.w, inputField.h, 8*scale, 8*scale)
     love.graphics.setColor(0.1, 0.1, 0.1, 1)
