@@ -144,14 +144,16 @@ function chat.addAdminMessage(text)
 end
 
 function chat.toggleChat()
-    if not isOnline or not isGameState then return
+    if not isOnline or not isGameState then return end
     isChatOpen = not isChatOpen
-    if not isChatOpen then chat.forceClose()
+    if not isChatOpen then
+        chat.forceClose()
+    end
 end
 
 function chat.toggleInput()
-    if not isOnline or not isGameState then return
-    if not isChatOpen then return
+    if not isOnline or not isGameState then return end
+    if not isChatOpen then return end
     
     isInputActive = not isInputActive
     if isInputActive then
@@ -177,8 +179,8 @@ function chat.forceClose()
 end
 
 function chat.sendMessage(text)
-    if text == "" then return
-    if not isOnline or not isGameState then return
+    if text == "" then return end
+    if not isOnline or not isGameState then return end
     
     local filtered = sanitize_utf8(text)
     -- Фильтр мата
@@ -230,8 +232,8 @@ function chat.sendMessage(text)
 end
 
 function chat.fetchMessages()
-    if not online or not online.isConnected() then return
-    if not isOnline or not isGameState then return
+    if not online or not online.isConnected() then return end
+    if not isOnline or not isGameState then return end
     
     if game and game.addDebugMessage then
         game.addDebugMessage("📥 Fetching messages...", {0.5, 0.5, 1, 1})
@@ -277,7 +279,7 @@ function chat.fetchMessages()
 end
 
 function chat.update(dt)
-    if not isOnline or not isGameState then return
+    if not isOnline or not isGameState then return end
     if online and online.isConnected() then
         fetchTimer = fetchTimer + dt
         if fetchTimer >= 2.0 then
@@ -288,7 +290,7 @@ function chat.update(dt)
 end
 
 function chat.draw()
-    if not isOnline or not isGameState then return
+    if not isOnline or not isGameState then return end
     
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
@@ -316,7 +318,7 @@ function chat.draw()
     chat._btnY = btnY
     chat._btnSize = btnSize
     
-    if not isChatOpen then return
+    if not isChatOpen then return end
     
     local chatX = w - chatWidth * scale - 10
     local chatY = btnY + btnSize + 5
@@ -383,7 +385,7 @@ function chat.draw()
 end
 
 function chat.keypressed(key)
-    if not isOnline or not isGameState then return false
+    if not isOnline or not isGameState then return false end
     
     if key == "t" or key == "т" then
         if not isChatOpen then
@@ -410,7 +412,7 @@ function chat.keypressed(key)
 end
 
 function chat.textinput(t)
-    if not isOnline or not isGameState then return
+    if not isOnline or not isGameState then return end
     if isInputActive then
         local filtered = sanitize_utf8(t)
         if #inputText + #filtered <= 100 then
@@ -420,7 +422,7 @@ function chat.textinput(t)
 end
 
 function chat.touchpressed(x, y)
-    if not isOnline or not isGameState then return false
+    if not isOnline or not isGameState then return false end
     
     -- Кнопка чата
     if chat._btnX and chat._btnY then
@@ -451,8 +453,8 @@ function chat.touchpressed(x, y)
 end
 
 function chat.mousepressed(x, y, button)
-    if not isOnline or not isGameState then return false
-    if isMobile then return false
+    if not isOnline or not isGameState then return false end
+    if isMobile then return false end
     
     if button == 1 and chat._btnX and chat._btnY then
         local s = chat._btnSize

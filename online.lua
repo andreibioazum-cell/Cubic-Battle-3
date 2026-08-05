@@ -8,6 +8,8 @@ local PLAYERS_PATH = "players/"
 local BULLETS_PATH = "bullets/"
 local ABILITIES_PATH = "abilities/"
 local DAMAGE_PATH = "damage/"
+local EVENT_PATH = "Event"
+local EVENT_REFRESH_INTERVAL = 2
 
 local myUid = nil
 local myNickname = nil
@@ -21,6 +23,12 @@ local lastSentX = nil
 local lastSentY = nil
 local lastSentTime = 0
 local fetchTimer = 0
+
+-- Состояние общего события из Firebase (Event = 1 / Event = 0).
+local eventActive = false
+local eventRequestInFlight = false
+local lastEventFetchTime = nil
+local eventRequestGeneration = 0
 
 local isAndroid = (love.system.getOS() == "Android")
 
@@ -218,7 +226,48 @@ function online.parseAbilities(jsonStr)
     return result
 end
 
+local function resetEventState()
+    eventActive = false
+    eventRequestInFlight = false
+    lastEventFetchTime = nil
+    -- Игнорируем ответы от запросов, начатых в предыдущем сеансе.
+    eventRequestGeneration = eventRequestGeneration + 1
+end
+
+local function isEventEnabled(response)
+    -- Firebase для значения Event возвращает JSON-число (1 или 0).
+    -- Строковый вариант тоже поддержан, если значение записано как "1".
+    local value = tostring(response or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    return value == "1" or value == "\"1\""
+end
+
+function online.fetchEvent()
+    if not isConnected or eventRequestInFlight then return end
+
+    eventRequestInFlight = true
+    local requestGeneration = eventRequestGeneration
+
+    online.sendRequest("GET", EVENT_PATH, nil, function(ok, response)
+        -- Не даём старому ответу включить событие после выхода из игры.
+        if requestGeneration ~= eventRequestGeneration then return end
+
+        eventRequestInFlight = false
+        if ok then
+            local wasActive = eventActive
+            eventActive = isEventEnabled(response)
+            if eventActive ~= wasActive then
+                print("[ONLINE] Event is " .. (eventActive and "enabled" or "disabled"))
+            end
+        end
+    end)
+end
+
+function online.isEventActive()
+    return eventActive
+end
+
 function online.init(nickname)
+    resetEventState()
     myNickname = nickname or "Player"
     mySkin = SAVE_DATA.equippedSkin or "NONE"
     myUid = SAVE_DATA.uid or generateUuid()
@@ -382,6 +431,15 @@ function online.update(dt)
         fetchTimer = 0
         online.fetchPlayers()
     end
+
+    -- Проверяем флаг события отдельно от игроков. В main.lua и game.lua
+    -- online.update может вызываться в одном кадре дважды, поэтому используем
+    -- реальное время, а не накопленный dt.
+    local now = love.timer.getTime()
+    if not eventRequestInFlight and (not lastEventFetchTime or now - lastEventFetchTime >= EVENT_REFRESH_INTERVAL) then
+        lastEventFetchTime = now
+        online.fetchEvent()
+    end
 end
 
 function online.leave()
@@ -392,6 +450,7 @@ function online.leave()
     players = {}
     bullets = {}
     abilities = {}
+    resetEventState()
     myUid = nil
     myNickname = nil
     lastSentX = nil
