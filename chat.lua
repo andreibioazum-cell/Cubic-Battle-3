@@ -144,14 +144,16 @@ function chat.addAdminMessage(text)
 end
 
 function chat.toggleChat()
-    if not isOnline or not isGameState then return
+    if not isOnline or not isGameState then return end
     isChatOpen = not isChatOpen
-    if not isChatOpen then chat.forceClose()
+    if not isChatOpen then
+        chat.forceClose()
+    end
 end
 
 function chat.toggleInput()
-    if not isOnline or not isGameState then return
-    if not isChatOpen then return
+    if not isOnline or not isGameState then return end
+    if not isChatOpen then return end
     
     isInputActive = not isInputActive
     if isInputActive then
@@ -177,8 +179,8 @@ function chat.forceClose()
 end
 
 function chat.sendMessage(text)
-    if text == "" then return
-    if not isOnline or not isGameState then return
+    if text == "" then return end
+    if not isOnline or not isGameState then return end
     
     local filtered = sanitize_utf8(text)
     -- Фильтр мата
@@ -230,8 +232,8 @@ function chat.sendMessage(text)
 end
 
 function chat.fetchMessages()
-    if not online or not online.isConnected() then return
-    if not isOnline or not isGameState then return
+    if not online or not online.isConnected() then return end
+    if not isOnline or not isGameState then return end
     
     if game and game.addDebugMessage then
         game.addDebugMessage("📥 Fetching messages...", {0.5, 0.5, 1, 1})
@@ -277,7 +279,7 @@ function chat.fetchMessages()
 end
 
 function chat.update(dt)
-    if not isOnline or not isGameState then return
+    if not isOnline or not isGameState then return end
     if online and online.isConnected() then
         fetchTimer = fetchTimer + dt
         if fetchTimer >= 2.0 then
@@ -288,7 +290,7 @@ function chat.update(dt)
 end
 
 function chat.draw()
-    if not isOnline or not isGameState then return
+    if not isOnline or not isGameState then return end
     
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
@@ -310,6 +312,163 @@ function chat.draw()
     local icon = isChatOpen and "X" or "C"
     local iconW = font:getWidth(icon)
     local iconH = font:getHeight()
+    love.graphics.print(icon, btnX + (btnSize - iconW)/2, btnY + (btnSize - iconH)/2)
+    
+    chat._btnX = btnX
+    chat._btnY = btnY
+    chat._btnSize = btnSize
+    
+    if not isChatOpen then return end
+    
+    local chatX = w - chatWidth * scale - 10
+    local chatY = btnY + btnSize + 5
+    
+    -- Фон окна чата
+    love.graphics.setColor(0, 0, 0, 0.8)
+    love.graphics.rectangle("fill", chatX, chatY, chatWidth * scale, chatHeight * scale, 6 * scale, 6 * scale)
+    love.graphics.setColor(0.2, 0.4, 0.8, 0.3)
+    love.graphics.setLineWidth(1.5 * scale)
+    love.graphics.rectangle("line", chatX, chatY, chatWidth * scale, chatHeight * scale, 6 * scale, 6 * scale)
+    
+    love.graphics.setFont(font)
+    local y = chatY + 5 + scrollOffset
+    local maxMessages = math.floor((chatHeight * scale - 10) / 16)
+    local startIdx = math.max(1, #messages - maxMessages + 1)
+    
+    for i = startIdx, #messages do
+        local msg = messages[i]
+        local alpha = (i == startIdx) and 0.5 or 1
+        
+        -- Время
+        love.graphics.setColor(0.6, 0.6, 0.6, alpha * 0.6)
+        local timeText = msg.time .. " "
+        love.graphics.print(timeText, chatX + 4, y)
+        local timeW = font:getWidth(timeText)
+        
+        -- Ник
+        love.graphics.setColor(msg.color[1], msg.color[2], msg.color[3], alpha)
+        local senderText = msg.sender .. ": "
+        love.graphics.print(senderText, chatX + 4 + timeW, y)
+        local senderW = font:getWidth(senderText)
+        
+        -- Текст
+        love.graphics.setColor(1, 1, 1, alpha)
+        local text = msg.text or ""
+        if font:getWidth(text) > (chatWidth * scale - 20 - timeW - senderW) then
+            while font:getWidth(text .. "...") > (chatWidth * scale - 20 - timeW - senderW) and #text > 1 do
+                text = text:sub(1, -2)
+            end
+            text = text .. "..."
+        end
+        pcall(love.graphics.print, text, chatX + 4 + timeW + senderW, y)
+        y = y + 16
+    end
+    
+    if isInputActive then
+        local inputY = chatY + chatHeight * scale - 24
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.9)
+        love.graphics.rectangle("fill", chatX + 2, inputY, chatWidth * scale - 4, 20, 4 * scale, 4 * scale)
+        love.graphics.setColor(0.3, 0.5, 0.9, 0.5)
+        love.graphics.setLineWidth(1 * scale)
+        love.graphics.rectangle("line", chatX + 2, inputY, chatWidth * scale - 4, 20, 4 * scale, 4 * scale)
+        
+        love.graphics.setColor(1, 1, 1, 1)
+        local displayText = sanitize_utf8(inputText)
+        if love.timer.getTime() % 1 < 0.5 then
+            displayText = displayText .. "_"
+        end
+        love.graphics.print(displayText:sub(1, 50), chatX + 6, inputY + 3)
+    else
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+        love.graphics.print(isMobile and "Tap to chat" or "Press T to chat", chatX + 4, chatY + chatHeight * scale - 18)
+    end
+end
+
+function chat.keypressed(key)
+    if not isOnline or not isGameState then return false end
+    
+    if key == "t" or key == "т" then
+        if not isChatOpen then
+            isChatOpen = true
+        else
+            chat.toggleInput()
+        end
+        return true
+    end
+    
+    if isInputActive then
+        if key == "return" or key == "kpenter" then
+            chat.toggleInput()
+            return true
+        elseif key == "escape" then
+            chat.forceClose()
+            return true
+        elseif key == "backspace" then
+            inputText = inputText:sub(1, -2)
+        end
+    end
+    
+    return false
+end
+
+function chat.textinput(t)
+    if not isOnline or not isGameState then return end
+    if isInputActive then
+        local filtered = sanitize_utf8(t)
+        if #inputText + #filtered <= 100 then
+            inputText = inputText .. filtered
+        end
+    end
+end
+
+function chat.touchpressed(x, y)
+    if not isOnline or not isGameState then return false end
+    
+    -- Кнопка чата
+    if chat._btnX and chat._btnY then
+        local s = chat._btnSize
+        if x >= chat._btnX and x <= chat._btnX + s and
+           y >= chat._btnY and y <= chat._btnY + s then
+            chat.toggleChat()
+            return true
+        end
+    end
+    
+    -- Клик по окну чата = открыть клавиатуру
+    if isChatOpen then
+        local w, h = love.graphics.getDimensions()
+        local scale = getScale()
+        local chatX = w - chatWidth * scale - 10
+        local chatY = 10 + 34 * scale + 5
+        if x >= chatX and x <= chatX + chatWidth * scale and
+           y >= chatY and y <= chatY + chatHeight * scale then
+            if not isInputActive then
+                chat.toggleInput()
+            end
+            return true
+        end
+    end
+    
+    return false
+end
+
+function chat.mousepressed(x, y, button)
+    if not isOnline or not isGameState then return false end
+    if isMobile then return false end
+    
+    if button == 1 and chat._btnX and chat._btnY then
+        local s = chat._btnSize
+        if x >= chat._btnX and x <= chat._btnX + s and
+           y >= chat._btnY and y <= chat._btnY + s then
+            chat.toggleChat()
+            return true
+        end
+    end
+    
+    return false
+end
+
+return chatl iconH = font:getHeight()
     love.graphics.print(icon, btnX + (btnSize - iconW)/2, btnY + (btnSize - iconH)/2)
     
     chat._btnX = btnX
