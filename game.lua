@@ -378,9 +378,9 @@ function game.update(dt)
         online.sendPosition(cube.x, cube.y)
         
         damageCheckTimer = damageCheckTimer + dt
-        if damageCheckTimer >= 0.1 then
+        if damageCheckTimer >= 0.5 then
             damageCheckTimer = 0
-            online.fetchDamage(function(damageData)
+            online.sync(function(damageData)
                 if damageData and damageData.damage > 0 then
                     onHitPlayer(damageData.damage, damageData.attacker)
                 end
@@ -729,19 +729,16 @@ function game.draw()
         love.graphics.circle("line", cube.x, cube.y, PLAYER_SIZE * 1.2)
     end
 
-    love.graphics.pop()
-
     -- Event1.png показывается только в онлайн-матче, когда Firebase/Event = 1.
-    -- При Event = 0 online.isEventActive() возвращает false и картинка исчезает.
+    -- Теперь он рисуется в игровом мире на фиксированной позиции (400, 300).
     if isOnlineMode and eventImg and online.isEventActive() then
-        local screenW, screenH = love.graphics.getDimensions()
         local imageW, imageH = eventImg:getDimensions()
-        local scale = math.min(1, (screenW - 40) / imageW, (screenH - 40) / imageH)
-        local drawW, drawH = imageW * scale, imageH * scale
-
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.draw(eventImg, (screenW - drawW) / 2, (screenH - drawH) / 2, 0, scale, scale)
+        -- Позиция в мире, например (400, 300)
+        love.graphics.draw(eventImg, 400 - imageW / 2, 300 - imageH / 2)
     end
+
+    love.graphics.pop()
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)

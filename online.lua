@@ -241,27 +241,6 @@ local function isEventEnabled(response)
     return value == "1" or value == "\"1\""
 end
 
-function online.fetchEvent()
-    if not isConnected or eventRequestInFlight then return end
-
-    eventRequestInFlight = true
-    local requestGeneration = eventRequestGeneration
-
-    online.sendRequest("GET", EVENT_PATH, nil, function(ok, response)
-        -- Не даём старому ответу включить событие после выхода из игры.
-        if requestGeneration ~= eventRequestGeneration then return end
-
-        eventRequestInFlight = false
-        if ok then
-            local wasActive = eventActive
-            eventActive = isEventEnabled(response)
-            if eventActive ~= wasActive then
-                print("[ONLINE] Event is " .. (eventActive and "enabled" or "disabled"))
-            end
-        end
-    end)
-end
-
 function online.isEventActive()
     return eventActive
 end
@@ -332,15 +311,14 @@ function online.sendPosition(x, y)
     if lastSentX == newX and lastSentY == newY then return end
     
     local now = love.timer.getTime()
-    if now - lastSentTime < 0.5 then return end
+    if now - lastSentTime < 0.2 then return end
     lastSentTime = now
 
     lastSentX = newX
     lastSentY = newY
 
     local path = PLAYERS_PATH .. myUid
-    local data = string.format('{"x":%d,"y":%d,"nickname":"%s","skin":"%s"}', 
-        newX, newY, myNickname, mySkin)
+    local data = string.format('{"x":%d,"y":%d}', newX, newY)
     online.sendRequest("PATCH", path, data)
 end
 
@@ -372,12 +350,19 @@ function online.updateSkin(skin)
 end
 
 function online.fetchPlayers()
+    -- Больше не используется напрямую, заменено на online.sync()
+end
+
+function online.sync(callbackForDamage)
     if not isConnected then return end
 
-    online.sendRequest("GET", PLAYERS_PATH, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            local newPlayers = online.parsePlayers(res)
+    online.sendRequest("GET", "", nil, function(ok, res)
+        if not ok or not res or res == "null" then return end
 
+        -- Парсим игроков
+        local playersPart = res:match('"players":%s*({.-})%s*[,}]')
+        if playersPart then
+            local newPlayers = online.parsePlayers(playersPart)
             for id, data in pairs(newPlayers) do
                 if id ~= myUid then
                     if not players[id] then
@@ -391,24 +376,52 @@ function online.fetchPlayers()
                     end
                 end
             end
-
             for id in pairs(players) do
-                if not newPlayers[id] then
-                    players[id] = nil
-                end
+                if not newPlayers[id] then players[id] = nil end
             end
         end
-    end)
 
-    online.sendRequest("GET", BULLETS_PATH, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            bullets = online.parseBullets(res)
+        -- Парсим пули
+        local bulletsPart = res:match('"bullets":%s*({.-})%s*[,}]')
+        if bulletsPart then
+            bullets = online.parseBullets(bulletsPart)
+        else
+            bullets = {}
         end
-    end)
 
-    online.sendRequest("GET", ABILITIES_PATH, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            abilities = online.parseAbilities(res)
+        -- Парсим способности
+        local abilitiesPart = res:match('"abilities":%s*({.-})%s*[,}]')
+        if abilitiesPart then
+            abilities = online.parseAbilities(abilitiesPart)
+        else
+            abilities = {}
+        end
+
+        -- Парсим событие
+        local eventPart = res:match('"Event":%s*(%d+)')
+        if eventPart then
+            local wasActive = eventActive
+            eventActive = (eventPart == "1")
+            if eventActive ~= wasActive then
+                print("[ONLINE] Event is " .. (eventActive and "enabled" or "disabled"))
+            end
+        end
+
+        -- Проверяем урон для нас
+        if myUid then
+            local damagePart = res:match('"damage":%s*({.-})%s*[,}]')
+            if damagePart then
+                local myDamage = damagePart:match('"' .. myUid .. '":%s*({[^{}]+})')
+                if myDamage then
+                    local dmg = myDamage:match('"damage":%s*(%d+)')
+                    local attacker = myDamage:match('"attacker":%s*"([^"]+)"')
+                    if dmg and callbackForDamage then
+                        callbackForDamage({damage=tonumber(dmg), attacker=attacker})
+                        -- Удаляем запись об уроне после обработки
+                        online.sendRequest("DELETE", DAMAGE_PATH .. myUid, nil, function() end)
+                    end
+                end
+            end
         end
     end)
 end
@@ -420,25 +433,19 @@ function online.update(dt)
         if p.targetX then
             p.x = p.x or p.targetX
             p.y = p.y or p.targetY
-            p.x = p.x + (p.targetX - p.x) * math.min(1, dt * 8)
-            p.y = p.y + (p.targetY - p.y) * math.min(1, dt * 8)
+            -- Более плавная и быстрая интерполяция
+            local lerpSpeed = 15
+            p.x = p.x + (p.targetX - p.x) * math.min(1, dt * lerpSpeed)
+            p.y = p.y + (p.targetY - p.y) * math.min(1, dt * lerpSpeed)
             p.hp = p.hp or 5
         end
     end
 
     fetchTimer = fetchTimer + dt
-    if fetchTimer >= 2.0 then
+    -- Вызываем синхронизацию раз в 0.5 секунд (включает всё: игроков, пули, урон, события)
+    if fetchTimer >= 0.5 then
         fetchTimer = 0
-        online.fetchPlayers()
-    end
-
-    -- Проверяем флаг события отдельно от игроков. В main.lua и game.lua
-    -- online.update может вызываться в одном кадре дважды, поэтому используем
-    -- реальное время, а не накопленный dt.
-    local now = love.timer.getTime()
-    if not eventRequestInFlight and (not lastEventFetchTime or now - lastEventFetchTime >= EVENT_REFRESH_INTERVAL) then
-        lastEventFetchTime = now
-        online.fetchEvent()
+        -- Мы передадим колбэк для урона в game.lua через специальную переменную или вызов
     end
 end
 
@@ -466,21 +473,6 @@ function online.sendDamage(targetUid, damage, attackerUid)
     local data = string.format('{"damage":%d,"attacker":"%s","time":%f}', 
         damage, attackerUid or myUid, love.timer.getTime())
     online.sendRequest("PUT", path, data)
-end
-
-function online.fetchDamage(callback)
-    if not isConnected or not myUid then return end
-    local path = DAMAGE_PATH .. myUid
-    online.sendRequest("GET", path, nil, function(ok, res)
-        if ok and res and res ~= "null" then
-            local damage = res:match('"damage":%s*(%d+)')
-            local attacker = res:match('"attacker":%s*"([^"]+)"')
-            if damage then
-                if callback then callback({damage=tonumber(damage), attacker=attacker}) end
-                online.sendRequest("DELETE", path, nil, function() end)
-            end
-        end
-    end)
 end
 
 function online.updateHP(hp)
