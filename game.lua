@@ -14,7 +14,7 @@ local BULLET_SPEED = 340 * 1.15
 
 local cube = { x = 0, y = 0, speed = 260, angle = 0, hp = PLAYER_HP_MAX, hit = 0 }
 local bullets = {}
-local bg, playerImg, azumImg, nastyaImg, bukImg, font
+local bg, playerImg, azumImg, nastyaImg, bukImg, eventImg, font
 local cam = { x = 0, y = 0 }
 local dead = false
 
@@ -341,6 +341,18 @@ function game.load()
     nastyaImg:setFilter("nearest", "nearest")
     bukImg = bukImg or love.graphics.newImage("buk.png")
     bukImg:setFilter("nearest", "nearest")
+
+    -- Картинка события нужна только для отображения в онлайн-режиме.
+    if not eventImg then
+        local ok, imageOrError = pcall(love.graphics.newImage, "Event1.png")
+        if ok then
+            eventImg = imageOrError
+            eventImg:setFilter("nearest", "nearest")
+        else
+            print("[GAME] Event1.png was not loaded: " .. tostring(imageOrError))
+        end
+    end
+
     font = font or love.graphics.newFont("Fredoka-Bold.ttf", 18)
 
     controls.load()
@@ -718,6 +730,18 @@ function game.draw()
     end
 
     love.graphics.pop()
+
+    -- Event1.png показывается только в онлайн-матче, когда Firebase/Event = 1.
+    -- При Event = 0 online.isEventActive() возвращает false и картинка исчезает.
+    if isOnlineMode and eventImg and online.isEventActive() then
+        local screenW, screenH = love.graphics.getDimensions()
+        local imageW, imageH = eventImg:getDimensions()
+        local scale = math.min(1, (screenW - 40) / imageW, (screenH - 40) / imageH)
+        local drawW, drawH = imageW * scale, imageH * scale
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(eventImg, (screenW - drawW) / 2, (screenH - drawH) / 2, 0, scale, scale)
+    end
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)

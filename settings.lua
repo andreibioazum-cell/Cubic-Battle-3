@@ -245,7 +245,7 @@ function settings.touchreleased(id, x, y)
 end
 
 function settings.keypressed(key)
-    if not inputActive then return
+    if not inputActive then return end
     if key == "return" or key == "kpenter" then
         inputActive = false
         love.keyboard.setTextInput(false)
