@@ -9,10 +9,12 @@ local btnRight = { w = 60, h = 60, x = 0, y = 0 }
 local online = require("online")
 
 local SKINS = {
-    { name = "AZUM CUBE", price = 500 },
-    { name = "NASTYA CUBE", price = 350 },
-    { name = "BUK CUBE", price = 400 },
+    { name = "AZUM CUBE", price = 500, file = "azum.png" },
+    { name = "NASTYA CUBE", price = 350, file = "nastya.png" },
+    { name = "BUK CUBE", price = 400, file = "buk.png" },
+    { name = "FATHER FROST", price = 500, file = "FatherFrost.png" },
 }
+local skinImages = {}
 local currentSkinIndex = 1
 local ownedSkins = {}
 local equippedSkin = "NONE"
@@ -53,6 +55,17 @@ function shop.load(saveData)
     end
     equippedSkin = (saveData and saveData.equippedSkin) or "NONE"
     currentSkinIndex = 1
+
+    for _, s in ipairs(SKINS) do
+        if not skinImages[s.name] and s.file then
+            local ok, img = pcall(love.graphics.newImage, s.file)
+            if ok and img then
+                img:setFilter("nearest", "nearest")
+                skinImages[s.name] = img
+            end
+        end
+    end
+
     shop.resize()
 end
 
@@ -98,21 +111,43 @@ function shop.draw(coins)
     local skin = SKINS[currentSkinIndex]
     local isOwned = false
     for _, name in ipairs(ownedSkins) do
-        if name == skin.name then isOwned = true; break end
+        if name == skin.name or (skin.name == "FATHER FROST" and (name == "FatherFrost" or name == "FATHER FROST CUBE")) then
+            isOwned = true
+            break
+        end
     end
-    local isEquipped = (equippedSkin == skin.name)
+    local isEquipped = (equippedSkin == skin.name) or (skin.name == "FATHER FROST" and (equippedSkin == "FatherFrost" or equippedSkin == "FATHER FROST CUBE"))
 
     local infoY = love.graphics.getHeight()/2 - 60*scale
     drawSpacedText(skin.name, 0, infoY, w, "center", fontBtn, nil, 1)
 
     if isOwned then
         if isEquipped then
-            drawSpacedText("EQUIPPED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+            drawSpacedText("EQUIPPED", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
         else
-            drawSpacedText("OWNED", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+            drawSpacedText("OWNED", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
         end
     else
-        drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 50*scale, w, "center", fontBtn, nil, 1)
+        drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
+    end
+
+    -- Отрисовка превью скина по центру между стрелками
+    local img = skinImages[skin.name]
+    if img then
+        local previewSize = 65 * scale
+        local cx = w / 2
+        local cy = love.graphics.getHeight()/2 + 40 * scale
+        local bob = math.sin(animTime * 3) * 3 * scale
+        local sx = previewSize / img:getWidth()
+        local sy = previewSize / img:getHeight()
+
+        -- Тень
+        love.graphics.setColor(0, 0, 0, 0.35)
+        love.graphics.draw(img, cx + 3*scale, cy + 5*scale, 0, sx, sy, img:getWidth()/2, img:getHeight()/2)
+
+        -- Сама текстура
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(img, cx, cy + bob, 0, sx, sy, img:getWidth()/2, img:getHeight()/2)
     end
 
     local function drawButton(btn, text, color, isHover)
@@ -218,9 +253,12 @@ function shop.touchpressed(id, x, y, coins, saveData)
         local skin = SKINS[currentSkinIndex]
         local isOwned = false
         for _, name in ipairs(ownedSkins) do
-            if name == skin.name then isOwned = true; break end
+            if name == skin.name or (skin.name == "FATHER FROST" and (name == "FatherFrost" or name == "FATHER FROST CUBE")) then
+                isOwned = true
+                break
+            end
         end
-        local isEquipped = (equippedSkin == skin.name)
+        local isEquipped = (equippedSkin == skin.name) or (skin.name == "FATHER FROST" and (equippedSkin == "FatherFrost" or equippedSkin == "FATHER FROST CUBE"))
 
         if not isOwned then
             if coins >= skin.price then
