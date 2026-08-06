@@ -1,4 +1,5 @@
--- online.lua - ПК = Scrap-Mods/http, ANDROID = lua-https
+-- online.lua - Универсальный HTTP/HTTPS клиент для ПК и Android
+-- Приоритет транспорта: lua-https > Scrap-Mods/http > LuaSec (ssl.https) > curl (десктоп)
 local online = {}
 
 local DB_URL = "https://cubic-battle-3-default-rtdb.firebaseio.com/"
@@ -42,112 +43,189 @@ local function generateUuid()
 end
 
 -- ============================================================
---  ПК: Scrap-Mods/http
+--  ОПРЕДЕЛЕНИЕ ТРАНСПОРТА (один раз при загрузке модуля)
 -- ============================================================
-local http = nil
-local httpLoaded = false
+local transport = { name = "none", mod = nil, ltn12 = nil }
 
-local function initHttp()
-    local ok, result = pcall(require, "http")
-    if ok then
-        http = result
-        httpLoaded = true
-        print("[ONLINE] ✅ Scrap-Mods/http loaded on PC!")
-        return true
-    else
-        print("[ONLINE] ❌ Scrap-Mods/http not found on PC")
-        return false
+-- 1) lua-https (основной для Android и ПК, возвращает code, body)
+do
+    local ok, m = pcall(require, "https")
+    if ok and m then
+        transport.name = "lua-https"
+        transport.mod = m
     end
 end
 
-if not isAndroid then
-    initHttp()
-end
-
-local function sendPCRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] PC: " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
-    
-    if httpLoaded and http then
-        local options = {
-            url = url,
-            method = method,
-            headers = {
-                ["Content-Type"] = "application/json"
-            }
-        }
-        
-        if body then
-            options.data = body
-        end
-        
-        http.request(options, function(response)
-            local code = response.status or 0
-            if code >= 200 and code < 300 then
-                print("[ONLINE] ✅ Scrap-Mods/http success! Code: " .. code)
-                if callback then callback(true, response.body) end
-            else
-                print("[ONLINE] ❌ Scrap-Mods/http error: " .. code)
-                if callback then callback(false, "HTTP error: " .. code) end
-            end
-        end)
-        
-        return true
-    else
-        print("[ONLINE] ❌ No HTTP client available on PC!")
-        if callback then callback(false, "No HTTP client") end
-        return false
+-- 2) Scrap-Mods/http (асинхронный, для ПК)
+if transport.name == "none" then
+    local ok, m = pcall(require, "http")
+    if ok and m then
+        transport.name = "scrap-mods-http"
+        transport.mod = m
     end
 end
 
--- ============================================================
---  ANDROID: lua-https
--- ============================================================
-local function sendAndroidRequest(method, path, body, callback)
-    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
-    
-    print("[ONLINE] Android: " .. method .. " " .. path)
-    print("[ONLINE] URL: " .. url)
-    
-    local ok, https = pcall(require, "https")
-    if not ok then
-        print("[ONLINE] ❌ https not found on Android!")
-        if callback then callback(false, "https not found") end
-        return false
+-- 3) LuaSec (ssl.https + ltn12)
+if transport.name == "none" then
+    local okHttps, httpsMod = pcall(require, "ssl.https")
+    local okLtn12, ltn12 = pcall(require, "ltn12")
+    if okHttps and okLtn12 and httpsMod and ltn12 then
+        transport.name = "luasec"
+        transport.mod = httpsMod
+        transport.ltn12 = ltn12
     end
-    
+end
+
+-- 4) Резерв: curl на десктопе (Linux/macOS/Windows 10+)
+if transport.name == "none" and not isAndroid then
+    transport.name = "curl"
+end
+
+print("[ONLINE] HTTP transport: " .. transport.name)
+
+-- ============================================================
+--  РЕАЛИЗАЦИИ ЗАПРОСОВ ПО ТРАНСПОРТАМ
+-- ============================================================
+local curlBroken = false
+
+local function requestLuaHttps(url, method, body, callback)
     local options = {
         method = method,
-        headers = {
-            ["Content-Type"] = "application/json"
-        }
+        headers = { ["Content-Type"] = "application/json" }
     }
-    
-    if body then
-        options.data = body
-    end
-    
-    local code, response = https.request(url, options)
-    
-    if code >= 200 and code < 300 then
-        print("[ONLINE] ✅ Android success! Code: " .. code)
+    if body then options.data = body end
+
+    local okCall, code, response = pcall(transport.mod.request, url, options)
+    code = tonumber(code) or 0
+    if okCall and code >= 200 and code < 300 then
         if callback then callback(true, response) end
         return true
-    else
-        print("[ONLINE] ❌ Android error: " .. tostring(code))
-        if callback then callback(false, "HTTP error: " .. code) end
+    end
+    if callback then callback(false, "HTTP error: " .. tostring(code)) end
+    return false
+end
+
+local function requestScrapMods(url, method, body, callback)
+    local options = {
+        url = url,
+        method = method,
+        headers = { ["Content-Type"] = "application/json" }
+    }
+    if body then options.data = body end
+
+    transport.mod.request(options, function(response)
+        local code = (response and response.status) or 0
+        if code >= 200 and code < 300 then
+            if callback then callback(true, response.body) end
+        else
+            if callback then callback(false, "HTTP error: " .. tostring(code)) end
+        end
+    end)
+    return true
+end
+
+local function requestLuaSec(url, method, body, callback)
+    local respChunks = {}
+    local options = {
+        url = url,
+        method = method,
+        sink = transport.ltn12.sink.table(respChunks),
+        headers = {
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = body and #body or 0
+        }
+    }
+    if body then
+        options.source = transport.ltn12.source.string(body)
+    end
+
+    local okCall, _, code = pcall(transport.mod.request, options)
+    code = tonumber(code) or 0
+    local response = table.concat(respChunks)
+    if okCall and code >= 200 and code < 300 then
+        if callback then callback(true, response) end
+        return true
+    end
+    if callback then callback(false, "HTTP error: " .. tostring(code)) end
+    return false
+end
+
+local function requestCurl(url, method, body, callback)
+    if curlBroken then
+        if callback then callback(false, "curl unavailable") end
         return false
+    end
+
+    local dataArg = ""
+    if body then
+        -- Тело пишем во временный файл — экранировать JSON внутри shell ненадёжно
+        pcall(function()
+            love.filesystem.write("curl_body.tmp", body)
+        end)
+        local filePath = love.filesystem.getSaveDirectory() .. "/curl_body.tmp"
+        dataArg = string.format('--data-binary @"%s"', filePath)
+    end
+
+    local cmd = string.format(
+        'curl -s --max-time 10 -X %s -H "Content-Type: application/json" %s -w "\n%%{http_code}" "%s"',
+        method, dataArg, url)
+
+    local pipe = io.popen(cmd, "r")
+    if not pipe then
+        curlBroken = true
+        if callback then callback(false, "curl failed to start") end
+        return false
+    end
+
+    local out = pipe:read("*a") or ""
+    pipe:close()
+
+    local response, codeStr = out:match("^(.*)\n(%d+)%s*$")
+    local code = tonumber(codeStr) or 0
+    if code == 0 then
+        curlBroken = true
+        if callback then callback(false, "curl not found or network error") end
+        return false
+    end
+    if code >= 200 and code < 300 then
+        if callback then callback(true, response or "") end
+        return true
+    end
+    if callback then callback(false, "HTTP error: " .. code) end
+    return false
+end
+
+-- ============================================================
+--  ЕДИНАЯ ТОЧКА ОТПРАВКИ (API прежний: online.sendRequest)
+-- ============================================================
+function online.sendRequest(method, path, body, callback)
+    local url = DB_URL .. path .. ".json?auth=" .. API_KEY
+    print("[ONLINE] " .. method .. " " .. path .. " [" .. transport.name .. "]")
+
+    if transport.name == "lua-https" then
+        return requestLuaHttps(url, method, body, callback)
+    elseif transport.name == "scrap-mods-http" then
+        return requestScrapMods(url, method, body, callback)
+    elseif transport.name == "luasec" then
+        return requestLuaSec(url, method, body, callback)
+    elseif transport.name == "curl" then
+        return requestCurl(url, method, body, callback)
+    end
+
+    print("[ONLINE] ❌ No HTTP client available! Install lua-https, Scrap-Mods/http, LuaSec or curl")
+    if callback then callback(false, "No HTTP client") end
+    return false
+end
+
+-- Для асинхронных транспортов (Scrap-Mods/http): вызывать каждый кадр.
+function online.pump()
+    if transport.name == "scrap-mods-http" and transport.mod and transport.mod.update then
+        pcall(transport.mod.update)
     end
 end
 
-function online.sendRequest(method, path, body, callback)
-    if isAndroid then
-        return sendAndroidRequest(method, path, body, callback)
-    else
-        return sendPCRequest(method, path, body, callback)
-    end
+function online.getTransportName()
+    return transport.name
 end
 
 -- ============================================================
@@ -156,7 +234,7 @@ end
 function online.parsePlayers(jsonStr)
     if not jsonStr or jsonStr == "" or jsonStr == "null" then return {} end
     local result = {}
-    
+
     for id, data in jsonStr:gmatch('"([^"]+)":%s*({[^{}]+})') do
         local x = data:match('"x":%s*([%d%.%-]+)')
         local y = data:match('"y":%s*([%d%.%-]+)')
@@ -252,19 +330,19 @@ function online.init(nickname)
     myUid = SAVE_DATA.uid or generateUuid()
     SAVE_DATA.uid = myUid
     SAVE_SAVE()
-    
-    setDebug("Online initialized with UID: " .. myUid)
+
+    setDebug("Online initialized with UID: " .. myUid .. " [" .. transport.name .. "]")
     online.connect()
 end
 
 function online.connect()
     if not myUid then return end
-    
+
     local path = PLAYERS_PATH .. myUid
     local data = string.format('{"x":400,"y":300,"hp":5,"nickname":"%s","skin":"%s"}', myNickname, mySkin)
-    
+
     setDebug("Connecting...")
-    
+
     online.sendRequest("PUT", path, data, function(ok, response)
         if ok then
             isConnected = true
@@ -273,7 +351,7 @@ function online.connect()
         else
             setDebug("❌ Failed to connect")
             isConnected = false
-            print("[ONLINE] ❌ Connection failed!")
+            print("[ONLINE] ❌ Connection failed: " .. tostring(response))
         end
     end)
 end
@@ -307,9 +385,9 @@ function online.sendPosition(x, y)
 
     local newX = math.floor(x)
     local newY = math.floor(y)
-    
+
     if lastSentX == newX and lastSentY == newY then return end
-    
+
     local now = love.timer.getTime()
     if now - lastSentTime < 0.2 then return end
     lastSentTime = now
@@ -429,6 +507,8 @@ end
 function online.update(dt)
     if not isConnected then return end
 
+    online.pump()
+
     for id, p in pairs(players) do
         if p.targetX then
             p.x = p.x or p.targetX
@@ -470,7 +550,7 @@ end
 function online.sendDamage(targetUid, damage, attackerUid)
     if not isConnected or not myUid then return end
     local path = DAMAGE_PATH .. targetUid
-    local data = string.format('{"damage":%d,"attacker":"%s","time":%f}', 
+    local data = string.format('{"damage":%d,"attacker":"%s","time":%f}',
         damage, attackerUid or myUid, love.timer.getTime())
     online.sendRequest("PUT", path, data)
 end
