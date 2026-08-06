@@ -203,6 +203,9 @@ end
 function love.update(dt)
     if dt > 0.05 then dt = 0.05 end
 
+    -- Прокачка асинхронного HTTP-транспорта (Scrap-Mods/http), если он используется
+    if online.pump then online.pump() end
+
     if GameState.current ~= lastState then
         print("Switch to: " .. tostring(GameState.current))
         

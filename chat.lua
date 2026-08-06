@@ -1,5 +1,12 @@
--- chat.lua - Чат для ПК и телефона с отладкой через game.addDebugMessage
+-- chat.lua - Чат для ПК и телефона (Firebase Realtime Database)
 local chat = {}
+
+-- ФИКС #1 (главная причина, почему в Firebase не было папки chat):
+-- online здесь использовался как глобальная переменная, но в main.lua и game.lua
+-- он объявлен через `local online = require("online")` — глобала не существует.
+-- В итоге проверка `if online and online.isConnected()` всегда была ложной
+-- и сообщения НИКОГДА не уходили в Firebase. Подключаем модуль напрямую:
+local online = require("online")
 
 local messages = {}
 local MAX_MESSAGES = 20
@@ -11,6 +18,13 @@ local chatWidth = 180
 local chatHeight = 160
 local scrollOffset = 0
 local fetchTimer = 0
+
+-- Сколько секунд сообщение хранится в Firebase (чтобы узел chat не рос бесконечно)
+local MSG_TTL = 120
+
+-- id сообщений, которые уже попали в локальный список (защита от дублей)
+local knownIds = {}
+local knownIdsCount = 0
 
 local adminNicknames = {
     ["DimaSaraev"] = true,
@@ -27,6 +41,58 @@ local colors = {
 local isOnline = false
 local isGameState = false
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
+
+-- Логи: в консоль (logcat на Android) + game.addDebugMessage, если он когда-нибудь появится
+local function dbg(text)
+    print("[CHAT] " .. tostring(text))
+    local g = rawget(_G, "game")
+    if g and g.addDebugMessage then
+        pcall(g.addDebugMessage, tostring(text))
+    end
+end
+
+local function markKnown(id)
+    if knownIdsCount > 400 then
+        knownIds = {}
+        knownIdsCount = 0
+    end
+    if id and not knownIds[id] then
+        knownIds[id] = true
+        knownIdsCount = knownIdsCount + 1
+    end
+end
+
+-- Уникальный id сообщения: только цифры и "_" (валидный ключ Firebase),
+-- лексикографическая сортировка ключей = хронологический порядок.
+local function makeMessageId()
+    local ms = math.floor((love.timer.getTime() * 1000) % 100000)
+    return tostring(os.time()) .. "_" .. ms .. "_" .. math.random(1000, 9999)
+end
+
+-- Экранирование строк для JSON (кавычка/бэкслеш в тексте раньше ломали тело
+-- запроса -> Firebase отвечал 400 Bad Request и сообщение терялось)
+local function jsonEscape(s)
+    s = tostring(s or "")
+    s = s:gsub("\\", "\\\\")
+    s = s:gsub('"', '\\"')
+    s = s:gsub("\n", "\\n"):gsub("\r", "\\r")
+    return s
+end
+
+local function jsonUnescape(s)
+    if not s then return "" end
+    s = tostring(s)
+    s = s:gsub("\\\\", "\001")
+    s = s:gsub('\\"', '"'):gsub("\\n", "\n"):gsub("\\r", "\r")
+    s = s:gsub("\001", "\\")
+    return s
+end
+
+-- %f в некоторых локалях даёт десятичную запятую ("1,23") — это невалидный JSON
+local function jsonNumber(x)
+    local s = string.format("%.3f", tonumber(x) or 0)
+    return (s:gsub(",", "."))
+end
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -77,27 +143,23 @@ function chat.load()
     -- Используем шрифт Fredoka (как в игре)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
     messages = {}
+    knownIds = {}
+    knownIdsCount = 0
     inputText = ""
     isInputActive = false
     isChatOpen = false
     chat.forceClose()
-    if game and game.addDebugMessage then
-        game.addDebugMessage("💬 Chat loaded", {0.5, 0.8, 1, 1})
-    end
+    dbg("💬 Chat loaded")
 end
 
-function chat.setOnlineMode(online)
-    isOnline = online
+function chat.setOnlineMode(onlineMode)
+    isOnline = onlineMode
     if not isOnline then
         chat.forceClose()
         isChatOpen = false
-        if game and game.addDebugMessage then
-            game.addDebugMessage("💬 Chat offline", {0.8, 0.8, 0.8, 1})
-        end
+        dbg("💬 Chat offline")
     else
-        if game and game.addDebugMessage then
-            game.addDebugMessage("💬 Chat online", {0.3, 1, 0.3, 1})
-        end
+        dbg("💬 Chat online")
     end
 end
 
@@ -115,13 +177,13 @@ end
 
 function chat.addMessage(text, sender, color)
     if not text or text == "" then return end
-    
+
     local safeText = sanitize_utf8(text)
     if #safeText > 100 then safeText = safeText:sub(1, 100) end
-    
+
     local safeSender = sanitize_utf8(sender or "System")
     if #safeSender > 20 then safeSender = safeSender:sub(1, 20) end
-    
+
     local timestamp = os.date("%H:%M")
     table.insert(messages, {
         text = safeText,
@@ -130,7 +192,7 @@ function chat.addMessage(text, sender, color)
         time = timestamp,
         id = os.time() .. "_" .. math.random(1000, 9999)
     })
-    
+
     if #messages > MAX_MESSAGES then table.remove(messages, 1) end
     scrollOffset = 0
 end
@@ -154,7 +216,7 @@ end
 function chat.toggleInput()
     if not isOnline or not isGameState then return end
     if not isChatOpen then return end
-    
+
     isInputActive = not isInputActive
     if isInputActive then
         love.keyboard.setTextInput(true)
@@ -181,98 +243,102 @@ end
 function chat.sendMessage(text)
     if text == "" then return end
     if not isOnline or not isGameState then return end
-    
+
     local filtered = sanitize_utf8(text)
     -- Фильтр мата
     local badWords = {"хуй", "пизда", "бля", "еба", "сука", "гондон", "пидор", "мудак", "залупа"}
     for _, word in ipairs(badWords) do
         filtered = filtered:gsub(word, "***")
     end
-    
-    local sender = SAVE_DATA.nickname or "Player"
+
+    -- ФИКС: раньше условие `if sender == SAVE_DATA.nickname` было всегда истинным,
+    -- и ВСЕ игроки без исключения отправляли сообщения как "Anonymous"
+    local sender = sanitize_utf8((SAVE_DATA and SAVE_DATA.nickname) or "Player")
+    if #sender > 20 then sender = sender:sub(1, 20) end
+    if sender == "" then sender = "Player" end
     if adminNicknames[sender] then
         sender = "Admin"
     end
-    if sender == SAVE_DATA.nickname then
-        sender = "Anonymous"
-    end
-    
-    -- Отладка: отправка
-    if game and game.addDebugMessage then
-        game.addDebugMessage("📤 Sending: " .. filtered, {0.5, 1, 0.5, 1})
-    end
-    
-    -- Отправка в Firebase
-    if online and online.isConnected() then
-        local chatPath = "chat/" .. os.time() .. "_" .. math.random(1000, 9999)
-        local data = string.format('{"text":"%s","sender":"%s","time":%f}', 
-            filtered, sender, love.timer.getTime())
-        online.sendRequest("PUT", chatPath, data, function(ok, response)
-            if ok then
-                if game and game.addDebugMessage then
-                    game.addDebugMessage("✅ Message sent to Firebase", {0.3, 1, 0.3, 1})
-                end
-            else
-                if game and game.addDebugMessage then
-                    game.addDebugMessage("❌ Send failed: " .. tostring(response), {1, 0.3, 0.3, 1})
-                end
-            end
-        end)
-    else
-        if game and game.addDebugMessage then
-            game.addDebugMessage("❌ Not connected to Firebase", {1, 0.3, 0.3, 1})
-        end
-    end
-    
-    -- Добавляем локально
+
     local color = colors.player
     if sender == "Admin" then color = colors.admin end
-    if sender == "System" then color = colors.system end
+
+    -- Локально показываем сразу
     chat.addMessage(filtered, sender, color)
+
+    if not online or not online.isConnected() then
+        dbg("❌ Не отправлено: нет подключения к Firebase")
+        chat.addSystemMessage("Нет соединения с чат-сервером")
+        return
+    end
+
+    local msgId = makeMessageId()
+    markKnown(msgId) -- не дублировать собственное сообщение при следующем fetch
+
+    local data = string.format('{"text":"%s","sender":"%s","time":%s}',
+        jsonEscape(filtered), jsonEscape(sender), jsonNumber(os.time()))
+
+    dbg("📤 Отправка в chat/" .. msgId)
+    online.sendRequest("PUT", "chat/" .. msgId, data, function(ok, response)
+        if ok then
+            dbg("✅ Записано в Firebase: chat/" .. msgId)
+        else
+            dbg("❌ Firebase отклонил запись: " .. tostring(response))
+            chat.addSystemMessage("Ошибка отправки сообщения")
+        end
+    end)
 end
 
 function chat.fetchMessages()
     if not online or not online.isConnected() then return end
     if not isOnline or not isGameState then return end
-    
-    if game and game.addDebugMessage then
-        game.addDebugMessage("📥 Fetching messages...", {0.5, 0.5, 1, 1})
-    end
-    
-    online.sendRequest("GET", "chat.json", nil, function(ok, res)
-        if ok and res and res ~= "null" and res ~= "" then
-            if game and game.addDebugMessage then
-                game.addDebugMessage("✅ Got messages from Firebase", {0.3, 1, 0.3, 1})
-            end
-            for id, data in res:gmatch('"([^"]+)":%s*({[^{}]+})') do
-                local text = data:match('"text":%s*"([^"]+)"')
-                local sender = data:match('"sender":%s*"([^"]+)"')
-                if text and sender then
-                    local exists = false
-                    for _, msg in ipairs(messages) do
-                        if msg.text == text and msg.sender == sender and msg.id == id then
-                            exists = true
+
+    -- ФИКС: путь "chat", а не "chat.json" — суффикс ".json" сам подставляется
+    -- в online.sendRequest, поэтому старый запрос уходил на "chat.json.json"
+    -- и всегда возвращал null (чужие сообщения не отображались).
+    online.sendRequest("GET", "chat", nil, function(ok, res)
+        if not ok then
+            dbg("❌ Ошибка чтения чата: " .. tostring(res))
+            return
+        end
+        if not res or res == "null" or res == "" then return end
+
+        local now = os.time()
+        for id, data in res:gmatch('"([^"]+)":%s*({[^{}]+})') do
+            local ts = tonumber(id:match("^(%d+)")) or now
+            if now - ts > MSG_TTL then
+                -- Чистим старые сообщения, чтобы узел chat не разрастался бесконечно
+                online.sendRequest("DELETE", "chat/" .. id, nil, function() end)
+            elseif not knownIds[id] then
+                markKnown(id)
+                local text = sanitize_utf8(jsonUnescape(data:match('"text":%s*"([^"]*)"')))
+                local sender = sanitize_utf8(jsonUnescape(data:match('"sender":%s*"([^"]*)"')))
+                if #text > 100 then text = text:sub(1, 100) end
+                if #sender > 20 then sender = sender:sub(1, 20) end
+                if text ~= "" and sender ~= "" then
+                    -- Доп. защита от дубля (например, своё сообщение после перезахода)
+                    local dup = false
+                    for _, m in ipairs(messages) do
+                        if m.text == text and m.sender == sender then
+                            dup = true
                             break
                         end
                     end
-                    if not exists then
+                    if not dup then
                         local color = colors.player
                         if sender == "Admin" then color = colors.admin end
                         if sender == "System" then color = colors.system end
                         table.insert(messages, {
-                            text = sanitize_utf8(text),
-                            sender = sanitize_utf8(sender),
+                            text = text,
+                            sender = sender,
                             color = color,
-                            time = os.date("%H:%M"),
+                            time = os.date("%H:%M", ts),
                             id = id
                         })
                         if #messages > MAX_MESSAGES then table.remove(messages, 1) end
+                        scrollOffset = 0
                     end
                 end
-            end
-        else
-            if game and game.addDebugMessage then
-                game.addDebugMessage("❌ No messages or error: " .. tostring(res), {1, 0.3, 0.3, 1})
             end
         end
     end)
@@ -291,66 +357,66 @@ end
 
 function chat.draw()
     if not isOnline or not isGameState then return end
-    
+
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
     if not font then chat.load() end
-    
+
     -- Кнопка чата (правый верхний угол)
     local btnSize = 34 * scale
     local btnX = w - btnSize - 10
     local btnY = 10
-    
+
     love.graphics.setColor(0.2, 0.4, 0.8, 0.8)
     love.graphics.rectangle("fill", btnX, btnY, btnSize, btnSize, 6 * scale, 6 * scale)
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.setLineWidth(2 * scale)
     love.graphics.rectangle("line", btnX, btnY, btnSize, btnSize, 6 * scale, 6 * scale)
-    
+
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(font)
     local icon = isChatOpen and "X" or "C"
     local iconW = font:getWidth(icon)
     local iconH = font:getHeight()
     love.graphics.print(icon, btnX + (btnSize - iconW)/2, btnY + (btnSize - iconH)/2)
-    
+
     chat._btnX = btnX
     chat._btnY = btnY
     chat._btnSize = btnSize
-    
+
     if not isChatOpen then return end
-    
+
     local chatX = w - chatWidth * scale - 10
     local chatY = btnY + btnSize + 5
-    
+
     -- Фон окна чата
     love.graphics.setColor(0, 0, 0, 0.8)
     love.graphics.rectangle("fill", chatX, chatY, chatWidth * scale, chatHeight * scale, 6 * scale, 6 * scale)
     love.graphics.setColor(0.2, 0.4, 0.8, 0.3)
     love.graphics.setLineWidth(1.5 * scale)
     love.graphics.rectangle("line", chatX, chatY, chatWidth * scale, chatHeight * scale, 6 * scale, 6 * scale)
-    
+
     love.graphics.setFont(font)
     local y = chatY + 5 + scrollOffset
     local maxMessages = math.floor((chatHeight * scale - 10) / 16)
     local startIdx = math.max(1, #messages - maxMessages + 1)
-    
+
     for i = startIdx, #messages do
         local msg = messages[i]
         local alpha = (i == startIdx) and 0.5 or 1
-        
+
         -- Время
         love.graphics.setColor(0.6, 0.6, 0.6, alpha * 0.6)
         local timeText = msg.time .. " "
         love.graphics.print(timeText, chatX + 4, y)
         local timeW = font:getWidth(timeText)
-        
+
         -- Ник
         love.graphics.setColor(msg.color[1], msg.color[2], msg.color[3], alpha)
         local senderText = msg.sender .. ": "
         love.graphics.print(senderText, chatX + 4 + timeW, y)
         local senderW = font:getWidth(senderText)
-        
+
         -- Текст
         love.graphics.setColor(1, 1, 1, alpha)
         local text = msg.text or ""
@@ -363,7 +429,7 @@ function chat.draw()
         pcall(love.graphics.print, text, chatX + 4 + timeW + senderW, y)
         y = y + 16
     end
-    
+
     if isInputActive then
         local inputY = chatY + chatHeight * scale - 24
         love.graphics.setColor(0.1, 0.1, 0.2, 0.9)
@@ -371,7 +437,7 @@ function chat.draw()
         love.graphics.setColor(0.3, 0.5, 0.9, 0.5)
         love.graphics.setLineWidth(1 * scale)
         love.graphics.rectangle("line", chatX + 2, inputY, chatWidth * scale - 4, 20, 4 * scale, 4 * scale)
-        
+
         love.graphics.setColor(1, 1, 1, 1)
         local displayText = sanitize_utf8(inputText)
         if love.timer.getTime() % 1 < 0.5 then
@@ -386,7 +452,7 @@ end
 
 function chat.keypressed(key)
     if not isOnline or not isGameState then return false end
-    
+
     if key == "t" or key == "т" then
         if not isChatOpen then
             isChatOpen = true
@@ -395,7 +461,7 @@ function chat.keypressed(key)
         end
         return true
     end
-    
+
     if isInputActive then
         if key == "return" or key == "kpenter" then
             chat.toggleInput()
@@ -407,7 +473,7 @@ function chat.keypressed(key)
             inputText = inputText:sub(1, -2)
         end
     end
-    
+
     return false
 end
 
@@ -423,7 +489,7 @@ end
 
 function chat.touchpressed(x, y)
     if not isOnline or not isGameState then return false end
-    
+
     -- Кнопка чата
     if chat._btnX and chat._btnY then
         local s = chat._btnSize
@@ -433,7 +499,7 @@ function chat.touchpressed(x, y)
             return true
         end
     end
-    
+
     -- Клик по окну чата = открыть клавиатуру
     if isChatOpen then
         local w, h = love.graphics.getDimensions()
@@ -448,14 +514,14 @@ function chat.touchpressed(x, y)
             return true
         end
     end
-    
+
     return false
 end
 
 function chat.mousepressed(x, y, button)
     if not isOnline or not isGameState then return false end
     if isMobile then return false end
-    
+
     if button == 1 and chat._btnX and chat._btnY then
         local s = chat._btnSize
         if x >= chat._btnX and x <= chat._btnX + s and
@@ -464,7 +530,7 @@ function chat.mousepressed(x, y, button)
             return true
         end
     end
-    
+
     return false
 end
 
