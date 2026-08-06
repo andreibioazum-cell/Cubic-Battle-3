@@ -14,7 +14,7 @@ local BULLET_SPEED = 340 * 1.15
 
 local cube = { x = 0, y = 0, speed = 260, angle = 0, hp = PLAYER_HP_MAX, hit = 0 }
 local bullets = {}
-local bg, playerImg, azumImg, nastyaImg, bukImg, eventImg, font
+local bg, playerImg, azumImg, nastyaImg, bukImg, fatherFrostImg, presentImg, eventImg, font
 local cam = { x = 0, y = 0 }
 local dead = false
 
@@ -40,7 +40,21 @@ local DASH_SPEED_MULT = 4
 local DASH_COOLDOWN = 10
 local dashDirX, dashDirY = 0, 0
 
+local frostCooldown = 0
+local FROST_COOLDOWN = 20
+local mines = {}
+local explosionEffects = {}
+local playerFrozenTimer = 0
+local PLAYER_FREEZE_SPEED_MULT = 0.25
+local MINE_TRIGGER_RADIUS = 55
+local MINE_DAMAGE = 3
+local MINE_FREEZE_DURATION = 5
+
 local damageCheckTimer = 0
+
+local function isFatherFrost(skin)
+    return skin == "FATHER FROST" or skin == "FatherFrost" or skin == "FATHER FROST CUBE"
+end
 
 -- ============================================================
 --  ОТЛАДКА
@@ -196,6 +210,34 @@ local function spawnBullet(x, y, dx, dy, isDash)
     if _G.playShootSound then _G.playShootSound() end
 end
 
+local function spawnExplosion(x, y)
+    if _G.playHitSound then _G.playHitSound() end
+    local particles = {}
+    for i = 1, 24 do
+        local angle = math.random() * math.pi * 2
+        local spd = 60 + math.random() * 160
+        table.insert(particles, {
+            x = x,
+            y = y,
+            vx = math.cos(angle) * spd,
+            vy = math.sin(angle) * spd,
+            size = 3 + math.random() * 4,
+            life = 0.6 + math.random() * 0.4,
+            maxLife = 0.6 + math.random() * 0.4,
+            color = (math.random() > 0.5) and {0.3, 0.7, 1} or {0.8, 0.95, 1}
+        })
+    end
+    table.insert(explosionEffects, {
+        x = x,
+        y = y,
+        radius = 10,
+        maxRadius = 75,
+        life = 0.5,
+        maxLife = 0.5,
+        particles = particles
+    })
+end
+
 local function drawHPBar(x, y, w, h, hp, max, color)
     if hp < 0 then hp = 0 end
     love.graphics.setColor(0, 0, 0, 0.5)
@@ -320,6 +362,11 @@ function game.load()
     dashTimer = 0
     isDashing = false
 
+    frostCooldown = 0
+    mines = {}
+    explosionEffects = {}
+    playerFrozenTimer = 0
+
     local w, h = love.graphics.getDimensions()
     cube.x = w / 2
     cube.y = h / 2
@@ -341,6 +388,22 @@ function game.load()
     nastyaImg:setFilter("nearest", "nearest")
     bukImg = bukImg or love.graphics.newImage("buk.png")
     bukImg:setFilter("nearest", "nearest")
+
+    if not fatherFrostImg then
+        local ok, img = pcall(love.graphics.newImage, "FatherFrost.png")
+        if ok and img then
+            fatherFrostImg = img
+            fatherFrostImg:setFilter("nearest", "nearest")
+        end
+    end
+
+    if not presentImg then
+        local ok, img = pcall(love.graphics.newImage, "Present.png")
+        if ok and img then
+            presentImg = img
+            presentImg:setFilter("nearest", "nearest")
+        end
+    end
 
     -- Картинка события нужна только для отображения в онлайн-режиме.
     if not eventImg then
@@ -401,6 +464,14 @@ function game.update(dt)
         if dashCooldown < 0 then dashCooldown = 0 end
     end
 
+    if frostCooldown > 0 then
+        frostCooldown = math.max(0, frostCooldown - dt)
+    end
+
+    if playerFrozenTimer > 0 then
+        playerFrozenTimer = math.max(0, playerFrozenTimer - dt)
+    end
+
     if controls.getAbilityTrigger() then
         if equippedSkin == "AZUM CUBE" and not resurrectionUsed and cube.hp <= 1 then
             cube.hp = 5
@@ -459,6 +530,23 @@ function game.update(dt)
                 online.sendAbility("dash", cube.x, cube.y, dashDirX, dashDirY)
                 game.addDebugMessage("Dash", {0.3, 0.6, 0.9, 1})
             end
+        elseif isFatherFrost(equippedSkin) and frostCooldown <= 0 then
+            table.insert(mines, {
+                x = cube.x,
+                y = cube.y,
+                life = 60,
+                timer = 0,
+                owner = online.getMyUid()
+            })
+            frostCooldown = FROST_COOLDOWN
+            controls.setAbilityAvailable(false)
+            if _G.playShootSound then _G.playShootSound() end
+            if isOnlineMode and online.isConnected() then
+                online.sendAbility("mine", cube.x, cube.y)
+                game.addDebugMessage("Present mine placed", {0.3, 0.8, 1, 1})
+            else
+                game.addDebugMessage("Present mine placed", {0.3, 0.8, 1, 1})
+            end
         end
     end
 
@@ -468,13 +556,19 @@ function game.update(dt)
         controls.setAbilityAvailable(laserCooldown <= 0)
     elseif equippedSkin == "BUK CUBE" then
         controls.setAbilityAvailable(not isDashing and dashCooldown <= 0)
+    elseif isFatherFrost(equippedSkin) then
+        controls.setAbilityAvailable(frostCooldown <= 0)
     else
         controls.setAbilityAvailable(false)
     end
 
+    local baseSpeed = isOnlineMode and 420 or 260
+    local speedMult = (playerFrozenTimer > 0) and PLAYER_FREEZE_SPEED_MULT or 1
+    local currentSpeed = baseSpeed * speedMult
+
     local dx, dy = controls.getMove()
-    cube.x = cube.x + dx * cube.speed * dt
-    cube.y = cube.y + dy * cube.speed * dt
+    cube.x = cube.x + dx * currentSpeed * dt
+    cube.y = cube.y + dy * currentSpeed * dt
     if dx ~= 0 or dy ~= 0 then
         cube.angle = math.atan2(dy, dx) + math.pi / 2
     end
@@ -503,6 +597,37 @@ function game.update(dt)
         if b.life <= 0 then table.remove(bullets, i) end
     end
 
+    -- Обновление мин
+    for i = #mines, 1, -1 do
+        local m = mines[i]
+        m.timer = m.timer + dt
+        m.life = m.life - dt
+        if m.life <= 0 then
+            table.remove(mines, i)
+        end
+    end
+
+    -- Обновление эффектов взрывов мин
+    for i = #explosionEffects, 1, -1 do
+        local ex = explosionEffects[i]
+        ex.life = ex.life - dt
+        ex.radius = ex.radius + (ex.maxRadius - ex.radius) * math.min(1, dt * 10)
+        for j = #ex.particles, 1, -1 do
+            local p = ex.particles[j]
+            p.x = p.x + p.vx * dt
+            p.y = p.y + p.vy * dt
+            p.vx = p.vx * (1 - dt * 2)
+            p.vy = p.vy * (1 - dt * 2)
+            p.life = p.life - dt
+            if p.life <= 0 then
+                table.remove(ex.particles, j)
+            end
+        end
+        if ex.life <= 0 and #ex.particles == 0 then
+            table.remove(explosionEffects, i)
+        end
+    end
+
     if isOnlineMode and online.isConnected() then
         local onlineBullets = online.getBullets()
         for id, b in pairs(onlineBullets) do
@@ -516,9 +641,73 @@ function game.update(dt)
                 end
             end
         end
+
+        -- Проверка мин в онлайн-режиме: соперники наступают на наши мины
+        local players = online.getPlayers()
+        for uid, p in pairs(players) do
+            if uid ~= online.getMyUid() then
+                for i = #mines, 1, -1 do
+                    local m = mines[i]
+                    local mx = p.x - m.x
+                    local my = p.y - m.y
+                    if mx*mx + my*my <= MINE_TRIGGER_RADIUS * MINE_TRIGGER_RADIUS then
+                        table.remove(mines, i)
+                        spawnExplosion(m.x, m.y)
+                        online.sendDamage(uid, MINE_DAMAGE, online.getMyUid())
+                        online.sendAbility("mine_explode", m.x, m.y)
+                        break
+                    end
+                end
+            end
+        end
+
+        -- Проверка чужих способностей (мины других игроков)
+        local onlineAbilities = online.getAbilities() or {}
+        for aid, ab in pairs(onlineAbilities) do
+            if ab.owner ~= online.getMyUid() and ab.type == "mine" then
+                local mx = cube.x - ab.x
+                local my = cube.y - ab.y
+                if mx*mx + my*my <= (MINE_TRIGGER_RADIUS * 0.8) ^ 2 then
+                    spawnExplosion(ab.x, ab.y)
+                    onHitPlayer(MINE_DAMAGE, ab.owner)
+                    playerFrozenTimer = MINE_FREEZE_DURATION
+                    online.sendRequest("DELETE", "abilities/" .. aid, nil, function() end)
+                    online.sendAbility("mine_explode", ab.x, ab.y)
+                end
+            end
+        end
     end
 
     if not isOnlineMode then
+        -- Проверка столкновения мин с врагом в офлайне
+        local e, eSize, _ = enemy.get()
+        if e then
+            for i = #mines, 1, -1 do
+                local m = mines[i]
+                local dx = e.x - m.x
+                local dy = e.y - m.y
+                local distSq = dx*dx + dy*dy
+                local triggerRadius = MINE_TRIGGER_RADIUS + (eSize or 55) * 0.4
+                if distSq <= triggerRadius * triggerRadius then
+                    table.remove(mines, i)
+                    spawnExplosion(m.x, m.y)
+                    enemy.freeze(MINE_FREEZE_DURATION, 0.25)
+                    local killed = enemy.takeDamage(MINE_DAMAGE)
+                    if killed then
+                        local reward = 10
+                        if currentDifficulty == "easy" then reward = 5
+                        elseif currentDifficulty == "hard" then reward = 50
+                        elseif currentDifficulty == "impossible" then reward = 100 end
+                        SAVE_DATA.coins = (SAVE_DATA.coins or 0) + reward
+                        SAVE_SAVE()
+                        GameState.current = "lobby"
+                        return
+                    end
+                    break
+                end
+            end
+        end
+
         local enemyKilled = enemy.update(dt, cube.x, cube.y, bullets, onHitPlayer)
         if enemyKilled then
             local reward = 10
@@ -566,6 +755,66 @@ function game.draw()
     end
 
     drawSnow()
+
+    -- Отрисовка мин (Present)
+    if presentImg then
+        local pw = presentImg:getWidth()
+        local ph = presentImg:getHeight()
+        local targetMineSize = 46
+        local mineScale = targetMineSize / pw
+        for _, m in ipairs(mines) do
+            local pulse = 1 + 0.05 * math.sin(m.timer * 4)
+            -- Тень мины
+            love.graphics.setColor(0, 0, 0, 0.35)
+            love.graphics.ellipse("fill", m.x + 2, m.y + 14, 18, 8)
+            -- Мина-подарок
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(presentImg, m.x, m.y, 0, mineScale * pulse, mineScale * pulse, pw / 2, ph / 2)
+            -- Морозное свечение
+            local sparkAlpha = 0.4 + 0.3 * math.sin(m.timer * 6)
+            love.graphics.setColor(0.3, 0.7, 1.0, sparkAlpha)
+            love.graphics.setLineWidth(1.8)
+            love.graphics.circle("line", m.x, m.y, 24 * pulse)
+        end
+    end
+
+    -- Отрисовка чужих мин в онлайн-режиме
+    if isOnlineMode and presentImg then
+        local onlineAbilities = online.getAbilities() or {}
+        local pw = presentImg:getWidth()
+        local ph = presentImg:getHeight()
+        local targetMineSize = 46
+        local mineScale = targetMineSize / pw
+        for aid, ab in pairs(onlineAbilities) do
+            if ab.owner ~= online.getMyUid() and ab.type == "mine" then
+                local pulse = 1 + 0.05 * math.sin(love.timer.getTime() * 4)
+                love.graphics.setColor(0, 0, 0, 0.35)
+                love.graphics.ellipse("fill", ab.x + 2, ab.y + 14, 18, 8)
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.draw(presentImg, ab.x, ab.y, 0, mineScale * pulse, mineScale * pulse, pw / 2, ph / 2)
+                love.graphics.setColor(0.3, 0.7, 1.0, 0.5)
+                love.graphics.setLineWidth(1.8)
+                love.graphics.circle("line", ab.x, ab.y, 24 * pulse)
+            end
+        end
+    end
+
+    -- Отрисовка эффектов взрывов мин
+    for _, ex in ipairs(explosionEffects) do
+        local alpha = ex.life / ex.maxLife
+        love.graphics.setColor(0.3, 0.7, 1.0, alpha * 0.7)
+        love.graphics.setLineWidth(4 * alpha)
+        love.graphics.circle("line", ex.x, ex.y, ex.radius)
+
+        love.graphics.setColor(0.7, 0.9, 1.0, alpha * 0.25)
+        love.graphics.circle("fill", ex.x, ex.y, ex.radius * 0.7)
+
+        for _, p in ipairs(ex.particles) do
+            local pAlpha = p.life / p.maxLife
+            love.graphics.setColor(p.color[1], p.color[2], p.color[3], pAlpha)
+            love.graphics.circle("fill", p.x, p.y, p.size * pAlpha)
+        end
+    end
 
     for _, b in ipairs(bullets) do
         if b.isDash and b.isWhiteDash then
@@ -623,6 +872,9 @@ function game.draw()
                     love.graphics.setColor(0, 1, 0, 0.6)
                     love.graphics.setLineWidth(2)
                     love.graphics.circle("line", ab.x, ab.y, 40)
+                elseif ab.type == "mine_explode" then
+                    love.graphics.setColor(0.3, 0.7, 1.0, 0.5)
+                    love.graphics.circle("line", ab.x, ab.y, 45)
                 end
             end
         end
@@ -643,15 +895,20 @@ function game.draw()
                     imgToDraw = nastyaImg
                 elseif p.skin == "BUK CUBE" then
                     imgToDraw = bukImg
+                elseif isFatherFrost(p.skin) then
+                    imgToDraw = fatherFrostImg
                 else
                     imgToDraw = playerImg
                 end
 
+                local sx = imgToDraw and (PLAYER_SIZE / imgToDraw:getWidth()) or 1
+                local sy = imgToDraw and (PLAYER_SIZE / imgToDraw:getHeight()) or 1
+
                 love.graphics.setColor(0, 0, 0, 0.3)
-                love.graphics.draw(imgToDraw, p.x - PLAYER_SIZE/2 + 4, p.y - PLAYER_SIZE/2 + 6, 0, 1, 1)
+                love.graphics.draw(imgToDraw, p.x - PLAYER_SIZE/2 + 4, p.y - PLAYER_SIZE/2 + 6, 0, sx, sy)
 
                 love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.draw(imgToDraw, p.x - PLAYER_SIZE/2, p.y - PLAYER_SIZE/2, 0, 1, 1)
+                love.graphics.draw(imgToDraw, p.x - PLAYER_SIZE/2, p.y - PLAYER_SIZE/2, 0, sx, sy)
 
                 local hp = p.hp or 5
                 local hpW = 40
@@ -702,23 +959,39 @@ function game.draw()
         imgToDraw = nastyaImg
     elseif equippedSkin == "BUK CUBE" then
         imgToDraw = bukImg
+    elseif isFatherFrost(equippedSkin) then
+        imgToDraw = fatherFrostImg
     else
         imgToDraw = playerImg
     end
+
+    local sx = imgToDraw and (PLAYER_SIZE / imgToDraw:getWidth()) or 1
+    local sy = imgToDraw and (PLAYER_SIZE / imgToDraw:getHeight()) or 1
 
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.push()
     love.graphics.translate(cube.x + 6, cube.y + 8)
     love.graphics.rotate(cube.angle)
-    love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
+    love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2, 0, sx, sy)
     love.graphics.pop()
 
     love.graphics.push()
     love.graphics.translate(cube.x, cube.y)
     love.graphics.rotate(cube.angle)
     local t = cube.hit
-    love.graphics.setColor(1, 1 - t * 0.6, 1 - t * 0.6, 1)
-    love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2)
+    if playerFrozenTimer > 0 then
+        -- Заморозка игрока: синий оттенок
+        love.graphics.setColor(0.3, 0.65, 1.0, 1)
+    else
+        love.graphics.setColor(1, 1 - t * 0.6, 1 - t * 0.6, 1)
+    end
+    love.graphics.draw(imgToDraw, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2, 0, sx, sy)
+
+    if playerFrozenTimer > 0 then
+        love.graphics.setColor(0.4, 0.8, 1, 0.5)
+        love.graphics.setLineWidth(2)
+        love.graphics.rectangle("line", -PLAYER_SIZE/2 - 2, -PLAYER_SIZE/2 - 2, PLAYER_SIZE + 4, PLAYER_SIZE + 4, 6, 6)
+    end
     love.graphics.pop()
 
     if isDashing then
@@ -730,11 +1003,9 @@ function game.draw()
     end
 
     -- Event1.png показывается только в онлайн-матче, когда Firebase/Event = 1.
-    -- Теперь он рисуется в игровом мире на фиксированной позиции (400, 300).
     if isOnlineMode and eventImg and online.isEventActive() then
         local imageW, imageH = eventImg:getDimensions()
         love.graphics.setColor(1, 1, 1, 1)
-        -- Позиция в мире, например (400, 300)
         love.graphics.draw(eventImg, 400 - imageW / 2, 300 - imageH / 2)
     end
 
@@ -784,6 +1055,15 @@ function game.draw()
         else
             love.graphics.setColor(1, 0.2, 0.2, 0.8)
             love.graphics.printf("LASER READY", px, py + 88, 200, "left")
+        end
+    elseif isFatherFrost(equippedSkin) then
+        local cd = math.max(0, frostCooldown)
+        if cd > 0 then
+            love.graphics.setColor(0.4, 0.8, 1, 0.8)
+            love.graphics.printf("PRESENT CD: " .. math.ceil(cd) .. "s", px, py + 88, 200, "left")
+        else
+            love.graphics.setColor(0.3, 0.9, 1, 0.9)
+            love.graphics.printf("PRESENT READY", px, py + 88, 200, "left")
         end
     end
 

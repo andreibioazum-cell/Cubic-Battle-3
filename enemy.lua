@@ -90,7 +90,11 @@ local function spawn(px, py)
         dodgeTime = 0,
         dodgeDirX = 0,
         dodgeDirY = 0,
-        dodgeSpeed = 300
+        dodgeSpeed = 300,
+        freezeTimer = 0,
+        freezeDuration = 0,
+        isFrozen = false,
+        freezeSpeedMult = 0.25
     }
 end
 
@@ -108,7 +112,22 @@ end
 function enemy.get() return e, SIZE, MAX_HP end
 function enemy.getBullets() return eBullets end
 
--- Новая функция для нанесения урона врагу (используется лазером)
+-- Заморозка врага
+function enemy.freeze(duration, speedMult)
+    if not e then return end
+    duration = duration or 5
+    e.freezeTimer = duration
+    e.freezeDuration = duration
+    e.isFrozen = true
+    e.freezeSpeedMult = speedMult or 0.25
+    e.hit = 1
+end
+
+function enemy.isFrozen()
+    return e and e.freezeTimer and e.freezeTimer > 0
+end
+
+-- Новая функция для нанесения урона врагу (используется лазером и миной)
 function enemy.takeDamage(dmg)
     if not e then return false end
     e.hp = e.hp - dmg
@@ -137,6 +156,23 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
             spawn(px, py)
         end
         return false
+    end
+
+    -- Обработка заморозки
+    local curSpeed = SPEED
+    local curDodgeSpeed = e.dodgeSpeed or 300
+    local isFrozen = false
+    if e.freezeTimer and e.freezeTimer > 0 then
+        e.freezeTimer = e.freezeTimer - dt
+        if e.freezeTimer <= 0 then
+            e.freezeTimer = 0
+            e.isFrozen = false
+        else
+            isFrozen = true
+            local mult = e.freezeSpeedMult or 0.25
+            curSpeed = SPEED * mult
+            curDodgeSpeed = (e.dodgeSpeed or 300) * mult
+        end
     end
 
     local eX, eY = e.x, e.y
@@ -215,8 +251,8 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
 
     if e.isDodging then
         e.state = "dodge"
-        e.x = e.x + e.dodgeDirX * e.dodgeSpeed * dt
-        e.y = e.y + e.dodgeDirY * e.dodgeSpeed * dt
+        e.x = e.x + e.dodgeDirX * curDodgeSpeed * dt
+        e.y = e.y + e.dodgeDirY * curDodgeSpeed * dt
     else
         if dist < SIGHT then
             if dist < KEEP_DIST then
@@ -231,18 +267,19 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
         end
 
         if e.state == "chase" then
-            e.x = e.x + nx * SPEED * dt
-            e.y = e.y + ny * SPEED * dt
+            e.x = e.x + nx * curSpeed * dt
+            e.y = e.y + ny * curSpeed * dt
         elseif e.state == "retreat" then
-            e.x = e.x - nx * SPEED * dt
-            e.y = e.y - ny * SPEED * dt
+            e.x = e.x - nx * curSpeed * dt
+            e.y = e.y - ny * curSpeed * dt
         elseif e.state == "attack" then
             local sDx = -ny * e.strafeDir
             local sDy =  nx * e.strafeDir
-            e.x = e.x + sDx * SPEED * 0.4 * dt
-            e.y = e.y + sDy * SPEED * 0.4 * dt
+            e.x = e.x + sDx * curSpeed * 0.4 * dt
+            e.y = e.y + sDy * curSpeed * 0.4 * dt
 
-            e.shootT = e.shootT - dt
+            local shootDt = isFrozen and (dt * 0.4) or dt
+            e.shootT = e.shootT - shootDt
             if e.shootT <= 0 then
                 e.shootT = SHOOT_CD
                 local spread = (math.random() - 0.5) * 0.2
@@ -260,8 +297,8 @@ function enemy.update(dt, px, py, playerBullets, onHitPlayer)
                 e.wanderDX = math.cos(a)
                 e.wanderDY = math.sin(a)
             end
-            e.x = e.x + e.wanderDX * SPEED * 0.25 * dt
-            e.y = e.y + e.wanderDY * SPEED * 0.25 * dt
+            e.x = e.x + e.wanderDX * curSpeed * 0.25 * dt
+            e.y = e.y + e.wanderDY * curSpeed * 0.25 * dt
         end
     end
 
@@ -302,8 +339,26 @@ function enemy.draw()
     love.graphics.translate(e.x, e.y)
     love.graphics.rotate(e.angle)
     local t = e.hit
-    love.graphics.setColor(1, 1 - t * 0.8, 1 - t * 0.8, 1)
+    if e.freezeTimer and e.freezeTimer > 0 then
+        -- Заморозка: синий цвет
+        love.graphics.setColor(0.3, 0.65, 1.0, 1)
+    else
+        love.graphics.setColor(1, 1 - t * 0.8, 1 - t * 0.8, 1)
+    end
     love.graphics.draw(img, -SIZE / 2, -SIZE / 2)
+
+    -- Визуальный эффект заморозки (ледяная рамка и мерцание)
+    if e.freezeTimer and e.freezeTimer > 0 then
+        love.graphics.setColor(0.4, 0.8, 1.0, 0.4 + 0.2 * math.sin(love.timer.getTime() * 6))
+        love.graphics.setLineWidth(2.5)
+        love.graphics.rectangle("line", -SIZE/2 - 3, -SIZE/2 - 3, SIZE + 6, SIZE + 6, 8, 8)
+        love.graphics.setColor(0.7, 0.9, 1.0, 0.8)
+        love.graphics.circle("fill", -SIZE/2, -SIZE/2, 4)
+        love.graphics.circle("fill", SIZE/2, -SIZE/2, 4)
+        love.graphics.circle("fill", -SIZE/2, SIZE/2, 4)
+        love.graphics.circle("fill", SIZE/2, SIZE/2, 4)
+    end
+
     love.graphics.pop()
     love.graphics.setColor(1, 1, 1, 1)
 end
