@@ -278,13 +278,15 @@ function chat.sendMessage(text)
     local data = string.format('{"text":"%s","sender":"%s","time":%s}',
         jsonEscape(filtered), jsonEscape(sender), jsonNumber(os.time()))
 
-    dbg("📤 Отправка в chat/" .. msgId)
+    dbg("📤 Отправка в chat/" .. msgId .. " body=" .. tostring(data))
+    chat.addSystemMessage("Отправка...")
     online.sendRequest("PUT", "chat/" .. msgId, data, function(ok, response)
         if ok then
-            dbg("✅ Записано в Firebase: chat/" .. msgId)
+            dbg("✅ Записано в Firebase: chat/" .. msgId .. " resp=" .. tostring(response))
+            chat.addSystemMessage("✅ Отправлено")
         else
             dbg("❌ Firebase отклонил запись: " .. tostring(response))
-            chat.addSystemMessage("Ошибка отправки сообщения")
+            chat.addSystemMessage("❌ Ошибка: " .. tostring(response))
         end
     end)
 end
@@ -430,13 +432,21 @@ function chat.draw()
         y = y + 16
     end
 
+    -- Кнопка Send (справа при активном вводе, особенно нужна на мобилках где нет Enter)
+    local sendBtnW = 50 * scale
+    local sendBtnH = 20
+    local sendBtnX = chatX + chatWidth * scale - sendBtnW - 4
+    local sendBtnY = chatY + chatHeight * scale - 24
+    chat._sendBtn = nil
+
     if isInputActive then
-        local inputY = chatY + chatHeight * scale - 24
+        local inputY = sendBtnY
+        local inputW = chatWidth * scale - 4 - sendBtnW - 4
         love.graphics.setColor(0.1, 0.1, 0.2, 0.9)
-        love.graphics.rectangle("fill", chatX + 2, inputY, chatWidth * scale - 4, 20, 4 * scale, 4 * scale)
+        love.graphics.rectangle("fill", chatX + 2, inputY, inputW, 20, 4 * scale, 4 * scale)
         love.graphics.setColor(0.3, 0.5, 0.9, 0.5)
         love.graphics.setLineWidth(1 * scale)
-        love.graphics.rectangle("line", chatX + 2, inputY, chatWidth * scale - 4, 20, 4 * scale, 4 * scale)
+        love.graphics.rectangle("line", chatX + 2, inputY, inputW, 20, 4 * scale, 4 * scale)
 
         love.graphics.setColor(1, 1, 1, 1)
         local displayText = sanitize_utf8(inputText)
@@ -444,6 +454,20 @@ function chat.draw()
             displayText = displayText .. "_"
         end
         love.graphics.print(displayText:sub(1, 50), chatX + 6, inputY + 3)
+
+        -- Кнопка SEND
+        local canSend = inputText ~= ""
+        love.graphics.setColor(canSend and {0.2, 0.7, 0.3, 0.9} or {0.3, 0.3, 0.3, 0.7})
+        love.graphics.rectangle("fill", sendBtnX, sendBtnY, sendBtnW, sendBtnH, 4 * scale, 4 * scale)
+        love.graphics.setColor(0, 0, 0, 0.6)
+        love.graphics.setLineWidth(1 * scale)
+        love.graphics.rectangle("line", sendBtnX, sendBtnY, sendBtnW, sendBtnH, 4 * scale, 4 * scale)
+        love.graphics.setColor(1, 1, 1, 1)
+        local sendLabel = "SEND"
+        local sw = font:getWidth(sendLabel)
+        love.graphics.print(sendLabel, sendBtnX + (sendBtnW - sw) / 2, sendBtnY + 3)
+
+        chat._sendBtn = { x = sendBtnX, y = sendBtnY, w = sendBtnW, h = sendBtnH }
     else
         love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
         love.graphics.print(isMobile and "Tap to chat" or "Press T to chat", chatX + 4, chatY + chatHeight * scale - 18)
@@ -490,7 +514,7 @@ end
 function chat.touchpressed(x, y)
     if not isOnline or not isGameState then return false end
 
-    -- Кнопка чата
+    -- Кнопка чата (С/X в углу)
     if chat._btnX and chat._btnY then
         local s = chat._btnSize
         if x >= chat._btnX and x <= chat._btnX + s and
@@ -500,7 +524,20 @@ function chat.touchpressed(x, y)
         end
     end
 
-    -- Клик по окну чата = открыть клавиатуру
+    -- Кнопка SEND при активном вводе
+    if isInputActive and chat._sendBtn then
+        local b = chat._sendBtn
+        if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
+            if inputText ~= "" then
+                chat.sendMessage(inputText)
+                inputText = ""
+            end
+            -- Не закрываем ввод, чтобы можно было написать ещё
+            return true
+        end
+    end
+
+    -- Клик по окну чата = открыть клавиатуру (если ввод ещё не активен)
     if isChatOpen then
         local w, h = love.graphics.getDimensions()
         local scale = getScale()
@@ -522,12 +559,26 @@ function chat.mousepressed(x, y, button)
     if not isOnline or not isGameState then return false end
     if isMobile then return false end
 
-    if button == 1 and chat._btnX and chat._btnY then
-        local s = chat._btnSize
-        if x >= chat._btnX and x <= chat._btnX + s and
-           y >= chat._btnY and y <= chat._btnY + s then
-            chat.toggleChat()
-            return true
+    if button == 1 then
+        -- Кнопка чата
+        if chat._btnX and chat._btnY then
+            local s = chat._btnSize
+            if x >= chat._btnX and x <= chat._btnX + s and
+               y >= chat._btnY and y <= chat._btnY + s then
+                chat.toggleChat()
+                return true
+            end
+        end
+        -- Кнопка SEND (для ПК тоже)
+        if isInputActive and chat._sendBtn then
+            local b = chat._sendBtn
+            if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
+                if inputText ~= "" then
+                    chat.sendMessage(inputText)
+                    inputText = ""
+                end
+                return true
+            end
         end
     end
 

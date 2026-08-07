@@ -62,7 +62,7 @@ end
 local debugConsole = {
     messages = {},
     maxMessages = 6,
-    visible = true,
+    visible = false,
     lineHeight = 20,
     padding = 6,
     bgColor = {0, 0, 0, 0.75}
@@ -344,13 +344,11 @@ function game.load()
         online.init(SAVE_DATA.nickname or "Player")
         cube.speed = 420
         enemy.reset()
-        game.addDebugMessage("ONLINE MODE ACTIVATED", {0.2, 0.8, 0.2, 1})
     else
         currentDifficulty = _G.difficulty or "normal"
         enemy.setDifficulty(currentDifficulty)
         enemy.reset()
         cube.speed = 260
-        game.addDebugMessage("OFFLINE MODE", {0.5, 0.5, 0.8, 1})
     end
 
     equippedSkin = SAVE_DATA.equippedSkin or "NONE"
@@ -1078,14 +1076,8 @@ function game.draw()
         end
     end
 
-    if isOnlineMode then
-        local debugText = online.getDebugText()
-        if debugText then
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.setFont(font)
-            love.graphics.printf(debugText, 20, love.graphics.getHeight() - 120, love.graphics.getWidth() - 40, "left")
-        end
-    end
+    -- Дебаг-статус онлайна убран по просьбе пользователя (не нужные надписи внизу)
+    -- (debugText с "Connecting.../Connected/Failed" больше не рисуем)
 
     drawDebugConsole()
     controls.draw()
