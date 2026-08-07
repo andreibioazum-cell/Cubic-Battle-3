@@ -29,9 +29,16 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     elseif align == "right" then
         startX = x + (w - tw)
     end
-    local shadow = 2
-    love.graphics.setColor(0, 0, 0, alpha * 0.8)
-    love.graphics.print(text, startX + shadow, y + shadow)
+    local o = math.max(1.5, math.floor(2 * (scale or 1)))
+    love.graphics.setColor(0, 0, 0, alpha)
+    love.graphics.print(text, startX - o, y)
+    love.graphics.print(text, startX + o, y)
+    love.graphics.print(text, startX, y - o)
+    love.graphics.print(text, startX, y + o)
+    love.graphics.print(text, startX - o, y - o)
+    love.graphics.print(text, startX + o, y - o)
+    love.graphics.print(text, startX - o, y + o)
+    love.graphics.print(text, startX + o, y + o)
     love.graphics.setColor(1, 1, 1, alpha)
     love.graphics.print(text, startX, y)
 end
@@ -93,29 +100,17 @@ function difficulty.draw()
     drawSpacedText("SELECT DIFFICULTY", 0, 60 * scale, w, "center", fontTitle, nil, 1)
 
     local function drawButton(btn, label, color, isHover)
-        local r, g, b = color[1], color[2], color[3]
+        local r, g, b = 0.25, 0.72, 0.68
         if isHover then
-            r = math.min(1, r + 0.15)
-            g = math.min(1, g + 0.15)
-            b = math.min(1, b + 0.15)
+            r, g, b = 0.30, 0.78, 0.74
         end
-        
-        local shadowOffset = isHover and 4 or 5
-        love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-        love.graphics.rectangle("fill", btn.x + shadowOffset * scale, btn.y + (shadowOffset + 1) * scale, btn.w, btn.h, 16*scale, 16*scale)
         
         love.graphics.setColor(r, g, b, 1)
-        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
+        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
         
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(3.4 * scale)
-        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h, 16*scale, 16*scale)
-        
-        if isHover then
-            love.graphics.setColor(0.6, 0.8, 1, 0.3 + 0.3 * math.sin(animTime * 3))
-            love.graphics.setLineWidth(2 * scale)
-            love.graphics.rectangle("line", btn.x + 2*scale, btn.y + 2*scale, btn.w - 4*scale, btn.h - 4*scale, 14*scale, 14*scale)
-        end
+        love.graphics.setLineWidth(math.max(3, 4 * scale))
+        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
         
         drawSpacedText(label, btn.x, btn.y + 20*scale, btn.w, "center", fontBtn, nil, 1)
     end

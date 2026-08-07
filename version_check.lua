@@ -30,9 +30,16 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     elseif align == "right" then
         startX = x + (w - tw)
     end
-    local shadow = 2
-    love.graphics.setColor(0, 0, 0, alpha * 0.8)
-    love.graphics.print(text, startX + shadow, y + shadow)
+    local o = math.max(1.5, math.floor(2 * (scale or 1)))
+    love.graphics.setColor(0, 0, 0, alpha)
+    love.graphics.print(text, startX - o, y)
+    love.graphics.print(text, startX + o, y)
+    love.graphics.print(text, startX, y - o)
+    love.graphics.print(text, startX, y + o)
+    love.graphics.print(text, startX - o, y - o)
+    love.graphics.print(text, startX + o, y - o)
+    love.graphics.print(text, startX - o, y + o)
+    love.graphics.print(text, startX + o, y + o)
     love.graphics.setColor(1, 1, 1, alpha)
     love.graphics.print(text, startX, y)
 end
@@ -101,15 +108,12 @@ function version_check.drawPopup()
     local btnX = popupX + (popupW - btnW) / 2
     local btnY = popupY + popupH - 80 * scale
     
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", btnX + 4 * scale, btnY + 5 * scale, btnW, btnH, 14 * scale, 14 * scale)
-    
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 14 * scale, 14 * scale)
+    love.graphics.setColor(0.25, 0.72, 0.68, 1)
+    love.graphics.rectangle("fill", btnX, btnY, btnW, btnH)
     
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(3 * scale)
-    love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 14 * scale, 14 * scale)
+    love.graphics.setLineWidth(math.max(3, 4 * scale))
+    love.graphics.rectangle("line", btnX, btnY, btnW, btnH)
     
     local btnFont = love.graphics.newFont("Fredoka-Bold.ttf", math.max(20, 28 * scale))
     drawSpacedText("UPDATE", btnX, btnY + 14 * scale, btnW, "center", btnFont, nil, 1)

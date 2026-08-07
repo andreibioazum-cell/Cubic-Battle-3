@@ -512,15 +512,23 @@ function chat.draw()
 
         -- Кнопка SEND
         local canSend = inputText ~= ""
-        love.graphics.setColor(canSend and {0.2, 0.7, 0.3, 0.9} or {0.3, 0.3, 0.3, 0.7})
-        love.graphics.rectangle("fill", sendBtnX, sendBtnY, sendBtnW, sendBtnH, 4 * scale, 4 * scale)
-        love.graphics.setColor(0, 0, 0, 0.6)
-        love.graphics.setLineWidth(1 * scale)
-        love.graphics.rectangle("line", sendBtnX, sendBtnY, sendBtnW, sendBtnH, 4 * scale, 4 * scale)
-        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setColor(canSend and {0.25, 0.72, 0.68, 1} or {0.35, 0.45, 0.43, 0.7})
+        love.graphics.rectangle("fill", sendBtnX, sendBtnY, sendBtnW, sendBtnH)
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(math.max(2, 3 * scale))
+        love.graphics.rectangle("line", sendBtnX, sendBtnY, sendBtnW, sendBtnH)
         local sendLabel = "SEND"
         local sw = font:getWidth(sendLabel)
-        love.graphics.print(sendLabel, sendBtnX + (sendBtnW - sw) / 2, sendBtnY + 3)
+        local sx = sendBtnX + (sendBtnW - sw) / 2
+        local sy = sendBtnY + 3
+        local o = math.max(1, math.floor(1.5 * scale))
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.print(sendLabel, sx - o, sy)
+        love.graphics.print(sendLabel, sx + o, sy)
+        love.graphics.print(sendLabel, sx, sy - o)
+        love.graphics.print(sendLabel, sx, sy + o)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print(sendLabel, sx, sy)
 
         chat._sendBtn = { x = sendBtnX, y = sendBtnY, w = sendBtnW, h = sendBtnH }
     else
