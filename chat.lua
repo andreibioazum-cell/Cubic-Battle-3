@@ -137,6 +137,57 @@ local function sanitize_utf8(str)
     return table.concat(result)
 end
 
+-- Удаляет ПОСЛЕДНИЙ СИМВОЛ строки (не байт).
+-- Любовь к `s:sub(1, -2)` в коде приводила к обрезке многобайтового символа
+-- посередине (например, русской "я" = 2 байта), и дальше font:getWidth/print
+-- падали с "UTF-8 decoding error: Invalid UTF-8".
+local function utf8_chop(s)
+    if not s or #s == 0 then return s or "" end
+    local last = s:byte(#s)
+    if last < 0x80 then
+        return s:sub(1, -2)
+    end
+    -- последний байт — это продолжение многобайтового символа: ищем его начало
+    local i = #s
+    while i > 1 and s:byte(i) >= 0x80 and s:byte(i) <= 0xBF do
+        i = i - 1
+    end
+    return s:sub(1, i - 1)
+end
+
+-- Обрезает строку до maxBytes байт, не разрывая многобайтовый символ.
+-- Заменяет опасное `s:sub(1, N)` (оно могло оставить "хвост" символа -> Invalid UTF-8).
+local function utf8_truncate(s, maxBytes)
+    s = tostring(s or "")
+    if #s <= maxBytes then return s end
+    local b = s:byte(maxBytes)
+    if not b or b < 0x80 then
+        -- граница обрезки попала на ASCII-байт — можно резать смело
+        return s:sub(1, maxBytes)
+    end
+    if b >= 0xC2 and b <= 0xF4 then
+        -- на позиции maxBytes начинается многобайтовый символ — он не помещается
+        return s:sub(1, maxBytes - 1)
+    end
+    -- мы внутри многобайтового символа: ищем его ведущий байт
+    local i = maxBytes
+    while i > 1 and s:byte(i) >= 0x80 and s:byte(i) <= 0xBF do
+        i = i - 1
+    end
+    local lead = s:byte(i)
+    local charLen = 2
+    if lead >= 0xE0 and lead <= 0xEF then
+        charLen = 3
+    elseif lead >= 0xF0 and lead <= 0xF4 then
+        charLen = 4
+    end
+    if i + charLen - 1 <= maxBytes then
+        -- символ закончился ровно на границе обрезки — он поместился целиком
+        return s:sub(1, maxBytes)
+    end
+    return s:sub(1, i - 1)
+end
+
 function chat.load()
     local scale = getScale()
     local fontSize = math.max(12, 14 * scale)
@@ -179,10 +230,10 @@ function chat.addMessage(text, sender, color)
     if not text or text == "" then return end
 
     local safeText = sanitize_utf8(text)
-    if #safeText > 100 then safeText = safeText:sub(1, 100) end
+    safeText = utf8_truncate(safeText, 100)
 
     local safeSender = sanitize_utf8(sender or "System")
-    if #safeSender > 20 then safeSender = safeSender:sub(1, 20) end
+    safeSender = utf8_truncate(safeSender, 20)
 
     local timestamp = os.date("%H:%M")
     table.insert(messages, {
@@ -254,7 +305,7 @@ function chat.sendMessage(text)
     -- ФИКС: раньше условие `if sender == SAVE_DATA.nickname` было всегда истинным,
     -- и ВСЕ игроки без исключения отправляли сообщения как "Anonymous"
     local sender = sanitize_utf8((SAVE_DATA and SAVE_DATA.nickname) or "Player")
-    if #sender > 20 then sender = sender:sub(1, 20) end
+    sender = utf8_truncate(sender, 20)
     if sender == "" then sender = "Player" end
     if adminNicknames[sender] then
         sender = "Admin"
@@ -315,8 +366,8 @@ function chat.fetchMessages()
                 markKnown(id)
                 local text = sanitize_utf8(jsonUnescape(data:match('"text":%s*"([^"]*)"')))
                 local sender = sanitize_utf8(jsonUnescape(data:match('"sender":%s*"([^"]*)"')))
-                if #text > 100 then text = text:sub(1, 100) end
-                if #sender > 20 then sender = sender:sub(1, 20) end
+                text = utf8_truncate(text, 100)
+                sender = utf8_truncate(sender, 20)
                 if text ~= "" and sender ~= "" then
                     -- Доп. защита от дубля (например, своё сообщение после перезахода)
                     local dup = false
@@ -422,9 +473,13 @@ function chat.draw()
         -- Текст
         love.graphics.setColor(1, 1, 1, alpha)
         local text = msg.text or ""
-        if font:getWidth(text) > (chatWidth * scale - 20 - timeW - senderW) then
-            while font:getWidth(text .. "...") > (chatWidth * scale - 20 - timeW - senderW) and #text > 1 do
-                text = text:sub(1, -2)
+        local maxTextWidth = chatWidth * scale - 20 - timeW - senderW
+        if font:getWidth(text) > maxTextWidth then
+            -- ФИКС: укорачиваем по ЦЕЛЫМ символам, а не по байтам.
+            -- Раньше text:sub(1, -2) резал многобайтовый символ пополам,
+            -- и следующий font:getWidth падал с "UTF-8 decoding error".
+            while #text > 1 and font:getWidth(text .. "...") > maxTextWidth do
+                text = utf8_chop(text)
             end
             text = text .. "..."
         end
@@ -453,7 +508,7 @@ function chat.draw()
         if love.timer.getTime() % 1 < 0.5 then
             displayText = displayText .. "_"
         end
-        love.graphics.print(displayText:sub(1, 50), chatX + 6, inputY + 3)
+        love.graphics.print(utf8_truncate(displayText, 50), chatX + 6, inputY + 3)
 
         -- Кнопка SEND
         local canSend = inputText ~= ""
@@ -494,7 +549,7 @@ function chat.keypressed(key)
             chat.forceClose()
             return true
         elseif key == "backspace" then
-            inputText = inputText:sub(1, -2)
+            inputText = utf8_chop(inputText)
         end
     end
 
