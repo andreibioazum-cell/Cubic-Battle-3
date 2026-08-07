@@ -34,9 +34,16 @@ local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
     elseif align == "right" then
         startX = x + (w - tw)
     end
-    local shadow = 2
-    love.graphics.setColor(0, 0, 0, alpha * 0.8)
-    love.graphics.print(text, startX + shadow, y + shadow)
+    local o = math.max(1.5, math.floor(2 * getScale()))
+    love.graphics.setColor(0, 0, 0, alpha)
+    love.graphics.print(text, startX - o, y)
+    love.graphics.print(text, startX + o, y)
+    love.graphics.print(text, startX, y - o)
+    love.graphics.print(text, startX, y + o)
+    love.graphics.print(text, startX - o, y - o)
+    love.graphics.print(text, startX + o, y - o)
+    love.graphics.print(text, startX - o, y + o)
+    love.graphics.print(text, startX + o, y + o)
     love.graphics.setColor(1, 1, 1, alpha)
     love.graphics.print(text, startX, y)
 end
@@ -267,13 +274,11 @@ function controls.draw()
     end
 
     -- Кнопка Back
-    love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
-    love.graphics.rectangle("fill", back.x + 4*scale, back.y + 5*scale, back.w, back.h, 14*scale, 14*scale)
-    love.graphics.setColor(0.2, 0.5, 0.9, 1)
-    love.graphics.rectangle("fill", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
+    love.graphics.setColor(0.25, 0.72, 0.68, 1)
+    love.graphics.rectangle("fill", back.x, back.y, back.w, back.h)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(math.max(2, 3.8 * scale))
-    love.graphics.rectangle("line", back.x, back.y, back.w, back.h, 14*scale, 14*scale)
+    love.graphics.setLineWidth(math.max(3, 4 * scale))
+    love.graphics.rectangle("line", back.x, back.y, back.w, back.h)
     drawSpacedText("Back", back.x, back.y + 16*scale, back.w, "center", font, nil, 1)
 
     love.graphics.setColor(1, 1, 1, 1)
