@@ -4,11 +4,12 @@ local controls = {}
 
 local joy  = { id = nil, cx = 0, cy = 0, sx = 0, sy = 0, r = 45, sr = 18 }
 local atk  = { id = nil, x = 0, y = 0, r = 52, hold = false, press = 0 }
-local back = { x = 20, y = 20, w = 140, h = 55 }
+local back = { x = 0, y = 0, w = 0, h = 0 }
 local ability = { id = nil, x = 0, y = 0, r = 40, press = 0, triggered = false }
 
 local keys = { w = false, a = false, s = false, d = false, space = false, e = false }
 local font
+local backFont
 local aimDx, aimDy = 0, -1
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 local spaceJustPressed = false
@@ -58,9 +59,12 @@ local function place()
     joy.sr = math.max(14, 22 * scale)     -- минимум 14px
     atk.r = math.max(40, 65 * scale)
     ability.r = math.max(30, 50 * scale)
-    -- Кнопка Back в стиле лобби, но компактнее, чтобы не мешать в игре
-    back.w = math.max(140, 240 * scale)
-    back.h = math.max(46, 72 * scale)
+    -- Кнопка Back того же размера, что и кнопки в меню (как в выборе сложности).
+    local backW, backH, backScale = ui.wideButton(w, h, scale, 5)
+    back.w = backW
+    back.h = backH
+    back.x = (w - back.w) / 2
+    back.y = 25 * scale
 
     local margin = math.max(40, 60 * scale)
     joy.cx = margin
@@ -72,9 +76,6 @@ local function place()
 
     ability.x = atk.x - 80 * scale
     ability.y = atk.y
-
-    back.x = (w - back.w) / 2
-    back.y = 25 * scale
 end
 
 function controls.load()
@@ -82,6 +83,8 @@ function controls.load()
     local fontSize = math.max(20, 38 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
     place()
+    local _, _, backScale = ui.wideButton(love.graphics.getWidth(), love.graphics.getHeight(), scale, 5)
+    backFont = love.graphics.newFont("Fredoka-Bold.ttf", ui.buttonFontSize(backScale))
 end
 
 function controls.resize()
@@ -89,6 +92,8 @@ function controls.resize()
     local scale = getScale()
     local fontSize = math.max(20, 38 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
+    local _, _, backScale = ui.wideButton(love.graphics.getWidth(), love.graphics.getHeight(), scale, 5)
+    backFont = love.graphics.newFont("Fredoka-Bold.ttf", ui.buttonFontSize(backScale))
 end
 
 function controls.update(dt)
@@ -276,7 +281,7 @@ function controls.draw()
     end
 
     -- Кнопка Back в стиле лобби: бирюзовая заливка, чёрная рамка, подпись слева.
-    ui.drawButton(back, "Back", false, nil, font)
+    ui.drawButton(back, "Back", false, nil, backFont)
 
     love.graphics.setColor(1, 1, 1, 1)
 end
