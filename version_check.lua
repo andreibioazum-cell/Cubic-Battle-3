@@ -1,4 +1,5 @@
 -- version_check.lua – проверка обновлений
+local ui = require("ui")
 local version_check = {}
 
 local online = require("online")
@@ -18,30 +19,6 @@ local function getScale()
     local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
     if isMobile then base = 600 end
     return math.min(w, h) / base
-end
-
-local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
-    alpha = alpha or 1
-    love.graphics.setFont(font)
-    local tw = font:getWidth(text)
-    local startX = x
-    if align == "center" then
-        startX = x + (w - tw) / 2
-    elseif align == "right" then
-        startX = x + (w - tw)
-    end
-    local o = math.max(1.5, math.floor(2 * (scale or 1)))
-    love.graphics.setColor(0, 0, 0, alpha)
-    love.graphics.print(text, startX - o, y)
-    love.graphics.print(text, startX + o, y)
-    love.graphics.print(text, startX, y - o)
-    love.graphics.print(text, startX, y + o)
-    love.graphics.print(text, startX - o, y - o)
-    love.graphics.print(text, startX + o, y - o)
-    love.graphics.print(text, startX - o, y + o)
-    love.graphics.print(text, startX + o, y + o)
-    love.graphics.setColor(1, 1, 1, alpha)
-    love.graphics.print(text, startX, y)
 end
 
 function version_check.load()
@@ -103,21 +80,15 @@ function version_check.drawPopup()
     local ut = textFont:getWidth(updateText)
     love.graphics.print(updateText, popupX + (popupW - ut) / 2, yOffset)
     
-    local btnW = 180 * scale
-    local btnH = 55 * scale
+    -- Кнопка UPDATE в стиле лобби (широкая, во всю ширину попапа)
+    local btnW = popupW - 40 * scale
+    local btnH = 72 * scale
     local btnX = popupX + (popupW - btnW) / 2
-    local btnY = popupY + popupH - 80 * scale
-    
-    love.graphics.setColor(0.25, 0.72, 0.68, 1)
-    love.graphics.rectangle("fill", btnX, btnY, btnW, btnH)
-    
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(math.max(2, 3 * scale))
-    love.graphics.rectangle("line", btnX, btnY, btnW, btnH)
-    
-    local btnFont = love.graphics.newFont("Fredoka-Bold.ttf", math.max(20, 28 * scale))
-    drawSpacedText("UPDATE", btnX + 16 * scale, btnY + (btnH - btnFont:getHeight()) / 2, btnW - 32 * scale, "left", btnFont, nil, 1)
-    
+    local btnY = popupY + popupH - 90 * scale
+
+    local btnFont = love.graphics.newFont("Fredoka-Bold.ttf", ui.buttonFontSize(scale) * 0.7)
+    ui.drawButton({ x = btnX, y = btnY, w = btnW, h = btnH }, "UPDATE", false, nil, btnFont)
+
     version_check._updateBtn = { x = btnX, y = btnY, w = btnW, h = btnH }
     version_check._laterBtn = nil
 end

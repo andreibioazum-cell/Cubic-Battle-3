@@ -1,4 +1,5 @@
 -- difficulty.lua – выбор сложности (с эффектом наведения)
+local ui = require("ui")
 local difficulty = {}
 
 local fontTitle, fontBtn
@@ -19,36 +20,11 @@ local function getScale()
     return math.min(w, h) / base
 end
 
-local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
-    alpha = alpha or 1
-    love.graphics.setFont(font)
-    local tw = font:getWidth(text)
-    local startX = x
-    if align == "center" then
-        startX = x + (w - tw) / 2
-    elseif align == "right" then
-        startX = x + (w - tw)
-    end
-    local o = math.max(1.5, math.floor(2 * (scale or 1)))
-    love.graphics.setColor(0, 0, 0, alpha)
-    love.graphics.print(text, startX - o, y)
-    love.graphics.print(text, startX + o, y)
-    love.graphics.print(text, startX, y - o)
-    love.graphics.print(text, startX, y + o)
-    love.graphics.print(text, startX - o, y - o)
-    love.graphics.print(text, startX + o, y - o)
-    love.graphics.print(text, startX - o, y + o)
-    love.graphics.print(text, startX + o, y + o)
-    love.graphics.setColor(1, 1, 1, alpha)
-    love.graphics.print(text, startX, y)
-end
-
 function difficulty.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    local btnW = math.min(610 * scale, w - 32 * scale)
-    local btnH = 100 * scale
+    local btnW, btnH = ui.wideButton(w, h, scale)
     local gap = 18 * scale
 
     btnEasy.w = btnW; btnEasy.h = btnH
@@ -77,7 +53,7 @@ function difficulty.load()
     btnBack.y = h - btnBack.h - 24 * scale
 
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = math.max(20, 28 * scale)
+    local btnSize   = ui.buttonFontSize(scale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
@@ -97,34 +73,14 @@ function difficulty.draw()
     local w = love.graphics.getWidth()
     local scale = getScale()
 
-    drawSpacedText("SELECT DIFFICULTY", 0, 60 * scale, w, "center", fontTitle, nil, 1)
+    ui.drawSpacedText("SELECT DIFFICULTY", 0, 60 * scale, w, "center", fontTitle, nil, 1)
 
-    local function drawButton(btn, label, color, isHover)
-        -- Основной бирюзовый цвет взят с референса; для действий
-        -- (покупка, сложность и т. п.) сохраняется переданный цвет.
-        local r, g, b = color[1], color[2], color[3]
-        if isHover then
-            r = math.min(1, r + 0.07)
-            g = math.min(1, g + 0.07)
-            b = math.min(1, b + 0.07)
-        end
-
-        love.graphics.setColor(r, g, b, 1)
-        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-
-        love.graphics.setColor(0, 0, 0, 1)
-        -- Тоньше прежней рамки: около 3 px при масштабе 1.
-        love.graphics.setLineWidth(math.max(2, 3 * scale))
-        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-
-        drawSpacedText(label, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, nil, 1)
-    end
-
-    drawButton(btnEasy, "EASY", {0.2, 0.6, 0.2}, hoverBtn == "easy")
-    drawButton(btnNormal, "NORMAL", {0.2, 0.5, 0.9}, hoverBtn == "normal")
-    drawButton(btnHard, "HARD", {0.8, 0.2, 0.2}, hoverBtn == "hard")
-    drawButton(btnImpossible, "IMPOSSIBLE", {0.9, 0.0, 0.0}, hoverBtn == "impossible")
-    drawButton(btnBack, "BACK", {0.2, 0.5, 0.9}, hoverBtn == "back")
+    -- Кнопки в стиле лобби; цвет сохраняется за каждым уровнем сложности.
+    ui.drawButton(btnEasy, "EASY", hoverBtn == "easy", {0.2, 0.6, 0.2}, fontBtn)
+    ui.drawButton(btnNormal, "NORMAL", hoverBtn == "normal", {0.2, 0.5, 0.9}, fontBtn)
+    ui.drawButton(btnHard, "HARD", hoverBtn == "hard", {0.8, 0.2, 0.2}, fontBtn)
+    ui.drawButton(btnImpossible, "IMPOSSIBLE", hoverBtn == "impossible", {0.9, 0.0, 0.0}, fontBtn)
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
 end
 
 function difficulty.mousemoved(x, y)

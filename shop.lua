@@ -1,4 +1,5 @@
 -- shop.lua – магазин
+local ui = require("ui")
 local shop = {}
 
 local fontTitle, fontBtn
@@ -29,30 +30,6 @@ local function getScale()
     return math.min(w, h) / base
 end
 
-local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
-    alpha = alpha or 1
-    love.graphics.setFont(font)
-    local tw = font:getWidth(text)
-    local startX = x
-    if align == "center" then
-        startX = x + (w - tw) / 2
-    elseif align == "right" then
-        startX = x + (w - tw)
-    end
-    local o = math.max(1.5, math.floor(2 * (scale or 1)))
-    love.graphics.setColor(0, 0, 0, alpha)
-    love.graphics.print(text, startX - o, y)
-    love.graphics.print(text, startX + o, y)
-    love.graphics.print(text, startX, y - o)
-    love.graphics.print(text, startX, y + o)
-    love.graphics.print(text, startX - o, y - o)
-    love.graphics.print(text, startX + o, y - o)
-    love.graphics.print(text, startX - o, y + o)
-    love.graphics.print(text, startX + o, y + o)
-    love.graphics.setColor(1, 1, 1, alpha)
-    love.graphics.print(text, startX, y)
-end
-
 function shop.load(saveData)
     ownedSkins = {}
     if saveData and saveData.ownedSkins then
@@ -79,24 +56,23 @@ end
 function shop.resize()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
-    local wideW = math.min(610 * scale, w - 32 * scale)
-    local wideH = 100 * scale
+    local wideW, wideH = ui.wideButton(w, h, scale)
     btnBack.w = wideW; btnBack.h = wideH
     btnMain.w = wideW; btnMain.h = wideH
-    btnLeft.w = 60 * scale
-    btnLeft.h = 60 * scale
-    btnRight.w = 60 * scale
-    btnRight.h = 60 * scale
+    btnLeft.w = 72 * scale
+    btnLeft.h = 72 * scale
+    btnRight.w = 72 * scale
+    btnRight.h = 72 * scale
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - btnBack.h - 24 * scale
     btnMain.x = (w - btnMain.w) / 2
     btnMain.y = h/2 + 120 * scale
     btnLeft.x = w/2 - 180 * scale
     btnLeft.y = h/2 + 10 * scale
-    btnRight.x = w/2 + 120 * scale
+    btnRight.x = w/2 + 108 * scale
     btnRight.y = h/2 + 10 * scale
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = math.max(20, 28 * scale)
+    local btnSize   = ui.buttonFontSize(scale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
@@ -113,8 +89,8 @@ function shop.draw(coins)
     local w = love.graphics.getWidth()
     local scale = getScale()
 
-    drawSpacedText("SHOP", 0, 100*scale, w, "center", fontTitle, nil, 1)
-    drawSpacedText("COINS: " .. coins, 0, 170*scale, w, "center", fontBtn, nil, 1)
+    ui.drawSpacedText("SHOP", 0, 100*scale, w, "center", fontTitle, nil, 1)
+    ui.drawSpacedText("COINS: " .. coins, 0, 170*scale, w, "center", fontBtn, nil, 1)
 
     local skin = SKINS[currentSkinIndex]
     local isOwned = false
@@ -127,16 +103,16 @@ function shop.draw(coins)
     local isEquipped = (equippedSkin == skin.name) or (skin.name == "FATHER FROST" and (equippedSkin == "FatherFrost" or equippedSkin == "FATHER FROST CUBE"))
 
     local infoY = love.graphics.getHeight()/2 - 60*scale
-    drawSpacedText(skin.name, 0, infoY, w, "center", fontBtn, nil, 1)
+    ui.drawSpacedText(skin.name, 0, infoY, w, "center", fontBtn, nil, 1)
 
     if isOwned then
         if isEquipped then
-            drawSpacedText("EQUIPPED", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
+            ui.drawSpacedText("EQUIPPED", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
         else
-            drawSpacedText("OWNED", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
+            ui.drawSpacedText("OWNED", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
         end
     else
-        drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
+        ui.drawSpacedText("PRICE: " .. skin.price .. " COINS", 0, infoY + 40*scale, w, "center", fontBtn, nil, 1)
     end
 
     -- Отрисовка превью скина по центру между стрелками
@@ -158,27 +134,8 @@ function shop.draw(coins)
         love.graphics.draw(img, cx, cy + bob, 0, sx, sy, img:getWidth()/2, img:getHeight()/2)
     end
 
-    local function drawButton(btn, text, color, isHover)
-        -- Основной бирюзовый цвет взят с референса; для действий
-        -- (покупка, сложность и т. п.) сохраняется переданный цвет.
-        local r, g, b = color[1], color[2], color[3]
-        if isHover then
-            r = math.min(1, r + 0.07)
-            g = math.min(1, g + 0.07)
-            b = math.min(1, b + 0.07)
-        end
-
-        love.graphics.setColor(r, g, b, 1)
-        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-
-        love.graphics.setColor(0, 0, 0, 1)
-        -- Тоньше прежней рамки: около 3 px при масштабе 1.
-        love.graphics.setLineWidth(math.max(2, 3 * scale))
-        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-
-        drawSpacedText(text, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, nil, 1)
-    end
-
+    -- Кнопки в стиле лобби; стрелки перелистывания – компактные квадраты
+    -- с той же бирюзовой заливкой и рамкой, подпись по центру.
     local btnText, btnColor
     if not isOwned then
         btnText = "BUY"; btnColor = {0.2, 0.5, 0.9}
@@ -188,10 +145,10 @@ function shop.draw(coins)
         btnText = "UNEQUIP"; btnColor = {0.8, 0.2, 0.2}
     end
 
-    drawButton(btnMain, btnText, btnColor, hoverBtn == "main")
-    drawButton(btnLeft, "<", {0.2, 0.5, 0.9}, hoverBtn == "left")
-    drawButton(btnRight, ">", {0.2, 0.5, 0.9}, hoverBtn == "right")
-    drawButton(btnBack, "BACK", {0.2, 0.5, 0.9}, hoverBtn == "back")
+    ui.drawButton(btnMain, btnText, hoverBtn == "main", btnColor, fontBtn)
+    ui.drawButton(btnLeft, "<", hoverBtn == "left", nil, fontBtn, "center")
+    ui.drawButton(btnRight, ">", hoverBtn == "right", nil, fontBtn, "center")
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
 end
 
 function shop.mousemoved(x, y)

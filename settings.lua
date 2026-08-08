@@ -1,4 +1,5 @@
 -- settings.lua – настройки (исправлен)
+local ui = require("ui")
 local settings = {}
 
 local fontTitle, fontBtn, fontInput
@@ -21,36 +22,11 @@ local function getScale()
     return math.min(w, h) / base
 end
 
-local function drawSpacedText(text, x, y, w, align, font, alpha)
-    alpha = alpha or 1
-    love.graphics.setFont(font)
-    local tw = font:getWidth(text)
-    local startX = x
-    if align == "center" then
-        startX = x + (w - tw) / 2
-    elseif align == "right" then
-        startX = x + (w - tw)
-    end
-    local o = math.max(1.5, math.floor(2 * (scale or 1)))
-    love.graphics.setColor(0, 0, 0, alpha)
-    love.graphics.print(text, startX - o, y)
-    love.graphics.print(text, startX + o, y)
-    love.graphics.print(text, startX, y - o)
-    love.graphics.print(text, startX, y + o)
-    love.graphics.print(text, startX - o, y - o)
-    love.graphics.print(text, startX + o, y - o)
-    love.graphics.print(text, startX - o, y + o)
-    love.graphics.print(text, startX + o, y + o)
-    love.graphics.setColor(1, 1, 1, alpha)
-    love.graphics.print(text, startX, y)
-end
-
 function settings.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    local wideW = math.min(610 * scale, w - 32 * scale)
-    local wideH = 100 * scale
+    local wideW, wideH = ui.wideButton(w, h, scale)
     btnBack.w = wideW; btnBack.h = wideH
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - btnBack.h - 24 * scale
@@ -72,7 +48,7 @@ function settings.load()
     nickname = SAVE_DATA.nickname or "Player"
 
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = math.max(20, 28 * scale)
+    local btnSize   = ui.buttonFontSize(scale)
     local inputSize = math.max(22, 30 * scale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
@@ -94,37 +70,16 @@ function settings.draw()
     local w = love.graphics.getWidth()
     local scale = getScale()
 
-    drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, 1)
+    ui.drawSpacedText("SETTINGS", 0, 80*scale, w, "center", fontTitle, 1)
 
-    -- Отрисовка кнопок с эффектом наведения
-    local function drawButton(btn, text, color, isHover)
-        -- Основной бирюзовый цвет взят с референса; для действий
-        -- (покупка, сложность и т. п.) сохраняется переданный цвет.
-        local r, g, b = color[1], color[2], color[3]
-        if isHover then
-            r = math.min(1, r + 0.07)
-            g = math.min(1, g + 0.07)
-            b = math.min(1, b + 0.07)
-        end
-
-        love.graphics.setColor(r, g, b, 1)
-        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-
-        love.graphics.setColor(0, 0, 0, 1)
-        -- Тоньше прежней рамки: около 3 px при масштабе 1.
-        love.graphics.setLineWidth(math.max(2, 3 * scale))
-        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-
-        drawSpacedText(text, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, 1)
-    end
-
+    -- Кнопки в стиле лобби (цвет сохраняется для состояния вкл/выкл)
     local musicText = musicOn and "MUSIC: ON" or "MUSIC: OFF"
     local musicColor = musicOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
-    drawButton(btnMusic, musicText, musicColor, hoverBtn == "music")
+    ui.drawButton(btnMusic, musicText, hoverBtn == "music", musicColor, fontBtn)
 
     local sfxText = sfxOn and "SOUNDS: ON" or "SOUNDS: OFF"
     local sfxColor = sfxOn and {0.2, 0.5, 0.9} or {0.5, 0.5, 0.5}
-    drawButton(btnSfx, sfxText, sfxColor, hoverBtn == "sfx")
+    ui.drawButton(btnSfx, sfxText, hoverBtn == "sfx", sfxColor, fontBtn)
 
     -- Поле ввода никнейма
     love.graphics.setColor(0, 0, 0, 0.5)
@@ -153,7 +108,7 @@ function settings.draw()
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf("NICKNAME", inputField.x, inputField.y - 35*scale, inputField.w, "center")
 
-    drawButton(btnBack, "BACK", {0.2, 0.5, 0.9}, hoverBtn == "back")
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
 end
 
 function settings.mousemoved(x, y)

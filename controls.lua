@@ -1,4 +1,5 @@
 -- controls.lua - с адаптивным джойстиком
+local ui = require("ui")
 local controls = {}
 
 local joy  = { id = nil, cx = 0, cy = 0, sx = 0, sy = 0, r = 45, sr = 18 }
@@ -57,8 +58,9 @@ local function place()
     joy.sr = math.max(14, 22 * scale)     -- минимум 14px
     atk.r = math.max(40, 65 * scale)
     ability.r = math.max(30, 50 * scale)
-    back.w = math.max(100, 160 * scale)
-    back.h = math.max(40, 60 * scale)
+    -- Кнопка Back в стиле лобби, но компактнее, чтобы не мешать в игре
+    back.w = math.max(140, 240 * scale)
+    back.h = math.max(46, 72 * scale)
 
     local margin = math.max(40, 60 * scale)
     joy.cx = margin
@@ -77,7 +79,7 @@ end
 
 function controls.load()
     local scale = getScale()
-    local fontSize = math.max(16, 28 * scale)
+    local fontSize = math.max(20, 38 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
     place()
 end
@@ -85,7 +87,7 @@ end
 function controls.resize()
     place()
     local scale = getScale()
-    local fontSize = math.max(16, 28 * scale)
+    local fontSize = math.max(20, 38 * scale)
     font = love.graphics.newFont("Fredoka-Bold.ttf", fontSize)
 end
 
@@ -273,14 +275,8 @@ function controls.draw()
         end
     end
 
-    -- Кнопка Back
-    -- Стиль обычных кнопок: бирюзовая заливка, тонкая чёрная рамка и подпись слева.
-    love.graphics.setColor(0.31, 0.73, 0.72, 1)
-    love.graphics.rectangle("fill", back.x, back.y, back.w, back.h)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(math.max(2, 3 * scale))
-    love.graphics.rectangle("line", back.x, back.y, back.w, back.h)
-    drawSpacedText("Back", back.x + 16 * scale, back.y + (back.h - font:getHeight()) / 2, back.w - 32 * scale, "left", font, nil, 1)
+    -- Кнопка Back в стиле лобби: бирюзовая заливка, чёрная рамка, подпись слева.
+    ui.drawButton(back, "Back", false, nil, font)
 
     love.graphics.setColor(1, 1, 1, 1)
 end
