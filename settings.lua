@@ -49,26 +49,25 @@ function settings.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    btnBack.w = 140 * scale
-    btnBack.h = 55 * scale
+    local wideW = math.min(610 * scale, w - 32 * scale)
+    local wideH = 100 * scale
+    btnBack.w = wideW; btnBack.h = wideH
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - 80 * scale
+    btnBack.y = h - btnBack.h - 24 * scale
 
-    btnMusic.w = 220 * scale
-    btnMusic.h = 75 * scale
-    btnSfx.w = 220 * scale
-    btnSfx.h = 75 * scale
+    btnMusic.w = wideW; btnMusic.h = wideH
+    btnSfx.w = wideW; btnSfx.h = wideH
 
     btnMusic.x = (w - btnMusic.w) / 2
-    btnMusic.y = h/2 - 140 * scale
+    btnMusic.y = h/2 - 190 * scale
 
     btnSfx.x = (w - btnSfx.w) / 2
-    btnSfx.y = h/2 - 40 * scale
+    btnSfx.y = btnMusic.y + wideH + 18 * scale
 
     inputField.w = 280 * scale
     inputField.h = 55 * scale
     inputField.x = (w - inputField.w) / 2
-    inputField.y = h/2 + 50 * scale
+    inputField.y = btnSfx.y + wideH + 18 * scale
 
     nickname = SAVE_DATA.nickname or "Player"
 
@@ -99,19 +98,24 @@ function settings.draw()
 
     -- Отрисовка кнопок с эффектом наведения
     local function drawButton(btn, text, color, isHover)
-        local r, g, b = 0.25, 0.72, 0.68
+        -- Основной бирюзовый цвет взят с референса; для действий
+        -- (покупка, сложность и т. п.) сохраняется переданный цвет.
+        local r, g, b = color[1], color[2], color[3]
         if isHover then
-            r, g, b = 0.30, 0.78, 0.74
+            r = math.min(1, r + 0.07)
+            g = math.min(1, g + 0.07)
+            b = math.min(1, b + 0.07)
         end
-        
+
         love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-        
+
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(math.max(3, 4 * scale))
+        -- Тоньше прежней рамки: около 3 px при масштабе 1.
+        love.graphics.setLineWidth(math.max(2, 3 * scale))
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-        
-        drawSpacedText(text, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn, 1)
+
+        drawSpacedText(text, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, 1)
     end
 
     local musicText = musicOn and "MUSIC: ON" or "MUSIC: OFF"

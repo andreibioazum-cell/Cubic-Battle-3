@@ -274,12 +274,13 @@ function controls.draw()
     end
 
     -- Кнопка Back
-    love.graphics.setColor(0.25, 0.72, 0.68, 1)
+    -- Стиль обычных кнопок: бирюзовая заливка, тонкая чёрная рамка и подпись слева.
+    love.graphics.setColor(0.31, 0.73, 0.72, 1)
     love.graphics.rectangle("fill", back.x, back.y, back.w, back.h)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(math.max(3, 4 * scale))
+    love.graphics.setLineWidth(math.max(2, 3 * scale))
     love.graphics.rectangle("line", back.x, back.y, back.w, back.h)
-    drawSpacedText("Back", back.x, back.y + 16*scale, back.w, "center", font, nil, 1)
+    drawSpacedText("Back", back.x + 16 * scale, back.y + (back.h - font:getHeight()) / 2, back.w - 32 * scale, "left", font, nil, 1)
 
     love.graphics.setColor(1, 1, 1, 1)
 end

@@ -45,21 +45,20 @@ function mode_select.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    btnSingle.w = 220 * scale
-    btnSingle.h = 75 * scale
-    btnMulti.w  = 220 * scale
-    btnMulti.h  = 75 * scale
-    btnBack.w   = 140 * scale
-    btnBack.h   = 55 * scale
+    local wideW = math.min(610 * scale, w - 32 * scale)
+    local wideH = 100 * scale
+    btnSingle.w = wideW; btnSingle.h = wideH
+    btnMulti.w  = wideW; btnMulti.h = wideH
+    btnBack.w   = wideW; btnBack.h = wideH
 
     btnSingle.x = (w - btnSingle.w) / 2
-    btnSingle.y = h/2 - 130 * scale
+    btnSingle.y = h/2 - 180 * scale
 
     btnMulti.x = (w - btnMulti.w) / 2
-    btnMulti.y = h/2 - 30 * scale
+    btnMulti.y = btnSingle.y + wideH + 18 * scale
 
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - 100 * scale
+    btnBack.y = h - btnBack.h - 24 * scale
 
     local titleSize = math.max(32, 48 * scale)
     local btnSize   = math.max(20, 28 * scale)
@@ -85,19 +84,19 @@ function mode_select.draw()
     drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
     local function drawButton(btn, text, isHover)
-        local r, g, b = 0.25, 0.72, 0.68
+        local r, g, b = 0.31, 0.73, 0.72 -- #50BBBA из референса
         if isHover then
-            r, g, b = 0.30, 0.78, 0.74
+            r, g, b = 0.38, 0.80, 0.79
         end
-        
+
         love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-        
+
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(math.max(3, 4 * scale))
+        love.graphics.setLineWidth(math.max(2, 3 * scale))
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-        
-        drawSpacedText(text, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn, nil, 1)
+
+        drawSpacedText(text, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, nil, 1)
     end
 
     drawButton(btnSingle, "SINGLEPLAYER", hoverBtn == "single")
