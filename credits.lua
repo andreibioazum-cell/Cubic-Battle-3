@@ -20,13 +20,14 @@ function credits.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    btnBack.w, btnBack.h = ui.wideButton(w, h, scale)
+    local wideW, wideH, bScale = ui.wideButton(w, h, scale, 1)
+    btnBack.w = wideW; btnBack.h = wideH
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - btnBack.h - 24 * scale
 
     local titleSize = math.max(36, 56 * scale)
     local textSize  = math.max(20, 32 * scale)
-    local btnSize   = ui.buttonFontSize(scale)
+    local btnSize   = ui.buttonFontSize(bScale)
 
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontText  = love.graphics.newFont("Fredoka-Bold.ttf", textSize)
@@ -34,20 +35,7 @@ function credits.load()
 end
 
 function credits.resize()
-    local w, h = love.graphics.getDimensions()
-    local scale = getScale()
-
-    btnBack.w, btnBack.h = ui.wideButton(w, h, scale)
-    btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - btnBack.h - 24 * scale
-
-    local titleSize = math.max(36, 56 * scale)
-    local textSize  = math.max(20, 32 * scale)
-    local btnSize   = ui.buttonFontSize(scale)
-
-    fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
-    fontText  = love.graphics.newFont("Fredoka-Bold.ttf", textSize)
-    fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
+    credits.load()
 end
 
 function credits.update(dt)

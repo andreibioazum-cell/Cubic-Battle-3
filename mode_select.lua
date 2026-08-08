@@ -22,22 +22,23 @@ function mode_select.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    local wideW, wideH = ui.wideButton(w, h, scale)
+    local wideW, wideH, bScale = ui.wideButton(w, h, scale, 3)
     btnSingle.w = wideW; btnSingle.h = wideH
     btnMulti.w  = wideW; btnMulti.h = wideH
     btnBack.w   = wideW; btnBack.h = wideH
 
+    local gap = 18 * bScale
     btnSingle.x = (w - btnSingle.w) / 2
-    btnSingle.y = h/2 - 180 * scale
+    btnSingle.y = h/2 - 120 * bScale
 
     btnMulti.x = (w - btnMulti.w) / 2
-    btnMulti.y = btnSingle.y + wideH + 18 * scale
+    btnMulti.y = btnSingle.y + wideH + gap
 
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - btnBack.h - 24 * scale
+    btnBack.y = btnMulti.y + wideH + gap * 2
 
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = ui.buttonFontSize(scale)
+    local btnSize   = ui.buttonFontSize(bScale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
     fontNotice = love.graphics.newFont("Fredoka-Bold.ttf", math.max(14, 20 * scale))

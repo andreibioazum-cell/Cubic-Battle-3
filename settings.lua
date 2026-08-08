@@ -26,30 +26,31 @@ function settings.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    local wideW, wideH = ui.wideButton(w, h, scale)
+    local wideW, wideH, bScale = ui.wideButton(w, h, scale, 3)
     btnBack.w = wideW; btnBack.h = wideH
-    btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - btnBack.h - 24 * scale
-
     btnMusic.w = wideW; btnMusic.h = wideH
     btnSfx.w = wideW; btnSfx.h = wideH
 
     btnMusic.x = (w - btnMusic.w) / 2
-    btnMusic.y = h/2 - 190 * scale
+    btnMusic.y = h/2 - 150 * bScale
 
+    local gap = 18 * bScale
     btnSfx.x = (w - btnSfx.w) / 2
-    btnSfx.y = btnMusic.y + wideH + 18 * scale
+    btnSfx.y = btnMusic.y + wideH + gap
 
-    inputField.w = 280 * scale
-    inputField.h = 55 * scale
+    inputField.w = 280 * bScale
+    inputField.h = 55 * bScale
     inputField.x = (w - inputField.w) / 2
-    inputField.y = btnSfx.y + wideH + 18 * scale
+    inputField.y = btnSfx.y + wideH + gap
+
+    btnBack.x = (w - btnBack.w) / 2
+    btnBack.y = inputField.y + inputField.h + gap
 
     nickname = SAVE_DATA.nickname or "Player"
 
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = ui.buttonFontSize(scale)
-    local inputSize = math.max(22, 30 * scale)
+    local btnSize   = ui.buttonFontSize(bScale)
+    local inputSize = math.max(22, 30 * bScale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
     fontInput = love.graphics.newFont("Fredoka-Bold.ttf", inputSize)
@@ -108,7 +109,7 @@ function settings.draw()
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf("NICKNAME", inputField.x, inputField.y - 35*scale, inputField.w, "center")
 
-    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", nil, fontBtn)
 end
 
 function settings.mousemoved(x, y)

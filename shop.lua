@@ -56,23 +56,23 @@ end
 function shop.resize()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
-    local wideW, wideH = ui.wideButton(w, h, scale)
+    local wideW, wideH, bScale = ui.wideButton(w, h, scale, 2)
     btnBack.w = wideW; btnBack.h = wideH
     btnMain.w = wideW; btnMain.h = wideH
-    btnLeft.w = 72 * scale
-    btnLeft.h = 72 * scale
-    btnRight.w = 72 * scale
-    btnRight.h = 72 * scale
+    btnLeft.w = 72 * bScale
+    btnLeft.h = 72 * bScale
+    btnRight.w = 72 * bScale
+    btnRight.h = 72 * bScale
     btnBack.x = (w - btnBack.w) / 2
     btnBack.y = h - btnBack.h - 24 * scale
     btnMain.x = (w - btnMain.w) / 2
-    btnMain.y = h/2 + 120 * scale
-    btnLeft.x = w/2 - 180 * scale
-    btnLeft.y = h/2 + 10 * scale
-    btnRight.x = w/2 + 108 * scale
-    btnRight.y = h/2 + 10 * scale
+    btnMain.y = h/2 + 120 * bScale
+    btnLeft.x = w/2 - 180 * bScale
+    btnLeft.y = h/2 + 10 * bScale
+    btnRight.x = w/2 + 108 * bScale
+    btnRight.y = h/2 + 10 * bScale
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = ui.buttonFontSize(scale)
+    local btnSize   = ui.buttonFontSize(bScale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
@@ -148,7 +148,7 @@ function shop.draw(coins)
     ui.drawButton(btnMain, btnText, hoverBtn == "main", btnColor, fontBtn)
     ui.drawButton(btnLeft, "<", hoverBtn == "left", nil, fontBtn, "center")
     ui.drawButton(btnRight, ">", hoverBtn == "right", nil, fontBtn, "center")
-    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", nil, fontBtn)
 end
 
 function shop.mousemoved(x, y)
