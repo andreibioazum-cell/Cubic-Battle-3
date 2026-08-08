@@ -36,12 +36,16 @@ function ui.drawSpacedText(text, x, y, w, align, font, alpha)
     love.graphics.print(text, startX, y)
 end
 
--- Ширина, высота и масштаб широкой кнопки (адаптируется под количество кнопок, как в лобби).
+-- Ширина, высота и масштаб широкой кнопки.
+-- Размер ВСЕГДА рассчитывается как на экране выбора сложности (5 кнопок),
+-- чтобы кнопки во всех меню были одного размера.
+-- numButtons оставлен для совместимости вызовов, но на размер не влияет.
 function ui.wideButton(w, h, scale, numButtons)
     numButtons = numButtons or 4
     local baseScale = scale or ui.getScale()
-    local totalBtnH = numButtons * 100
-    local totalGap = (numButtons - 1) * 18
+    local refButtons = 5 -- эталон: экран выбора сложности
+    local totalBtnH = refButtons * 100
+    local totalGap = (refButtons - 1) * 18
     local availH = h * 0.65
     local bScale = math.min(baseScale, availH / (totalBtnH + totalGap))
     bScale = math.max(0.35, bScale)

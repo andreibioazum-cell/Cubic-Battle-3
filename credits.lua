@@ -12,7 +12,7 @@ local animTime = 0
 local function getScale()
     local w, h = love.graphics.getDimensions()
     local base = 1000
-    if isMobile then base = 800 end
+    if isMobile then base = 600 end
     return math.min(w, h) / base
 end
 
