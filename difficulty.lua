@@ -79,7 +79,7 @@ function difficulty.draw()
     ui.drawButton(btnNormal, "NORMAL", hoverBtn == "normal", {0.2, 0.5, 0.9}, fontBtn)
     ui.drawButton(btnHard, "HARD", hoverBtn == "hard", {0.8, 0.2, 0.2}, fontBtn)
     ui.drawButton(btnImpossible, "IMPOSSIBLE", hoverBtn == "impossible", {0.9, 0.0, 0.0}, fontBtn)
-    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", nil, fontBtn)
 end
 
 function difficulty.mousemoved(x, y)

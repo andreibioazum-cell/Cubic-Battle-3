@@ -148,7 +148,7 @@ function shop.draw(coins)
     ui.drawButton(btnMain, btnText, hoverBtn == "main", btnColor, fontBtn)
     ui.drawButton(btnLeft, "<", hoverBtn == "left", nil, fontBtn, "center")
     ui.drawButton(btnRight, ">", hoverBtn == "right", nil, fontBtn, "center")
-    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", nil, fontBtn)
 end
 
 function shop.mousemoved(x, y)

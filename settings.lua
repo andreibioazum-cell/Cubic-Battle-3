@@ -109,7 +109,7 @@ function settings.draw()
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf("NICKNAME", inputField.x, inputField.y - 35*scale, inputField.w, "center")
 
-    ui.drawButton(btnBack, "BACK", hoverBtn == "back", {0.2, 0.5, 0.9}, fontBtn)
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", nil, fontBtn)
 end
 
 function settings.mousemoved(x, y)
