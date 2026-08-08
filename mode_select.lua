@@ -1,7 +1,8 @@
 -- mode_select.lua – выбор режима (с эффектом наведения)
+local ui = require("ui")
 local mode_select = {}
 
-local fontTitle, fontBtn
+local fontTitle, fontBtn, fontNotice
 local btnSingle = { w = 220, h = 75, x = 0, y = 0 }
 local btnMulti  = { w = 220, h = 75, x = 0, y = 0 }
 local btnBack   = { w = 140, h = 55, x = 0, y = 0 }
@@ -17,36 +18,11 @@ local function getScale()
     return math.min(w, h) / base
 end
 
-local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
-    alpha = alpha or 1
-    love.graphics.setFont(font)
-    local tw = font:getWidth(text)
-    local startX = x
-    if align == "center" then
-        startX = x + (w - tw) / 2
-    elseif align == "right" then
-        startX = x + (w - tw)
-    end
-    local o = math.max(1.5, math.floor(2 * (scale or 1)))
-    love.graphics.setColor(0, 0, 0, alpha)
-    love.graphics.print(text, startX - o, y)
-    love.graphics.print(text, startX + o, y)
-    love.graphics.print(text, startX, y - o)
-    love.graphics.print(text, startX, y + o)
-    love.graphics.print(text, startX - o, y - o)
-    love.graphics.print(text, startX + o, y - o)
-    love.graphics.print(text, startX - o, y + o)
-    love.graphics.print(text, startX + o, y + o)
-    love.graphics.setColor(1, 1, 1, alpha)
-    love.graphics.print(text, startX, y)
-end
-
 function mode_select.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    local wideW = math.min(610 * scale, w - 32 * scale)
-    local wideH = 100 * scale
+    local wideW, wideH = ui.wideButton(w, h, scale)
     btnSingle.w = wideW; btnSingle.h = wideH
     btnMulti.w  = wideW; btnMulti.h = wideH
     btnBack.w   = wideW; btnBack.h = wideH
@@ -61,9 +37,10 @@ function mode_select.load()
     btnBack.y = h - btnBack.h - 24 * scale
 
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = math.max(20, 28 * scale)
+    local btnSize   = ui.buttonFontSize(scale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
+    fontNotice = love.graphics.newFont("Fredoka-Bold.ttf", math.max(14, 20 * scale))
 end
 
 function mode_select.resize()
@@ -81,40 +58,24 @@ function mode_select.draw()
     local w = love.graphics.getWidth()
     local scale = getScale()
 
-    drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
+    ui.drawSpacedText("SELECT MODE", 0, 120 * scale, w, "center", fontTitle, nil, 1)
 
-    local function drawButton(btn, text, isHover)
-        local r, g, b = 0.31, 0.73, 0.72 -- #50BBBA из референса
-        if isHover then
-            r, g, b = 0.38, 0.80, 0.79
-        end
-
-        love.graphics.setColor(r, g, b, 1)
-        love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(math.max(2, 3 * scale))
-        love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-
-        drawSpacedText(text, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, nil, 1)
-    end
-
-    drawButton(btnSingle, "SINGLEPLAYER", hoverBtn == "single")
-    drawButton(btnMulti, "MULTIPLAYER", hoverBtn == "multi")
-    drawButton(btnBack, "BACK", hoverBtn == "back")
+    ui.drawButton(btnSingle, "SINGLEPLAYER", hoverBtn == "single", nil, fontBtn)
+    ui.drawButton(btnMulti, "MULTIPLAYER", hoverBtn == "multi", nil, fontBtn)
+    ui.drawButton(btnBack, "BACK", hoverBtn == "back", nil, fontBtn)
 
     local time = love.timer.getTime()
     local yOffset = math.sin(time * 1.2) * 1.5
 
     local text = "Online is still being developed, it may be very weak, so don't throw slippers at us."
-    love.graphics.setFont(fontBtn)
-    local tw = fontBtn:getWidth(text)
+    love.graphics.setFont(fontNotice)
+    local tw = fontNotice:getWidth(text)
     local x = w/2 - tw/2
     local y = btnMulti.y + btnMulti.h + 30 * scale + yOffset
 
     local pad = 12 * scale
     local btnW = tw + pad * 2
-    local btnH = 30 * scale
+    local btnH = 34 * scale
     love.graphics.setColor(0.0, 0.1, 0.3, 0.5)
     love.graphics.rectangle("fill", x - pad, y - 4*scale, btnW, btnH, 8*scale, 8*scale)
     love.graphics.setColor(0.15, 0.35, 0.7, 1)
