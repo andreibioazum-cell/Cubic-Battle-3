@@ -36,14 +36,21 @@ function ui.drawSpacedText(text, x, y, w, align, font, alpha)
     love.graphics.print(text, startX, y)
 end
 
--- Ширина и высота широкой кнопки как в лобби (610 × 100 при масштабе 1).
-function ui.wideButton(w, h, scale)
-    return math.min(610 * scale, w - 32 * scale), 100 * scale
+-- Ширина, высота и масштаб широкой кнопки (адаптируется под количество кнопок, как в лобби).
+function ui.wideButton(w, h, scale, numButtons)
+    numButtons = numButtons or 4
+    local baseScale = scale or ui.getScale()
+    local totalBtnH = numButtons * 100
+    local totalGap = (numButtons - 1) * 18
+    local availH = h * 0.65
+    local bScale = math.min(baseScale, availH / (totalBtnH + totalGap))
+    bScale = math.max(0.35, bScale)
+    return math.min(610 * bScale, w - 32 * bScale), 100 * bScale, bScale
 end
 
--- Размер шрифта кнопки как в лобби (54 при масштабе 1).
-function ui.buttonFontSize(scale)
-    return math.max(22, 54 * scale)
+-- Размер шрифта кнопки.
+function ui.buttonFontSize(bScale)
+    return math.max(22, 54 * bScale)
 end
 
 -- Отрисовка кнопки в стиле лобби.

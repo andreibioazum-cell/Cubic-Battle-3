@@ -1,4 +1,5 @@
 -- lobby.lua – главное меню (с эффектом наведения)
+local ui = require("ui")
 local lobby = {}
 
 local btns = {
@@ -30,12 +31,10 @@ end
 local function place()
     local w, h = love.graphics.getDimensions()
     local baseScale = getScale()
-    buttonScale = math.min(baseScale, (h / 2 - 20 * baseScale) / (4 * 100 + 3 * 18))
-    buttonScale = math.max(0.35, buttonScale)
+    local btnW, btnH, bScale = ui.wideButton(w, h, baseScale, 4)
+    buttonScale = bScale
 
     local gap = 18 * buttonScale
-    local btnW = math.min(610 * buttonScale, w - 32 * buttonScale)
-    local btnH = 100 * buttonScale
     local startY = h / 2 - 20 * buttonScale
 
     for _, b in pairs(btns) do
@@ -130,7 +129,7 @@ function lobby.load()
 
     local titleSize = math.max(36, 72 * scale)
     local subSize   = math.max(18, 26 * scale)
-    local btnSize   = math.max(22, 54 * buttonScale)
+    local btnSize   = ui.buttonFontSize(buttonScale)
 
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
@@ -145,7 +144,7 @@ function lobby.resize(w, h)
     local scale = getScale()
     local titleSize = math.max(36, 72 * scale)
     local subSize   = math.max(18, 26 * scale)
-    local btnSize   = math.max(22, 54 * buttonScale)
+    local btnSize   = ui.buttonFontSize(buttonScale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)

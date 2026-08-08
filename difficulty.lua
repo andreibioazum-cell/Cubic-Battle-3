@@ -24,16 +24,17 @@ function difficulty.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    local btnW, btnH = ui.wideButton(w, h, scale)
-    local gap = 18 * scale
+    local btnW, btnH, bScale = ui.wideButton(w, h, scale, 5)
+    local gap = 18 * bScale
 
     btnEasy.w = btnW; btnEasy.h = btnH
     btnNormal.w = btnW; btnNormal.h = btnH
     btnHard.w = btnW; btnHard.h = btnH
     btnImpossible.w = btnW; btnImpossible.h = btnH
+    btnBack.w = btnW; btnBack.h = btnH
 
-    local totalH = btnH * 4 + gap * 3
-    local startY = (h - totalH) / 2
+    local totalH = btnH * 5 + gap * 4
+    local startY = (h - totalH) / 2 + 20 * scale
 
     btnEasy.x = (w - btnW) / 2
     btnEasy.y = startY
@@ -47,13 +48,11 @@ function difficulty.load()
     btnImpossible.x = (w - btnW) / 2
     btnImpossible.y = startY + (btnH + gap) * 3
 
-    btnBack.w = btnW
-    btnBack.h = btnH
-    btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - btnBack.h - 24 * scale
+    btnBack.x = (w - btnW) / 2
+    btnBack.y = startY + (btnH + gap) * 4
 
     local titleSize = math.max(32, 48 * scale)
-    local btnSize   = ui.buttonFontSize(scale)
+    local btnSize   = ui.buttonFontSize(bScale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 end
