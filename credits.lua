@@ -43,10 +43,10 @@ function credits.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    btnBack.w = 220 * scale
-    btnBack.h = 65 * scale
+    btnBack.w = math.min(610 * scale, w - 32 * scale)
+    btnBack.h = 100 * scale
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - 120 * scale
+    btnBack.y = h - btnBack.h - 24 * scale
 
     local titleSize = math.max(36, 56 * scale)
     local textSize  = math.max(20, 32 * scale)
@@ -61,10 +61,10 @@ function credits.resize()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    btnBack.w = 220 * scale
-    btnBack.h = 65 * scale
+    btnBack.w = math.min(610 * scale, w - 32 * scale)
+    btnBack.h = 100 * scale
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - 120 * scale
+    btnBack.y = h - btnBack.h - 24 * scale
 
     local titleSize = math.max(36, 56 * scale)
     local textSize  = math.max(20, 32 * scale)
@@ -97,19 +97,19 @@ function credits.draw()
     drawSpacedText("Dima Gustenyov – Owner (11 years)", 0, y, w, "center", fontText)
 
     local function drawButton(btn, text, isHover)
-        local r, g, b = 0.25, 0.72, 0.68
+        local r, g, b = 0.31, 0.73, 0.72 -- #50BBBA из референса
         if isHover then
-            r, g, b = 0.30, 0.78, 0.74
+            r, g, b = 0.38, 0.80, 0.79
         end
-        
+
         love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-        
+
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(math.max(3, 4 * scale))
+        love.graphics.setLineWidth(math.max(2, 3 * scale))
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-        
-        drawSpacedText(text, btn.x, btn.y + 18*scale, btn.w, "center", fontBtn, nil, 1)
+
+        drawSpacedText(text, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, nil, 1)
     end
 
     drawButton(btnBack, "BACK", hoverBtn == "back")

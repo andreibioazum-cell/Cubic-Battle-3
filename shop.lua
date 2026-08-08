@@ -79,15 +79,16 @@ end
 function shop.resize()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
-    btnBack.w = 140 * scale
-    btnBack.h = 55 * scale
-    btnMain.w = 220 * scale
-    btnMain.h = 75 * scale
+    local wideW = math.min(610 * scale, w - 32 * scale)
+    local wideH = 100 * scale
+    btnBack.w = wideW; btnBack.h = wideH
+    btnMain.w = wideW; btnMain.h = wideH
     btnLeft.w = 60 * scale
     btnLeft.h = 60 * scale
     btnRight.w = 60 * scale
     btnRight.h = 60 * scale
     btnBack.x = (w - btnBack.w) / 2
+    btnBack.y = h - btnBack.h - 24 * scale
     btnMain.x = (w - btnMain.w) / 2
     btnMain.y = h/2 + 120 * scale
     btnLeft.x = w/2 - 180 * scale
@@ -158,19 +159,24 @@ function shop.draw(coins)
     end
 
     local function drawButton(btn, text, color, isHover)
-        local r, g, b = 0.25, 0.72, 0.68
+        -- Основной бирюзовый цвет взят с референса; для действий
+        -- (покупка, сложность и т. п.) сохраняется переданный цвет.
+        local r, g, b = color[1], color[2], color[3]
         if isHover then
-            r, g, b = 0.30, 0.78, 0.74
+            r = math.min(1, r + 0.07)
+            g = math.min(1, g + 0.07)
+            b = math.min(1, b + 0.07)
         end
-        
+
         love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-        
+
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(math.max(3, 4 * scale))
+        -- Тоньше прежней рамки: около 3 px при масштабе 1.
+        love.graphics.setLineWidth(math.max(2, 3 * scale))
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-        
-        drawSpacedText(text, btn.x, btn.y + 20*scale, btn.w, "center", fontBtn, nil, 1)
+
+        drawSpacedText(text, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, nil, 1)
     end
 
     local btnText, btnColor

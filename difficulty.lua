@@ -47,9 +47,9 @@ function difficulty.load()
     local w, h = love.graphics.getDimensions()
     local scale = getScale()
 
-    local btnW = 200 * scale
-    local btnH = 70 * scale
-    local gap = 15 * scale
+    local btnW = math.min(610 * scale, w - 32 * scale)
+    local btnH = 100 * scale
+    local gap = 18 * scale
 
     btnEasy.w = btnW; btnEasy.h = btnH
     btnNormal.w = btnW; btnNormal.h = btnH
@@ -71,10 +71,10 @@ function difficulty.load()
     btnImpossible.x = (w - btnW) / 2
     btnImpossible.y = startY + (btnH + gap) * 3
 
-    btnBack.w = 140 * scale
-    btnBack.h = 55 * scale
+    btnBack.w = btnW
+    btnBack.h = btnH
     btnBack.x = (w - btnBack.w) / 2
-    btnBack.y = h - 80 * scale
+    btnBack.y = h - btnBack.h - 24 * scale
 
     local titleSize = math.max(32, 48 * scale)
     local btnSize   = math.max(20, 28 * scale)
@@ -100,19 +100,24 @@ function difficulty.draw()
     drawSpacedText("SELECT DIFFICULTY", 0, 60 * scale, w, "center", fontTitle, nil, 1)
 
     local function drawButton(btn, label, color, isHover)
-        local r, g, b = 0.25, 0.72, 0.68
+        -- Основной бирюзовый цвет взят с референса; для действий
+        -- (покупка, сложность и т. п.) сохраняется переданный цвет.
+        local r, g, b = color[1], color[2], color[3]
         if isHover then
-            r, g, b = 0.30, 0.78, 0.74
+            r = math.min(1, r + 0.07)
+            g = math.min(1, g + 0.07)
+            b = math.min(1, b + 0.07)
         end
-        
+
         love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-        
+
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(math.max(3, 4 * scale))
+        -- Тоньше прежней рамки: около 3 px при масштабе 1.
+        love.graphics.setLineWidth(math.max(2, 3 * scale))
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-        
-        drawSpacedText(label, btn.x, btn.y + 20*scale, btn.w, "center", fontBtn, nil, 1)
+
+        drawSpacedText(label, btn.x + 16 * scale, btn.y + (btn.h - fontBtn:getHeight()) / 2, btn.w - 32 * scale, "left", fontBtn, nil, 1)
     end
 
     drawButton(btnEasy, "EASY", {0.2, 0.6, 0.2}, hoverBtn == "easy")

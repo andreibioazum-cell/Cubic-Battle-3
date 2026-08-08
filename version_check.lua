@@ -112,11 +112,11 @@ function version_check.drawPopup()
     love.graphics.rectangle("fill", btnX, btnY, btnW, btnH)
     
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(math.max(3, 4 * scale))
+    love.graphics.setLineWidth(math.max(2, 3 * scale))
     love.graphics.rectangle("line", btnX, btnY, btnW, btnH)
     
     local btnFont = love.graphics.newFont("Fredoka-Bold.ttf", math.max(20, 28 * scale))
-    drawSpacedText("UPDATE", btnX, btnY + 14 * scale, btnW, "center", btnFont, nil, 1)
+    drawSpacedText("UPDATE", btnX + 16 * scale, btnY + (btnH - btnFont:getHeight()) / 2, btnW - 32 * scale, "left", btnFont, nil, 1)
     
     version_check._updateBtn = { x = btnX, y = btnY, w = btnW, h = btnH }
     version_check._laterBtn = nil

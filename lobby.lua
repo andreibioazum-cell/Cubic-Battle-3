@@ -14,6 +14,8 @@ local snowflakes = {}
 local isMobile = (love.system.getOS() == "Android" or love.system.getOS() == "iOS")
 local hoverBtn = nil
 local animTime = 0
+-- Фактический масштаб широких кнопок (может быть меньше общего на телефоне).
+local buttonScale = 1
 
 local function getScale()
     local w, h = love.graphics.getDimensions()
@@ -22,27 +24,31 @@ local function getScale()
     return math.min(w, h) / base
 end
 
+-- Размеры и оформление повторяют образец: широкая бирюзовая кнопка
+-- 610 × 100 (при масштабе 1).  На небольших экранах они уменьшаются
+-- целиком, чтобы не выходить за границы экрана.
 local function place()
     local w, h = love.graphics.getDimensions()
-    local scale = getScale()
-    local gap = 20 * scale
-    local btnW = 220 * scale
-    local btnH = 75 * scale
+    local baseScale = getScale()
+    buttonScale = math.min(baseScale, (h / 2 - 20 * baseScale) / (4 * 100 + 3 * 18))
+    buttonScale = math.max(0.35, buttonScale)
+
+    local gap = 18 * buttonScale
+    local btnW = math.min(610 * buttonScale, w - 32 * buttonScale)
+    local btnH = 100 * buttonScale
+    local startY = h / 2 - 20 * buttonScale
 
     for _, b in pairs(btns) do
         b.w = btnW
         b.h = btnH
+        b.x = (w - btnW) / 2
     end
 
-    btns.play.x = w/2 - btnW - gap/2
-    btns.play.y = h/2 + 80 * scale
-    btns.shop.x = w/2 + gap/2
-    btns.shop.y = h/2 + 80 * scale
-
-    btns.settings.x = w/2 - btnW - gap/2
-    btns.settings.y = h/2 + 80 * scale + btnH + gap
-    btns.credits.x = w/2 + gap/2
-    btns.credits.y = h/2 + 80 * scale + btnH + gap
+    -- Кнопки расположены одной колонкой, как в присланном образце.
+    btns.play.y = startY
+    btns.shop.y = startY + btnH + gap
+    btns.settings.y = startY + (btnH + gap) * 2
+    btns.credits.y = startY + (btnH + gap) * 3
 end
 
 local function drawSpacedText(text, x, y, w, align, font, spacing, alpha)
@@ -120,17 +126,17 @@ function lobby.load()
     local scale = getScale()
 
     backgroundImage = love.graphics.newImage("Lobby_Snow.png")
+    place()
 
     local titleSize = math.max(36, 72 * scale)
     local subSize   = math.max(18, 26 * scale)
-    local btnSize   = math.max(22, 34 * scale)
+    local btnSize   = math.max(22, 54 * buttonScale)
 
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
 
     generateSnowflakes(w, h)
-    place()
 end
 
 function lobby.resize(w, h)
@@ -139,7 +145,7 @@ function lobby.resize(w, h)
     local scale = getScale()
     local titleSize = math.max(36, 72 * scale)
     local subSize   = math.max(18, 26 * scale)
-    local btnSize   = math.max(22, 34 * scale)
+    local btnSize   = math.max(22, 54 * buttonScale)
     fontTitle = love.graphics.newFont("Fredoka-Bold.ttf", titleSize)
     fontSub   = love.graphics.newFont("Fredoka-Bold.ttf", subSize)
     fontBtn   = love.graphics.newFont("Fredoka-Bold.ttf", btnSize)
@@ -179,19 +185,24 @@ function lobby.draw()
     drawSpacedText("Touch & Dodge", 0, love.graphics.getHeight()/2 - 80*scale, w, "center", fontSub)
 
     local function drawButton(btn, label, isHover)
-        local r, g, b = 0.25, 0.72, 0.68
+        -- Цвет взят с референса (#50BBBA); при наведении он немного светлее.
+        local r, g, b = 0.31, 0.73, 0.72
         if isHover then
-            r, g, b = 0.30, 0.78, 0.74
+            r, g, b = 0.38, 0.80, 0.79
         end
-        
+
         love.graphics.setColor(r, g, b, 1)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.w, btn.h)
-        
+
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setLineWidth(math.max(3, 4 * scale))
+        love.graphics.setLineWidth(math.max(2, 3 * scale))
         love.graphics.rectangle("line", btn.x, btn.y, btn.w, btn.h)
-        
-        drawSpacedText(label, btn.x, btn.y + 22*scale, btn.w, "center", fontBtn)
+
+        -- Подпись намеренно не центрируется: она начинается у левого края
+        -- с таким же небольшим отступом, как на присланной фотографии.
+        local padding = 16 * scale
+        local textY = btn.y + (btn.h - fontBtn:getHeight()) / 2
+        drawSpacedText(label, btn.x + padding, textY, btn.w - padding * 2, "left", fontBtn)
     end
 
     drawButton(btns.play, "PLAY", hoverBtn == "play")
