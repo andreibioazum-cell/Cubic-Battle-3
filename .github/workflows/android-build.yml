@@ -1,151 +1,48 @@
-name: Build Cubic Battle Android
-
-on:
-  push:
-  pull_request:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-          cache: 'gradle'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Accept Android Licenses
-        run: |
-          mkdir -p ~/.android
-          echo "android.useAndroidX=true" >> ~/.android/repositories.cfg
-          yes | sdkmanager --licenses || true
-
-      - name: Cache Android SDK Components
-        uses: actions/cache@v4
-        id: cache-android-sdk
-        with:
-          path: |
-            ${{ env.ANDROID_HOME }}/ndk/23.1.7779620
-            ${{ env.ANDROID_HOME }}/platforms/android-33
-            ${{ env.ANDROID_HOME }}/build-tools/33.0.0
-          key: android-sdk-33-ndk-23.1.7779620
-
-      - name: Install Android SDK Components
-        if: steps.cache-android-sdk.outputs.cache-hit != 'true'
-        run: |
-          sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;23.1.7779620"
-
-      - name: Clone love-android
-        run: |
-          git clone --recursive --depth 1 --shallow-submodules https://github.com/love2d/love-android.git
-
-      - name: Cache Gradle and Build Outputs
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            love-android/.gradle
-            love-android/app/.cxx
-            love-android/app/build/intermediates
-          key: gradle-build-${{ runner.os }}-${{ hashFiles('love-android/**/*.gradle*', 'love-android/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-build-${{ runner.os }}-
-
-      - name: Fix AndroidManifest.xml
-        run: |
-          MANIFEST="love-android/app/src/main/AndroidManifest.xml"
-          
-          # Меняем пакет
-          sed -i 's/package="org.love2d.android"/package="com.CB3"/g' "$MANIFEST"
-          
-          # Добавляем INTERNET
-          if ! grep -q "INTERNET" "$MANIFEST"; then
-            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
-          fi
-          
-          # Добавляем usesCleartextTraffic
-          if ! grep -q "usesCleartextTraffic" "$MANIFEST"; then
-            sed -i '/<application /a\        android:usesCleartextTraffic="true"' "$MANIFEST"
-          fi
-          
-          # Меняем название приложения
-          sed -i 's/android:label="[^"]*"/android:label="Cubic Battle"/g' "$MANIFEST"
-          
-          echo "✅ AndroidManifest.xml fixed"
-          cat "$MANIFEST"
-
-      - name: Set package name in build.gradle
-        run: |
-          sed -i 's/applicationId "org.love2d.android"/applicationId "com.CB3"/g' love-android/app/build.gradle
-
-      - name: Create app name
-        run: |
-          mkdir -p love-android/app/src/main/res/values
-          cat > love-android/app/src/main/res/values/strings.xml << 'EOF'
-          <resources>
-              <string name="app_name">Cubic Battle</string>
-          </resources>
-          EOF
-
-      - name: Set ABIs (arm64-v8a + armeabi-v7a)
-        run: |
-          sed -i '/abiFilters/d' love-android/app/build.gradle
-          sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a", "armeabi-v7a" }' love-android/app/build.gradle
-
-      - name: Package game.love
-        run: |
-          zip -9 -q -r game.love . -x "*.git*" -x ".github/*" -x "love-android/*" -x "*.yml" -x "*.apk" -x "*.zip" -x "dist/*"
-
-      - name: Embed game
-        run: |
-          mkdir -p love-android/app/src/embed/assets
-          cp game.love love-android/app/src/embed/assets/game.love
-
-      - name: Optimize Gradle
-        run: |
-          cat >> love-android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4g -XX:+UseParallelGC -Dfile.encoding=UTF-8
-          org.gradle.parallel=true
-          org.gradle.caching=true
-          org.gradle.vfs.watch=false
-          org.gradle.daemon=false
-          org.gradle.workers.max=4
-          android.enableR8.fullMode=false
-          EOF
-
-      - name: Build APK
-        working-directory: love-android
-        run: |
-          ./gradlew assembleEmbedNoRecordRelease --build-cache --parallel --no-daemon --max-workers=4 --stacktrace
-
-      - name: Check and rename APK
-        run: |
-          APK_FILE=$(find love-android/app/build/outputs/apk -type f -name "*.apk" 2>/dev/null | head -n 1)
-          if [ -z "$APK_FILE" ]; then
-            APK_FILE=$(find love-android -type f -name "*.apk" 2>/dev/null | head -n 1)
-          fi
-          if [ -z "$APK_FILE" ]; then
-            echo "No APK found!"
-            exit 1
-          fi
-          echo "Found APK at: $APK_FILE"
-          cp "$APK_FILE" "CubicBattle.apk"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: CubicBattle-Android
-          path: "CubicBattle.apk"
-          if-no-files-found: error
-          compression-level: 0
+Перейти к содержимому
+андрейбиоазум-клетка
+Кубическая Битва-3
+Навигация по репозиторию
+Код
+Проблемы
+Запросы на слияние
+Действия
+Проекты
+Вики
+Безопасность и качество
+Build Cubic Battle Android
+Обновите файл android-build.yml #576
+Все вакансии
+Подробности выполнения
+Аннотации
+1 ошибка и 1 предупреждение
+строить
+неуспешный сейчасв 14 секундах
+Журналы поиска
+2с
+1с
+9s
+Запустите actions/setup-java@v5
+Установленные дистрибутивы
+Создание файла settings.xml с server-id: github
+Запись в файл /home/runner/.m2/settings.xml
+Настроил MAVEN_ARGS, добавив параметр -ntp для подавления логов хода передачи Maven. Установил 'show-download-progress: true', чтобы сохранить вывод хода загрузки.
+Ошибка: В каталоге /home/runner/work/Cubic-Battle-3/Cubic-Battle-3 не найден файл, соответствующий [**/*.gradle*,**/gradle-wrapper.properties,buildSrc/**/Versions.kt,buildSrc/**/Dependencies.kt,gradle/*.versions.toml,**/versions.properties]. Убедитесь, что вы переключились на целевой репозиторий.
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
+0 с
